@@ -84,7 +84,7 @@ def norm_mobile_eg(s):
         d = d[1:]
     if d.startswith('01') and len(d) == 11 and d[2] in '0125':
         return d, True
-    return norm_text(s), not d
+    return norm_text(s), not norm_text(s)   # text that is not a mobile number is a mistake; an empty field is not
 
 
 def wa_number(mobile):

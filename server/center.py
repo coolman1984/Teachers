@@ -90,6 +90,7 @@ def normalize_ops(store, ops, pc_index=0):
     school support groups. Refuses duplicates of things that must be unique (a student code, a teacher)."""
     if not isinstance(ops, list):
         return ops
+    used, batch_codes = None, {}
     for op in ops:
         if not isinstance(op, dict) or op.get('op') != 'put' or not isinstance(op.get('row'), dict):
             continue
@@ -108,13 +109,17 @@ def normalize_ops(store, ops, pc_index=0):
             if g:
                 raise Problem(g, 'Check the grade, system and track of the student.')
             with store.lock:
+                if used is None:   # every code ever given (also of deleted students), read once per save: codes are never reused
+                    used = {r[0] for r in store.conn.execute('SELECT code FROM students')}
+                cur = store.conn.execute('SELECT code FROM students WHERE id=?', (op.get('id'),)).fetchone()
                 if not row.get('code'):
-                    cur = store.conn.execute('SELECT code FROM students WHERE id=?', (op.get('id'),)).fetchone()
-                    row['code'] = cur[0] if cur and cur[0] else D.next_code([r[0] for r in store.conn.execute('SELECT code FROM students')], pc_index)
+                    row['code'] = cur[0] if cur and cur[0] else D.next_code(used, pc_index)
                 row['code'] = D.digits(row['code']) or row['code']
                 other = store.conn.execute('SELECT name FROM students WHERE code=? AND deleted=0 AND id<>?', (row['code'], op.get('id'))).fetchone()
-            if other:
-                raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0])
+            if other or batch_codes.get(row['code'], op.get('id')) != op.get('id'):
+                raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0] if other else '')
+            batch_codes[row['code']] = op.get('id')
+            used.add(row['code'])
             if row.get('discountPct') not in (None, ''):
                 row['discountPct'] = max(0.0, min(100.0, float(row['discountPct'])))
         if e == 'teachers':
@@ -135,6 +140,21 @@ def normalize_ops(store, ops, pc_index=0):
                 if int(row.get('capacity') or 0) > int(cfg['schoolMaxStudents']):
                     raise Problem('err.schoolSize', 'School support groups may not have more students than the maximum.', max=cfg['schoolMaxStudents'])
                 row['feeType'] = 'session'
+    return ops
+
+
+CONTACT_FIELDS = ('mobile', 'parentMobile', 'parentMobile2')
+
+
+def keep_hidden_contacts(store, ops):
+    """A user who may not see phone numbers saves a student without them: the numbers already stored must stay."""
+    for op in ops or []:
+        if isinstance(op, dict) and op.get('e') == 'students' and op.get('op') == 'put' and isinstance(op.get('row'), dict):
+            cur = store.row('students', op.get('id'))
+            if cur:
+                for f in CONTACT_FIELDS:
+                    if f in cur and f not in op['row']:
+                        op['row'][f] = cur[f]
     return ops
 
 
@@ -280,6 +300,8 @@ def find_students(store, q, scopes=None, limit=12):
             parts = key.split(' ')
             where = ' AND '.join(['name_key LIKE ?'] * len(parts))
             out = store.rows('students', where, tuple('%' + p + '%' for p in parts), scopes)
+            if not out:   # "عبدالله" and "عبد الله" are the same name: compare without spaces
+                out = store.rows('students', "REPLACE(name_key, ' ', '') LIKE ?", ('%' + key.replace(' ', '') + '%',), scopes)
             out.sort(key=lambda s: (not (s.get('nameKey') or '').startswith(key), len(s.get('name') or '')))
     return out[:limit]
 
@@ -1014,6 +1036,8 @@ def settlement(store, teacher_id, ym, facts=None):
 
 
 def settlements(store, ym, scopes=None):
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
     f = _month_facts(store, ym)
     out = []
     for t in store.rows('teachers', '', (), scopes):
@@ -1038,6 +1062,8 @@ def approve_settlement(ctx, teacher_id, ym):
 def profitability(store, ym, scopes=None):
     """Every group of the month: collected, centre share, room cost, the centre's profit, fill rate and attendance,
     and one advice (open another group / merge / watch / loses money)."""
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
     f = _month_facts(store, ym)
     teachers = {t['id']: t for t in store.rows('teachers')}
     rooms = {r['id']: r for r in store.rows('rooms')}

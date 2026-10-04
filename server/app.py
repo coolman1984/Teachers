@@ -201,6 +201,7 @@ OP_WORD = {'insert': 'add', 'update': 'change', 'delete': 'delete'}
 SHARED_LISTS = ('settings', 'subjects', 'rooms', 'students')  # not limited to a teacher
 DISCOUNT_FIELDS = {'discountPct', 'discountReason', 'exempt'}
 SYSTEM_ONLY = ('data.import',)  # money, attendance, shifts and settlements are written by the server's own operations only
+OPERATION_ONLY = {'payments', 'expenses', 'shifts', 'attendance', 'settlements'}  # a page may never save these through the generic /api/commit
 
 
 def required(entity, op, changed):
@@ -528,10 +529,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, self.me())
         if p == '/api/state':
             full = qs.get('all') == '1' and self.u['scopes'] is None and self.can('money.view')
-            return self.send(200, {**STORE.state(self.u['scopes'], None if full else store_mod.WINDOW_DAYS), 'gateway': bool(SECRETS.configured),
-                                   'office': OFFICE_STATE, 'node': {'id': NODE.id, 'letter': self.ctx().letter()}})
+            st = STORE.state(self.u['scopes'], None if full else store_mod.WINDOW_DAYS)
+            st['students'] = [self.contact_filter(x) for x in st['students']]
+            return self.send(200, {**st, 'gateway': bool(SECRETS.configured), 'office': OFFICE_STATE, 'node': {'id': NODE.id, 'letter': self.ctx().letter()}})
         if p == '/api/delta':
             d = STORE.delta(int(qs.get('since') or -1), self.u['scopes'])
+            if d and d['rows'].get('students'):
+                d['rows']['students'] = [self.contact_filter(x) for x in d['rows']['students']]
             return self.send(200, d if d is not None else {'full': True})
         if p.startswith('/api/c/'):
             return self.center_get(p[len('/api/c/'):], qs)
@@ -711,7 +715,11 @@ class Handler(BaseHTTPRequestHandler):
                     BACKUPS.create('pre-import')
             if any(isinstance(o, dict) and 'resolve' in o for o in (d.get('ops') or []) if isinstance(d.get('ops'), list)):
                 raise Forbidden('Conflicts are decided only in Devices & Sync by an administrator.')
+            if not force and any(isinstance(o, dict) and o.get('e') in OPERATION_ONLY for o in (d.get('ops') or []) if isinstance(d.get('ops'), list)):
+                raise Forbidden('Money, attendance and cash shifts are changed only through their own actions (a receipt is reversed, never edited).')
             ops = d.get('ops') if force else center.normalize_ops(STORE, d.get('ops'), self.ctx().pc_index())
+            if not force and not self.can('contacts.view'):
+                ops = center.keep_hidden_contacts(STORE, ops)
             res = STORE.commit(self.user, self.ip, label, ops, force, guard=commit_guard(self.u), user_id=self.u['id'])
             log.info('COMMIT %s (%s) "%s" %s changes', self.user, self.ip, label, res['changes'])
             return self.send(200, res)

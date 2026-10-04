@@ -10,7 +10,6 @@ message that says what to do. Nothing here tries to get around such protection.
 import codecs
 import csv
 import datetime as dt
-import html
 import io
 import re
 import struct
@@ -267,7 +266,7 @@ def read_xls(data):
                 nm = _biff_str(body, 6, 8)[0]
                 sheets.append((nm, off, state))
         elif rid == 0xFC:
-            j, buf = i + 1, bytearray(body)
+            j = i + 1
             conts = []
             while j < len(recs) and recs[j][0] == 0x3C:
                 conts.append(recs[j][1]); j += 1
