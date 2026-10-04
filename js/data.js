@@ -1,10 +1,10 @@
-/* Hessa - data layer: the whole state and the trust insights are kept in memory, refreshed when the server
+/* Hessa - data layer: the startup state and incremental changes are kept in memory, refreshed when the server
    version changes, and every save goes through HS.data.commit (optimistic version check on the server). */
 (function () {
   'use strict';
   var HS = window.HS;
-  var D = HS.data = { state: null, insights: {}, version: null, loading: null };
-  var index = {};
+  var D = HS.data = { state: null, version: null, loading: null, connected: true };
+  var index = {}, generation = 0;
 
   function reindex() {
     index = {};
@@ -14,20 +14,23 @@
   }
   D.load = function () {
     if (D.loading) return D.loading;
-    var wantInsights = HS.can('trips.view');
-    D.loading = Promise.all([HS.get('/api/state'), wantInsights ? HS.get('/api/insights') : Promise.resolve({})]).then(function (r) {
-      D.state = r[0]; D.insights = r[1] || {}; D.version = r[0].version; reindex(); D.loading = null;
+    var epoch = generation;
+    D.loading = HS.get('/api/state').then(function (state) {
+      if (epoch !== generation) return D;
+      D.state = state; D.version = state.version; reindex(); D.loading = null;
       HS.emit('data', D);
       return D;
-    }, function (e) { D.loading = null; throw e; });
+    }, function (e) { if (epoch === generation) D.loading = null; throw e; });
     return D.loading;
   };
   D.get = function (entity, id) { return (index[entity] || {})[id] || null; };
   D.list = function (entity) { return (D.state && D.state[entity]) || []; };
   D.name = function (entity, id, field) { var r = D.get(entity, id); return r ? (r[field || 'name'] || '') : ''; };
-  D.catName = function (id) { var c = D.get('tripCategories', id); return c ? (HS.lang === 'ar' && c.nameAr ? c.nameAr : c.name) : ''; };
-  D.placeName = function (p) { return p ? (HS.lang === 'ar' && p.nameAr ? p.nameAr : p.name) : ''; };
-  D.trust = function (id) { return D.insights[id] || { trust: 'grey', reasons: [] }; };
+  D.teacherName = function (id) { return D.name('teachers', id); };
+  D.groupName = function (id) { return D.name('groups', id); };
+  D.subjectName = function (id) {
+    var s = D.get('subjects', id); return s ? (HS.lang === 'en' ? s.nameEn || s.name : s.name) : '';
+  };
 
   /* one save = one change in the history. ops: [{e, id, op:'put'|'del', row, ver}] */
   D.commit = function (label, ops) {
@@ -50,18 +53,59 @@
     return prefix + Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   };
 
-  /* follow other users and other PCs: reload when the version changed, repaint when nothing is being edited */
-  var timer = null;
+  /* One refresh at a time; preserve open editors while accepting other PCs' writes. */
+  var timer = null, refreshing = null;
+  function repaint() {
+    if (!HS.overlay.isOpen && !HS.panel.count()) { D.dirty = false; HS.rerender(); }
+    else D.dirty = true;
+  }
+  function connection(ok) {
+    if (D.connected !== ok) { D.connected = ok; HS.emit('connection', ok); }
+  }
+  D.refresh = function () {
+    if (refreshing) return refreshing;
+    if (D.loading) return D.loading;
+    var epoch = generation;
+    refreshing = HS.get('/api/version').then(function (v) {
+      if (epoch !== generation) return;
+      connection(true);
+      if (D.version === null || v.version === D.version) return;
+      return HS.get('/api/delta?since=' + encodeURIComponent(D.version)).then(function (d) {
+        if (epoch !== generation) return;
+        if (d.full) return D.load().then(function () { if (epoch === generation) repaint(); });
+        Object.keys(d.rows || {}).forEach(function (e) {
+          var changed = {};
+          (d.rows[e] || []).forEach(function (r) { changed[r.id] = r; });
+          var list = D.list(e).map(function (r) {
+            if (!changed[r.id]) return r;
+            var row = changed[r.id]; delete changed[r.id]; return row;
+          });
+          Object.keys(changed).forEach(function (id) { list.push(changed[id]); });
+          D.state[e] = list;
+        });
+        Object.keys(d.gone || {}).forEach(function (e) {
+          D.state[e] = D.list(e).filter(function (r) { return d.gone[e].indexOf(r.id) < 0; });
+        });
+        D.version = D.state.version = d.version;
+        reindex(); HS.emit('data', D); repaint();
+      });
+    }).catch(function (e) {
+      if (epoch === generation) connection(false);
+      throw e;
+    }).then(function (r) { if (epoch === generation) refreshing = null; return r; },
+      function (e) { if (epoch === generation) refreshing = null; throw e; });
+    return refreshing;
+  };
   D.startPolling = function () {
     clearInterval(timer);
-    timer = setInterval(function () {
-      HS.get('/api/version').then(function (v) {
-        if (D.version !== null && v.version !== D.version) {
-          D.load().then(function () { if (!HS.overlay.isOpen && !HS.panel.count()) HS.rerender(); else D.dirty = true; });
-        }
-      }, function () { /* offline or signed out: HS.api handles 401 */ });
-    }, 4000);
+    timer = setInterval(function () { D.refresh().catch(function () {}); }, 2000);
   };
-  D.stopPolling = function () { clearInterval(timer); };
-  HS.on('overlay-closed', function () { if (D.dirty && !HS.panel.count()) { D.dirty = false; HS.rerender(); } });
+  D.stopPolling = function () { clearInterval(timer); timer = null; };
+  function flushDirty() { if (D.dirty && !HS.overlay.isOpen && !HS.panel.count()) repaint(); }
+  HS.on('overlay-closed', flushDirty);
+  HS.on('panel-closed', flushDirty);
+  HS.on('logged-out', function () {
+    generation++; D.stopPolling(); D.state = null; D.version = null; D.loading = null; refreshing = null;
+    D.dirty = false; index = {};
+  });
 })();

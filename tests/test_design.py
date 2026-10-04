@@ -66,11 +66,11 @@ class ContrastTest(unittest.TestCase):
             self.assertEqual(set(t), base, name)
 
 
-if __name__ == '__main__':
-    unittest.main()
+JS_FILES = [p[3:] for p in re.findall(r'<script src="(js/[^"]+)">', read('index.html'))
+            if not p.startswith('js/i18n') and p != 'js/boot.js']
+PAGES = ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements',
+         'reports', 'activity', 'settings', 'help', 'importx', 'print', 'mailbox']
 
-
-JS_FILES = ['shell.js', 'core.js', 'prefs.js', 'app.js', 'data.js', 'ui.js', 'views/auth.js', 'views/overview.js', 'views/soon.js', 'views/settings.js', 'views/help.js', 'views/lists.js', 'views/trips.js', 'views/board.js', 'views/activity.js', 'views/access.js', 'views/datatab.js', 'views/excel.js', 'views/mailbox.js', 'views/print.js', 'views/reports.js']
 
 
 def dict_keys(lang):
@@ -98,10 +98,33 @@ class LanguageTest(unittest.TestCase):
     def test_dynamic_key_families_are_complete(self):
         keys = dict_keys('en')
         for fam in ('nav.{}', 'page.{}.d'):
-            for page in ('overview', 'trips', 'board', 'review', 'vehicles', 'drivers', 'people', 'places', 'reports', 'excel', 'activity', 'settings', 'help'):
-                if fam.startswith('page.') and page in ('settings', 'help'):
-                    continue
+            for page in PAGES:
                 self.assertIn(fam.format(page), keys)
+
+    def test_all_server_errors_are_translated(self):
+        source = read('server', 'center.py') + read('server', 'domain.py')
+        errors = set(re.findall(r"(?:Problem\(|return\s+)'(err\.[A-Za-z0-9_.]+)'", source))
+        self.assertGreater(len(errors), 20)
+        for lang in ('en', 'ar'):
+            self.assertEqual(sorted(errors - dict_keys(lang)), [], lang)
+
+    def test_centre_vocabulary_is_complete(self):
+        import sys
+        sys.path.insert(0, os.path.join(ROOT, 'server'))
+        import domain
+        families = {'grade': domain.GRADES, 'fee': domain.FEE_TYPES, 'kind': domain.GROUP_KINDS,
+                    'pay.kind': domain.PAY_KINDS, 'pay.method': domain.PAY_METHODS, 'att': domain.ATT_STATUSES,
+                    'exam.kind': domain.EXAM_KINDS, 'exp.cat': domain.EXPENSE_CATS, 'day': range(7)}
+        for lang in ('en', 'ar'):
+            keys = dict_keys(lang)
+            for family, values in families.items():
+                for value in values:
+                    self.assertIn(f'{family}.{value}', keys)
+
+    def test_dictionary_keys_are_unique(self):
+        for lang in ('en', 'ar'):
+            keys = re.findall(r"'([a-zA-Z0-9_.\-]+)':\s*'", read('js', 'i18n', f'{lang}.js'))
+            self.assertEqual(len(keys), len(set(keys)), lang)
 
     def test_no_literal_words_in_page_templates(self):
         """Visible words come from the dictionaries; a word typed straight into a template would stay English in Arabic."""
@@ -147,3 +170,7 @@ class PermissionLabelsTest(unittest.TestCase):
             self.assertIn('permgroup.' + slug, keys, group)
             for p, _ in perms:
                 self.assertIn('perm.' + p, keys, p)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,4 +1,4 @@
-/* Hessa - shared interface pieces: plates, trust dots, status badges, confirm dialog, forms, tables, name matching. */
+/* Hessa - shared interface pieces: money, grades, attendance badges, confirm dialog, forms, tables, name matching. */
 (function () {
   'use strict';
   var HS = window.HS;
@@ -36,20 +36,22 @@
   };
 
   /* ---------- small pieces ---------- */
-  U.plate = function (p) {
-    if (!p) return '<span class="faint">–</span>';
-    var m = /^(.*?)\s*(\d+)\s*$/.exec(String(p));
-    if (!m || !m[1]) return '<span class="plate"><b>' + HS.esc(p) + '</b></span>';
-    return '<span class="plate" dir="rtl"><b>' + HS.esc(m[1]) + '</b><i>' + HS.esc(m[2]) + '</i></span>';
+  U.bdi = function (text) { return '<bdi dir="ltr">' + HS.esc(text) + '</bdi>'; };
+  U.money = function (n) {
+    var amount = Number(n) || 0, settings = HS.data.state && HS.data.state.settings || {}, currency = settings.currency || 'EGP';
+    var label = currency === 'EGP' ? HS.t('currency.EGP') : currency;
+    var value = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(amount);
+    return '<span class="num' + (amount < 0 ? ' bad' : '') + '">' +
+      (HS.lang === 'ar' ? U.bdi(value) + ' ' + HS.esc(label) : HS.esc(label) + ' ' + U.bdi(value)) + '</span>';
   };
-  U.trust = function (colour, reasons) {
-    var tip = (reasons || []).map(function (r) { return HS.t('why.' + r); }).join(' · ') || HS.t('trust.' + colour);
-    return '<span class="trust ' + colour + '" title="' + HS.esc(tip) + '" role="img" aria-label="' + HS.esc(HS.t('trust.' + colour)) + '"></span>';
+  U.pct = function (x) { return U.bdi(HS.fmt.num(Math.round((Number(x) || 0) * 100) / 100) + '%'); };
+  U.grade = function (code, system, track) {
+    return [code ? HS.t('grade.' + code) : '', system ? HS.t('system.' + system) : '',
+      track ? HS.t('track.' + track) : ''].filter(Boolean).map(HS.esc).join(' · ');
   };
-  var STATUS_TONE = { draft: '', sent: 'info', started: 'signal', finished: 'ok', closed: 'ok', cancelled: 'bad' };
-  U.status = function (s) {
-    s = s || 'draft';
-    return '<span class="badge ' + (STATUS_TONE[s] || '') + '">' + (s === 'started' ? '<span class="pulse-dot" style="width:.5rem;height:.5rem"></span>' : '') + HS.esc(HS.t('status.' + s)) + '</span>';
+  var ATT_TONE = { present: 'ok', late: 'warn', absent: 'bad', excused: 'info' };
+  U.att = function (status) {
+    return '<span class="badge ' + (ATT_TONE[status] || '') + '">' + HS.esc(HS.t('att.' + status)) + '</span>';
   };
   U.empty = function (icon, title, text, action) {
     return '<div class="empty"><div class="art">' + HS.icon(icon, 'lg') + '</div><h3>' + HS.esc(title) + '</h3>' + (text ? '<p>' + HS.esc(text) + '</p>' : '') + (action || '') + '</div>';
@@ -74,13 +76,15 @@
     });
   };
 
-  U.errorText = function (e) { return (e && e.message) || HS.t('common.error'); };
+  U.errorText = function (e) {
+    return e && e.data && e.data.key ? HS.t(e.data.key, e.data.vars) : (e && e.message) || HS.t('common.error');
+  };
 
   /* ---------- forms ---------- */
   // field: { key, label, type: text|number|tel|date|datetime|select|bool|textarea|ref, entity, options, required, help, ltr, placeholder, allowNew }
   function refOptions(f) {
     var rows = HS.data.list(f.entity).filter(function (r) { return r.active !== false; });
-    return rows.map(function (r) { return { v: r.id, l: f.entity === 'vehicles' ? r.plate : f.entity === 'tripCategories' ? HS.data.catName(r.id) : f.entity === 'places' ? HS.data.placeName(r) : r.name }; })
+    return rows.map(function (r) { return { v: r.id, l: f.entity === 'subjects' ? HS.data.subjectName(r.id) : r.name }; })
       .sort(function (a, b) { return String(a.l).localeCompare(String(b.l), HS.lang); });
   }
   U.field = function (f, value) {

@@ -177,10 +177,10 @@ Errors: HTTP 400 `{error, key, vars}` from `center.Problem` → the page shows `
 
 ### C7. Known gaps in the current code (fix in task P1)
 1. **P1.1 implemented 2026-10-04:** startup assets now exist in the prescribed order, with centre scaffolds and the shared data wrapper in `ui.js`. Centre navigation and visual verification remain dependent on P1.2.
-2. `js/shell.js` `PAGES`, palette actions (`HS.newTrip`), shortcuts (`N`), tour and slides are trip pages.
-3. `js/views/lists.js`, `overview.js`, `settings.js` (tabs rules/money/gateway), `access.js` ("categories") are trip-shaped.
-4. `js/i18n/en.js`/`ar.js` hold trip texts; `tests/test_design.py` `JS_FILES` lists deleted views (it fails now — expected).
-5. `js/data.js` reloads the **whole** state every 4 s on any change → must use `/api/delta` (P1.4).
+2. P1.2 implemented: centre pages, permission-aware palette, shortcuts, tour and onboarding.
+3. P1 cleanup implemented: overview/lists are centre scaffolds; access scopes are teachers. Full lists/settings/overview follow in P3 and P5.
+4. P1.5/P1.6 implemented: centre dictionaries and updated design tests pass.
+5. P1.4 implemented: two-second delta polling with fallback and deferred repaint; Chrome timing verification pending.
 6. `tests/test_e2e_browser.py` tests trip flows → rewrite (P8).
 7. `gateway/public/*` is the driver page → becomes the parent page (P7).
 8. `center.dashboard()` calls `risk_list()` on every load (slow for big centres) → cache by data version (P2.6).
@@ -551,7 +551,7 @@ groups with free seats, WhatsApp booking link) pushed as a public card (no stude
 ## Part G — Checks before every push
 ```
 cd /home/user/Teachers
-node --test --test-isolation=none tests/test_startup.js                                                # startup asset/order regression
+node --test --test-isolation=none tests/test_frontend.js                                                # startup asset/order regression
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 cd tests
 python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)

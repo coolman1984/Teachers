@@ -21,7 +21,7 @@
       { h: 'f.name', cell: function (u) { return '<b>' + HS.esc(u.full_name) + '</b><div class="muted" style="font-size:.85rem">@' + HS.esc(u.username) + (u.title ? ' · ' + HS.esc(u.title) : '') + '</div>'; } },
       { h: 'acc.profile', cell: function (u) { return '<span class="badge ' + (u.role === 'Administrator' ? 'signal' : '') + '">' + HS.esc(u.role || 'Custom') + '</span>'; } },
       { h: 'acc.login', cell: function (u) { var l = linkFor(u.id); return l.login === 'link' ? '<span class="badge info">' + HS.icon('chat', 'sm') + HS.esc(HS.t('acc.login.link')) + '</span>' : '<span class="badge">' + HS.icon('lock', 'sm') + HS.esc(HS.t('acc.login.pw')) + '</span>'; } },
-      { h: 'acc.cats', cell: function (u) { return u.scopes ? '<span class="badge warn">' + HS.fmt.num(u.scopes.length) + ' ' + HS.esc(HS.t('acc.catsOnly')) + '</span>' : '<span class="muted">' + HS.esc(HS.t('acc.allCats')) + '</span>'; } },
+      { h: 'acc.teachers', cell: function (u) { return u.scopes ? '<span class="badge warn">' + HS.fmt.num(u.scopes.length) + ' ' + HS.esc(HS.t('acc.teachersOnly')) + '</span>' : '<span class="muted">' + HS.esc(HS.t('acc.allTeachers')) + '</span>'; } },
       { h: 'acc.last', cell: function (u) { return u.last_login ? '<span class="num">' + U.dt(u.last_login) + '</span>' : '<span class="faint">–</span>'; } },
       { h: 'f.active', cell: function (u) { return u.active ? '<span class="badge ok">' + HS.esc(HS.t('f.activeYes')) + '</span>' : '<span class="badge">' + HS.esc(HS.t('f.inactive')) + '</span>'; } }
     ], users, { click: true, rowAttr: function (u) { return 'data-uid="' + HS.esc(u.id) + '"'; } });
@@ -40,7 +40,7 @@
 
   /* ---------- user form ---------- */
   function openUser(u) {
-    var isNew = !u, l = u ? linkFor(u.id) : {}, profiles = cache.users.profiles, cats = HS.data.list('tripCategories');
+    var isNew = !u, l = u ? linkFor(u.id) : {}, profiles = cache.users.profiles, teachers = HS.data.list('teachers');
     var perms = u ? u.perms : (profiles.filter(function (p) { return p.id === 'viewer'; })[0] || { perms: [] }).perms;
     var mode = l.login === 'link' ? 'link' : 'password';
     var scoped = !!(u && u.scopes);
@@ -52,8 +52,8 @@
         (isNew ? '<div class="field"><label>' + HS.esc(HS.t('auth.password')) + '</label><input class="input" name="password" type="text" dir="ltr" autocomplete="off"><span class="help">' + HS.esc(HS.t('acc.pw.h')) + '</span></div>' : '') + '</div>' +
         '<div class="field"><label>' + HS.esc(HS.t('acc.title')) + '</label><input class="input" name="title" value="' + HS.esc(u ? u.title : '') + '"></div>' +
         '<div class="field"><label>' + HS.esc(HS.t('acc.profile')) + '</label><select class="input" name="role">' + profiles.map(function (p) { return '<option value="' + HS.esc(p.name) + '"' + (u && u.role === p.name ? ' selected' : '') + '>' + HS.esc(p.name) + '</option>'; }).join('') + '<option value="Custom"' + (u && (!u.role || u.role === 'Custom') ? ' selected' : '') + '>' + HS.esc(HS.t('acc.custom')) + '</option></select><span class="help">' + HS.esc(HS.t('acc.profile.h')) + '</span></div>' +
-        '<div class="field"><label>' + HS.esc(HS.t('acc.cats')) + '</label><div class="seg" role="group"><button type="button" data-scope="all" aria-pressed="' + (!scoped) + '">' + HS.esc(HS.t('acc.allCats')) + '</button><button type="button" data-scope="some" aria-pressed="' + scoped + '">' + HS.esc(HS.t('acc.catsOnly')) + '</button></div>' +
-          '<div data-cats class="chip-row" style="margin-top:.4rem"' + (scoped ? '' : ' hidden') + '>' + cats.map(function (c) { return '<label class="perm"><input type="checkbox" data-cat="' + HS.esc(c.id) + '"' + (u && u.scopes && u.scopes.indexOf(c.id) >= 0 ? ' checked' : '') + '><span>' + HS.esc(HS.data.catName(c.id)) + '</span></label>'; }).join('') + '</div></div>' +
+        '<div class="field"><label>' + HS.esc(HS.t('acc.teachers')) + '</label><div class="seg" role="group"><button type="button" data-scope="all" aria-pressed="' + (!scoped) + '">' + HS.esc(HS.t('acc.allTeachers')) + '</button><button type="button" data-scope="some" aria-pressed="' + scoped + '">' + HS.esc(HS.t('acc.teachersOnly')) + '</button></div>' +
+          '<div data-teachers class="chip-row" style="margin-top:.4rem"' + (scoped ? '' : ' hidden') + '>' + teachers.map(function (c) { return '<label class="perm"><input type="checkbox" data-teacher="' + HS.esc(c.id) + '"' + (u && u.scopes && u.scopes.indexOf(c.id) >= 0 ? ' checked' : '') + '><span>' + HS.esc(HS.data.teacherName(c.id)) + '</span></label>'; }).join('') + '</div></div>' +
         '<div class="field"><div class="row"><span class="switch"><input type="checkbox" name="active"' + (!u || u.active ? ' checked' : '') + '><span></span></span><label style="font-weight:600">' + HS.esc(HS.t('f.active')) + '</label></div></div>' +
         (u && mode === 'link' ? linkBox(u, l) : '') +
         '<div class="field"><label>' + HS.esc(HS.t('acc.perms')) + '</label><div class="row wrap"><button type="button" class="btn sm" data-all>' + HS.esc(HS.t('acc.selectAll')) + '</button><button type="button" class="btn sm ghost" data-none>' + HS.esc(HS.t('acc.clearAll')) + '</button></div></div>' + ticks(perms) +
@@ -75,7 +75,7 @@
     el.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
       if (b.dataset.mode) { mode = b.dataset.mode; sync(); }
-      else if (b.dataset.scope) { HS.$$('[data-scope]', el).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); el.querySelector('[data-cats]').hidden = b.dataset.scope === 'all'; }
+      else if (b.dataset.scope) { HS.$$('[data-scope]', el).forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); el.querySelector('[data-teachers]').hidden = b.dataset.scope === 'all'; }
       else if (b.hasAttribute('data-all')) HS.$$('[data-perm]', el).forEach(function (c) { if (!c.closest('.admin')) c.checked = true; });
       else if (b.hasAttribute('data-none')) HS.$$('[data-perm]', el).forEach(function (c) { c.checked = false; });
       else if (b.hasAttribute('data-copy')) { var inp = el.querySelector('[data-linkurl]'); inp.select(); try { document.execCommand('copy'); HS.toast(HS.t('common.saved')); } catch (x) { /* the user can still copy by hand */ } }
@@ -94,7 +94,7 @@
     el.addEventListener('change', function (e) { if (e.target.dataset && e.target.dataset.perm) el.querySelector('[name="role"]').value = 'Custom'; });
     function save() {
       var f = function (n) { return (form.querySelector('[name="' + n + '"]') || {}).value || ''; };
-      var scopes = el.querySelector('[data-scope="some"]').getAttribute('aria-pressed') === 'true' ? HS.$$('[data-cat]', el).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.cat; }) : null;
+      var scopes = el.querySelector('[data-scope="some"]').getAttribute('aria-pressed') === 'true' ? HS.$$('[data-teacher]', el).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.teacher; }) : null;
       var body = { id: u ? u.id : undefined, full_name: f('full_name').trim(), username: mode === 'password' ? f('username').trim() : (u ? u.username : ''), title: f('title').trim(), role: f('role'), login: mode,
         perms: checked(el), scopes: scopes, active: form.querySelector('[name="active"]').checked, must_change: !u };
       if (!u && mode === 'password') body.password = f('password');

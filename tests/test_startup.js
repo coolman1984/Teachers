@@ -10,16 +10,16 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
 const pages = ['door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'importx', 'print', 'mailbox'];
 
-function startup(lang) {
+function startup(lang, options) {
   const ctx = vm.createContext({
     document: { documentElement: { lang, dataset: {} }, addEventListener() {} },
     localStorage: { getItem() { return null; } },
-    console, Intl, URLSearchParams, setTimeout, clearTimeout, setInterval, clearInterval
+    console, Intl, URLSearchParams, addEventListener() {}, removeEventListener() {}, setTimeout, clearTimeout, setInterval, clearInterval
   });
   ctx.window = ctx;
   for (const file of scripts) {
     // QRCode needs the browser DOM; its existence is checked separately.
-    if (file === 'lib/qrcode.min.js') continue;
+    if (file === 'lib/qrcode.min.js' || (options && options.app === false && file === 'js/app.js')) continue;
     vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), ctx, { filename: file });
   }
   return ctx.HS;
@@ -76,3 +76,5 @@ test('data failure offers retry and recovery mounts the page', async () => {
   view.mount({}, {});
   assert.equal(mounted, 1);
 });
+
+module.exports = { startup };

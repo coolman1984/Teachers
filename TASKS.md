@@ -14,11 +14,12 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P1.1 index.html script list + skeleton view files
   - [x] Startup-order regression, both-language placeholders, failed-load retry
   - [ ] Chrome visual verification after P1.2 makes centre navigation reachable; full P1 checks still pending
-- [ ] P1.2 shell.js pages, palette, shortcuts, tour, slides
-- [ ] P1.3 ui.js / data.js helpers (money, grade, att badges; error keys)
-- [ ] P1.4 Fast refresh with /api/delta
-- [ ] P1.5 i18n EN + Formal Arabic reset
-- [ ] P1.6 test_design.py updated and green
+- [x] P1.2 shell.js pages, palette, shortcuts, tour, slides
+- [x] P1.3 ui.js / data.js helpers (money, grade, att badges; error keys)
+- [x] P1.4 Fast refresh with /api/delta
+  - [ ] Two-context Chrome timing check (<3 s, no /api/state request) after browser transport is available
+- [x] P1.5 i18n EN + Formal Arabic reset
+- [x] P1.6 test_design.py updated and green
 
 ## Phase P2 – Server hardening
 - [ ] P2.1 tests/test_center_domain.py

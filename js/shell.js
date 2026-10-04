@@ -8,20 +8,19 @@
   // perm: permission (or list) that shows the page; key: the letter after "G" that jumps there; phase: when it is built
   var PAGES = [
     { id: 'overview', icon: 'home', group: 'ops', perm: 'overview.view', key: 'o', phase: 1 },
-    { id: 'trips', icon: 'route', group: 'ops', perm: 'trips.view', key: 't', phase: 2 },
-    { id: 'board', icon: 'board', group: 'ops', perm: 'board.view', key: 'b', phase: 2 },
-    { id: 'review', icon: 'shield', group: 'ops', perm: 'review.view', key: 'r', phase: 2 },
-    { id: 'vehicles', icon: 'car', group: 'fleet', perm: 'fleet.view', key: 'v', phase: 2 },
-    { id: 'drivers', icon: 'wheel', group: 'fleet', perm: 'fleet.view', key: 'd', phase: 2 },
-    { id: 'people', icon: 'users', group: 'fleet', perm: 'people.view', key: 'p', phase: 2 },
-    { id: 'places', icon: 'pin', group: 'fleet', perm: 'people.view', key: 'l', phase: 2 },
-    { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'e', phase: 1 },
-    { id: 'excel', icon: 'sheet', group: 'insight', perm: ['excel.import', 'excel.export'], key: 'x', phase: 1 },
-    { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 2 },
-    { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 's', phase: 1 },
+    { id: 'door', icon: 'board', group: 'ops', perm: 'door.use', key: 'd', phase: 1 },
+    { id: 'students', icon: 'users', group: 'ops', perm: 'students.view', key: 's', phase: 1 },
+    { id: 'groups', icon: 'layers', group: 'ops', perm: 'groups.view', key: 'g', phase: 1 },
+    { id: 'money', icon: 'sheet', group: 'money', perm: 'money.view', key: 'm', phase: 1 },
+    { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1 },
+    { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1 },
+    { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1 },
+    { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'r', phase: 1 },
+    { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 1 },
+    { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 'c', phase: 1 },
     { id: 'help', icon: 'help', group: 'control', perm: null, key: 'h', phase: 1 }
   ];
-  var GROUPS = ['ops', 'fleet', 'insight', 'control'];
+  var GROUPS = ['ops', 'learn', 'money', 'insight', 'control'];
   HS.pages = PAGES;
 
   HS.can = function (perm) {
@@ -60,7 +59,7 @@
     var initials = (me.full_name || me.username || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase();
     return '<div class="app" id="app-shell" data-collapsed="' + (HS.prefs.data.collapsed ? 1 : 0) + '">' +
       '<aside class="sidebar" id="sidebar" aria-label="' + HS.esc(HS.t('top.menu')) + '">' +
-        '<div class="brand"><div class="mark">' + HS.icon('route', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '<small>' + HS.esc(HS.t('app.tagline')) + '</small></div></div>' +
+        '<div class="brand"><div class="mark">' + HS.icon('cap', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '<small>' + HS.esc(HS.t('app.tagline')) + '</small></div></div>' +
         '<nav class="nav" data-tour="nav">' + groups + '</nav>' +
         '<div class="side-foot"><button class="icon-btn" data-act="account" aria-label="' + HS.esc(HS.t('top.account')) + '" style="background:var(--side-active);color:var(--side-ink);font-weight:700;border-radius:50%">' + HS.esc(initials) + '</button>' +
           '<div class="who"><b>' + HS.esc(me.full_name || me.username) + '</b><small>' + HS.esc(me.role || '') + '</small></div>' +
@@ -95,7 +94,7 @@
       renderRoute();
       if (!HS.prefs.data.welcomed) setTimeout(function () { HS.slides.open(true); }, 500);
     },
-    stop: function () { shellReady = false; }
+    stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); }
   };
 
   function refreshThemeButton() {
@@ -107,11 +106,11 @@
     if (!shellReady) return;
     var r = HS.route();
     var page = PAGES.filter(function (p) { return p.id === r.path; })[0];
-    if (!page || !HS.can(page.perm)) { HS.go('overview'); return; }
+    if (!page || !HS.can(page.perm)) { HS.go(visiblePages()[0].id); return; }
     HS.$$('#sidebar a[data-page]').forEach(function (a) { if (a.dataset.page === page.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     HS.$('#crumbs').innerHTML = '<span class="mut">' + HS.esc(HS.t('app.name')) + '</span><span class="mut faint">/</span><b>' + HS.esc(HS.t('nav.' + page.id)) + '</b>';
     document.title = HS.t('nav.' + page.id) + ' · ' + HS.t('app.name');
-    var view = HS.views[page.id] || HS.views.soon;
+    var view = r.path === 'students' && r.parts[1] === 'import' ? HS.views.importx : HS.views[page.id] || HS.views.soon;
     var old = HS.$('#view'), host = old.cloneNode(false);   // a fresh element: no listeners of the previous page stay behind, and the page-in animation replays
     old.replaceWith(host);
     var ctx = { page: page, route: r, me: HS.me };
@@ -177,6 +176,7 @@
         if (sc) { sc.classList.remove('on'); setTimeout(function () { sc.remove(); }, 260); }
         host.style.pointerEvents = 'none';
       }
+      HS.emit('panel-closed');
       return true;
     },
     count: function () { return panelStack.length; }
@@ -191,7 +191,6 @@
       return { icon: p.icon, label: HS.t('nav.' + p.id), group: HS.t('pal.g.pages'), hint: 'G ' + p.key.toUpperCase(), run: function () { HS.go(p.id); } };
     });
     items.push(
-      { icon: 'plus', label: HS.t('act.newtrip'), group: HS.t('pal.g.actions'), hint: 'N', run: function () { HS.newTrip(); } },
       { icon: 'moon', label: HS.t('act.theme.toggle'), group: HS.t('pal.g.appearance'), hint: 'T', run: function () { HS.prefs.toggleTheme(); } },
       { icon: 'globe', label: HS.t('act.lang.toggle'), group: HS.t('pal.g.appearance'), hint: 'L', run: function () { HS.prefs.toggleLang(); } },
       { icon: 'collapse', label: HS.t('act.collapse'), group: HS.t('pal.g.appearance'), hint: '[', run: function () { toggleCollapse(); } },
@@ -201,8 +200,38 @@
       { icon: 'info', label: HS.t('act.about'), group: HS.t('pal.g.actions'), hint: '', run: function () { openAbout(); } },
       { icon: 'logout', label: HS.t('act.logout'), group: HS.t('pal.g.actions'), hint: '', run: function () { logout(); } }
     );
+    [
+      { kind: 'student', perm: 'students.manage', icon: 'users', key: 'act.newStudent', hint: 'N' },
+      { kind: 'group', perm: 'groups.manage', icon: 'layers', key: 'act.newGroup' },
+      { kind: 'payment', perm: 'money.collect', icon: 'sheet', key: 'act.takePayment' },
+      { kind: 'door', perm: 'door.use', icon: 'board', key: 'act.openDoor' }
+    ].forEach(function (a) {
+      if (HS.can(a.perm)) items.push({ icon: a.icon, label: HS.t(a.key), group: HS.t('pal.g.actions'), hint: a.hint || '',
+        run: function () { HS.quickAdd(a.kind); } });
+    });
     return items;
   }
+  HS.quickAdd = function (kind) {
+    var actions = { student: ['students.manage', 'students?new=1'], group: ['groups.manage', 'groups?new=1'],
+      payment: ['money.collect', 'money?pay=1'], door: ['door.use', 'door'] };
+    var a = actions[kind || 'student'];
+    if (a && HS.can(a[0])) HS.go(a[1]);
+  };
+  HS.paletteRecords = function (q) {
+    var n = norm(q), items = [];
+    if (!n || !HS.data) return items;
+    if (HS.can('students.view')) HS.data.list('students').forEach(function (s) {
+      var search = [s.code, s.name];
+      if (HS.can('contacts.view')) search = search.concat([s.mobile, s.parentMobile]);
+      if (norm(search.join(' ')).indexOf(n) >= 0) items.push({ icon: 'users', label: s.code + ' · ' + s.name,
+        group: HS.t('nav.students'), run: function () { HS.go('students?id=' + encodeURIComponent(s.id)); } });
+    });
+    if (HS.can('groups.view')) HS.data.list('groups').forEach(function (g) {
+      if (norm(g.name).indexOf(n) >= 0) items.push({ icon: 'layers', label: g.name, group: HS.t('nav.groups'),
+        run: function () { HS.go('groups?id=' + encodeURIComponent(g.id)); } });
+    });
+    return items;
+  };
   function openPalette() {
     var all = paletteItems(), sel = 0, list = all;
     var o = HS.overlay.open('<div class="dialog palette" role="dialog" aria-modal="true" aria-label="' + HS.esc(HS.t('top.search')) + '">' +
@@ -239,10 +268,9 @@
   /* ---------- keyboard shortcuts sheet ---------- */
   function showKeys() {
     var rows = [
-      ['Ctrl K', 'keys.search'], ['?', 'keys.help'], ['G + O T B R V D P L E X A S H', 'keys.go'], ['T', 'keys.theme'], ['L', 'keys.lang'],
-      ['[', 'keys.collapse'], ['Esc', 'keys.close'], ['N', 'keys.new'], ['[ ]', 'keys.day']
+      ['Ctrl K', 'keys.search'], ['?', 'keys.help'], ['G + O D S G M E F T R A C H', 'keys.go'], ['T', 'keys.theme'], ['L', 'keys.lang'],
+      ['[', 'keys.collapse'], ['Esc', 'keys.close'], ['N', 'keys.new'], ['F2', 'keys.doorFocus']
     ];
-    rows[8][0] = '← →';
     HS.dialog({ title: HS.t('keys.title'), wide: true,
       body: '<div class="keys">' + rows.map(function (r) { return '<div><span>' + HS.esc(HS.t(r[1])) + '</span><span>' + r[0].split(' ').map(function (k) { return k === '+' ? '+' : '<i class="kbd">' + HS.esc(k) + '</i>'; }).join(' ') + '</span></div>'; }).join('') + '</div>' +
         '<p class="faint">' + HS.esc(HS.t('keys.note')) + '</p>' });
@@ -253,7 +281,7 @@
     HS.get('/api/auth/status').then(function (s) {
       var a = s.about || {};
       HS.panel.open({ title: HS.t('panel.about'), body:
-        '<div class="card"><div class="row"><div class="brand" style="padding:0;min-height:0"><div class="mark" style="background:var(--signal)">' + HS.icon('route', 'lg') + '</div></div><div><h3>' + HS.esc(HS.t('app.name')) + '</h3><span class="muted">' + HS.esc(HS.t('common.version')) + ' <span class="num">' + HS.esc(a.version || '') + '</span></span></div></div>' +
+        '<div class="card"><div class="row"><div class="brand" style="padding:0;min-height:0"><div class="mark" style="background:var(--signal)">' + HS.icon('cap', 'lg') + '</div></div><div><h3>' + HS.esc(HS.t('app.name')) + '</h3><span class="muted">' + HS.esc(HS.t('common.version')) + ' <span class="num">' + HS.esc(a.version || '') + '</span></span></div></div>' +
         '<p style="margin-top:.9rem">' + HS.esc(HS.t('panel.about.body')) + '</p></div>' +
         '<div class="tip">' + HS.icon('info') + '<span>' + HS.esc(HS.t('panel.sheet')) + '</span></div>' +
         '<dl class="kv"><dt>©</dt><dd>' + HS.esc((a.copyright || '').replace('©', '').trim()) + '</dd></dl>' });
@@ -313,6 +341,9 @@
       var app = HS.$('#app-shell'); if (app && app.dataset.menu === '1') app.dataset.menu = 0;
       return;
     }
+    if (e.key === 'F2' && HS.route().path === 'door' && !HS.overlay.isOpen) {
+      var search = HS.$('#door-q'); if (search) { e.preventDefault(); search.focus(); } return;
+    }
     if (typing || e.ctrlKey || e.metaKey || e.altKey || HS.overlay.isOpen) return;
     if (HS.slides.active) { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === ' ') HS.slides.key(e); return; }
     var code = e.code || '';
@@ -327,8 +358,8 @@
     else if (code === 'KeyG') { goPending = Date.now(); }
     else if (code === 'KeyT') { HS.prefs.toggleTheme(); }
     else if (code === 'KeyL') { HS.prefs.toggleLang(); }
-    else if (code === 'KeyN') { if (HS.can('trips.create')) { e.preventDefault(); HS.newTrip(); } }
-    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && HS.boardShift) { var rtl = document.documentElement.dir === 'rtl'; if (HS.boardShift((e.key === 'ArrowRight') === rtl ? -1 : 1)) e.preventDefault(); }
+    else if (code === 'KeyN') { if (HS.can('students.manage')) { e.preventDefault(); HS.quickAdd('student'); } }
+    else if (e.key === ',') { e.preventDefault(); HS.go('settings'); }
     else if (e.key === '[') { toggleCollapse(); }
     else if (e.key === '/') { e.preventDefault(); openPalette(); }
   });
@@ -351,7 +382,7 @@
         el.scrollIntoView({ block: 'center' });
         var r = el.getBoundingClientRect(), pad = 6;
         var pw = Math.min(352, window.innerWidth - 32), ph = 210, gap = 16, vw = window.innerWidth, vh = window.innerHeight;
-        var top, left, tall = r.height > vh * 0.5;
+        var top, left, rtl = document.documentElement.dir === 'rtl', tall = r.height > vh * 0.5;
         var clampX = function (x) { return Math.min(Math.max(12, x), vw - pw - 12); };
         var clampY = function (y) { return Math.min(Math.max(12, y), vh - ph - 12); };
         if (!tall && r.bottom + gap + ph <= vh) { top = r.bottom + gap; left = clampX(r.left + r.width / 2 - pw / 2); }
@@ -359,8 +390,8 @@
         else if (r.left - gap - pw >= 12) { left = r.left - gap - pw; top = clampY(r.top + 24); }
         else if (r.right + gap + pw <= vw - 12) { left = r.right + gap; top = clampY(r.top + 24); }
         else { left = clampX(12); top = clampY(vh - ph - 12); }
-        host.innerHTML = '<div class="hole" style="top:' + (r.top - pad) + 'px;left:' + (r.left - pad) + 'px;width:' + (r.width + pad * 2) + 'px;height:' + (r.height + pad * 2) + 'px"></div>' +
-          '<div class="pop" role="dialog" style="top:' + top + 'px;left:' + left + 'px"><h3>' + HS.esc(HS.t('tour.' + s.k + '.t')) + '</h3><p class="muted">' + HS.esc(HS.t('tour.' + s.k + '.b')) + '</p>' +
+        host.innerHTML = '<div class="hole" style="top:' + (r.top - pad) + 'px;inset-inline-start:' + (rtl ? vw - r.right - pad : r.left - pad) + 'px;width:' + (r.width + pad * 2) + 'px;height:' + (r.height + pad * 2) + 'px"></div>' +
+          '<div class="pop" role="dialog" style="top:' + top + 'px;inset-inline-start:' + (rtl ? vw - left - pw : left) + 'px"><h3>' + HS.esc(HS.t('tour.' + s.k + '.t')) + '</h3><p class="muted">' + HS.esc(HS.t('tour.' + s.k + '.b')) + '</p>' +
           '<div class="row"><span class="dots">' + steps.map(function (_, n) { return '<i class="' + (n === i ? 'on' : '') + '"></i>'; }).join('') + '</span><span class="faint num">' + HS.t('tour.of', { n: i + 1, m: steps.length }) + '</span>' +
           '<span class="grow"></span><button class="btn ghost sm" data-tskip>' + HS.esc(HS.t('common.skip')) + '</button><button class="btn primary sm" data-tnext>' + HS.esc(i === steps.length - 1 ? HS.t('common.done') : HS.t('common.next')) + '</button></div></div>';
         host.querySelector('[data-tskip]').onclick = HS.tour.stop;
@@ -376,7 +407,7 @@
   };
 
   /* ---------- welcome slides ---------- */
-  var SLIDE_ICONS = ['route', 'chat', 'camera', 'shield', 'sheet', 'lock'];
+  var SLIDE_ICONS = ['cap', 'board', 'shield', 'chat', 'bell', 'lock'];
   HS.slides = {
     active: false, i: 0,
     open: function (first) {

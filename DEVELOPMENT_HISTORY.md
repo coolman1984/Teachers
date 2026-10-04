@@ -4,6 +4,24 @@ Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
 ---
 
+## Centre shell, translations and incremental refresh (2026-10-04)
+
+**Why:** P1.2–P1.6 still used the previous domain and reloaded all data on every remote write.
+**What:** centre navigation and permission-aware quick actions; student/group palette records; N, comma, G and F2 shortcuts;
+graduation-cap branding and centre onboarding; shared money, grade, attendance and translated-error helpers.
+Startup loads only state; subsequent two-second polls merge delta rows and removals, with full-state fallback when requested.
+Open editors defer repaint until the last panel/dialog closes; requests started before logout cannot restore the old session's data.
+Reset EN/Formal Arabic dictionaries, translate all centre permissions/errors/vocabularies, and convert access scopes to teachers.
+Replaced inherited overview/list content with explicit centre scaffolds until their scheduled tasks; settings retains appearance,
+access and data tabs, with safe pending content for the remaining tabs. Appearance swatches use CSS tokens.
+**Verified:** node --test --test-isolation=none tests/test_frontend.js: 11 passed.
+python -m unittest discover -s tests -p test_design.py: 15 passed.
+Design checks now cover the declared startup files, unique dictionary keys, centre vocabularies and server error translations.
+**Limits:** Chrome screenshots and the two-context refresh timing scenario remain unticked. Server hardening and functional
+screens follow in P2–P7. No claim that the complete app is ready; no push until all required checks pass.
+**Lessons:** use the actual permission money.collect, not an invented permission name. Contact searches need permission
+even when a page already holds a record. Logout must invalidate asynchronous reads, and closing a panel must flush deferred updates.
+
 ## Startup assets and centre page scaffolds (2026-10-04)
 
 **Why:** P1.1 loaded deleted trip view files, and the prescribed script order would load centre views before their data wrapper existed.

@@ -10,4 +10,5 @@
     },
     mount: function () {}
   });
+  HS.mailboxTab = HS.views.mailbox;
 })();

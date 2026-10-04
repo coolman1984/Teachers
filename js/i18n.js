@@ -24,7 +24,7 @@
     HS.emit('lang-changed', HS.lang);
   };
 
-  /* Western digits in both languages (km, times and plates read the same everywhere). */
+  /* Western digits in both languages (codes, money and times read the same everywhere). */
   var nf = new Intl.NumberFormat('en-US');
   HS.fmt = {
     num: function (n) { return nf.format(Number(n) || 0); },

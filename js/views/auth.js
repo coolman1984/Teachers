@@ -4,7 +4,7 @@
   var HS = window.HS;
 
   function hero() {
-    return '<div class="hero"><div class="row"><div class="brand" style="padding:0;min-height:0"><div class="mark">' + HS.icon('route', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '</div></div>' +
+    return '<div class="hero"><div class="row"><div class="brand" style="padding:0;min-height:0"><div class="mark">' + HS.icon('cap', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '</div></div>' +
       '<span class="grow"></span><button class="btn ghost sm" data-lang style="color:var(--side-ink)">' + HS.icon('globe', 'sm') + (HS.lang === 'ar' ? 'English' : 'العربية') + '</button></div>' +
       '<div><h1>' + HS.esc(HS.t('auth.hero.title')) + '</h1><p>' + HS.esc(HS.t('auth.hero.sub')) + '</p></div><div class="road" aria-hidden="true"></div></div>';
   }
