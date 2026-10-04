@@ -135,6 +135,10 @@ Merge rules: `materials.stock` is a **counter** (two PCs selling at once both co
 - numbers carry the PC letter: receipts `R26-A-000123`, expenses `E26-A-000012`, shifts `S26-A-0007` (`domain.doc_no`)
 - student codes: number ranges per PC (`domain.CODE_RANGES`: PC A 10000–49999, B 50000–69999, …)
 
+Sample business records use `smp-` ids, including deterministic sessions, attendance, marks and settlements.
+The regular deterministic ids above are unchanged. Sample accounts use normal signed account ids plus an explicit
+sample-account notes marker; sample removal disables those accounts and archives prefixed business rows.
+
 ### C5. Settings ids (`settings` entity) and defaults (`domain.DEFAULTS`)
 `systemName` (centre name), `logoText`, `currency` (EGP), `lateMinutes` 15, `doorEarlyMinutes` 90, `doorLateMinutes` 30,
 `schoolTreasuryPct` 15, `schoolTeacherPct` 80, `schoolMaxFee` 100, `schoolMaxStudents` 25, `riskCall` 35, `riskHigh` 60,

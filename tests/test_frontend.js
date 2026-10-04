@@ -3,6 +3,56 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { startup } = require('./test_startup.js');
 
+test('sample controls require both permissions and cancellation never writes', async () => {
+  for (const lang of ['en','ar']) {
+    const HS=startup(lang);HS.lang=lang;HS.data.state={settings:{}};
+    HS.me={perms:['data.import']};assert.ok(!HS.sampleControls().includes('data-sample='));
+    HS.me.perms.push('users.manage');assert.ok(HS.sampleControls().includes('data-sample="load"'));
+    HS.data.state.settings['smp-centre']={};assert.ok(HS.sampleControls().includes('data-sample="delete"'));
+    let click,writes=0;HS.post=async () => {writes++;};HS.ui.confirm=async () => false;
+    HS.mountSampleControls({addEventListener:(_,fn) => {click=fn;}});
+    click({target:{closest:()=>({dataset:{sample:'delete'}})}});
+    await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,0);
+    HS.ui.confirm=async () => true;HS.ui.run=promise=>promise;HS.data.load=async()=>{};HS.rerender=()=>{};
+    click({target:{closest:()=>({dataset:{sample:'load'}})}});
+    await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,1);
+  }
+});
+
+test('import preview escapes records, retains selection and saves only after confirmation', async () => {
+  const HS=startup('en');HS.lang='en';HS.data.state={settings:{},groups:[{id:'g1',name:'Example group'}]};
+  HS.me={perms:['students.manage']};assert.ok(!HS.views.importx.render().includes('data-import-form'));
+  HS.me.perms.push('contacts.view');assert.ok(HS.views.importx.render().includes('data-import-form'));
+  const handlers={},formHandlers={},file={name:'example.csv'},input={files:[file]},submit={disabled:false};
+  const preview={innerHTML:'',addEventListener:(type,fn)=>{handlers[type]=fn;},querySelector:()=>({checked:true})};
+  const form={addEventListener:(type,fn)=>{formHandlers[type]=fn;},querySelector:selector=>selector==='[name="file"]'?input:selector==='[type="submit"]'?submit:{value:'S1'}};
+  const root={isConnected:true,querySelector:selector=>selector==='[data-import-form]'?form:preview};
+  let writes=0,saved,calls=0,confirmed=false;
+  HS.api=async (method,url,body,opts)=>{calls++;assert.equal(method,'POST');assert.ok(url.startsWith('/api/import/preview'));assert.equal(body,file);assert.equal(opts.raw,true);
+    return {rows:[{name:'<script>bad</script>',code:'10001',gradeCode:'S1',parentMobile:'',groupId:'g1',match:'',warnings:['imp.noGrade']}]};};
+  HS.post=async (url,body)=>{writes++;saved=body;assert.equal(url,'/api/c/import');};
+  HS.ui.confirm=async()=>confirmed;HS.ui.run=promise=>promise;HS.data.load=async()=>{};
+  HS.views.importx.mount(root);formHandlers.submit({preventDefault(){}});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,1);assert.equal(writes,0);assert.equal(submit.disabled,false);
+  assert.ok(preview.innerHTML.includes('&lt;script&gt;bad&lt;/script&gt;'));assert.ok(!preview.innerHTML.includes('<script>bad'));
+  assert.ok(preview.innerHTML.includes(HS.t('imp.noGrade')));
+  const button={};const saveEvent={target:{closest:selector=>selector==='[data-import-save]'?button:null}};
+  handlers.click(saveEvent);await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,0);
+  confirmed=true;handlers.click(saveEvent);await new Promise(resolve=>setImmediate(resolve));assert.equal(writes,1);
+  assert.equal(saved.rows.length,1);assert.equal(saved.rows[0].consent,true);assert.equal(preview.innerHTML,'');
+});
+
+test('overview shows scoped server numbers and renders retry on a failed read', async () => {
+  const HS=startup('ar');HS.lang='ar';HS.data.state={settings:{}};HS.me={perms:['overview.view']};
+  const target={innerHTML:''},root={isConnected:true,querySelector:()=>target,addEventListener(){}};
+  HS.get=async()=>({checkedIn:12,sessions:[],students:40,risk:3,trend:[]});
+  HS.views.overview.mount(root);await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(target.innerHTML.includes('12'));assert.ok(target.innerHTML.includes(HS.t('ov.students')));
+  assert.ok(!target.innerHTML.includes(HS.t('ov.money')));
+  HS.get=async()=>{throw new Error('Offline');};HS.views.overview.mount(root);
+  await new Promise(resolve=>setImmediate(resolve));assert.ok(target.innerHTML.includes('data-dashboard-retry'));
+});
+
 test('centre navigation uses server permissions and supported routes', () => {
   const HS = startup('en');
   assert.deepEqual(Array.from(HS.pages, p => p.id),

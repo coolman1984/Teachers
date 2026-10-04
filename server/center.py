@@ -73,6 +73,10 @@ def settings(store):
     with store.lock:
         rows = {r[0]: r[1] for r in store.conn.execute('SELECT id, value FROM settings WHERE deleted=0')}
     out = dict(D.DEFAULTS)
+    try:
+        out.update(json.loads(rows.get('smp-centre') or '{}'))
+    except (TypeError, ValueError, AttributeError):
+        pass
     for k, v in rows.items():
         try:
             out[k] = json.loads(v)
@@ -1004,7 +1008,7 @@ def save_marks(ctx, exam_id, items):
                 raise Problem('err.scoreRange', 'A mark is higher than the full mark.', max=mx)
         if score is None and not absent:
             continue
-        mid = f'mk-{exam_id}-{sid}'
+        mid = D.mark_id(exam_id, sid)
         cur = ctx.store.row('marks', mid)
         row = {'examId': exam_id, 'studentId': sid, 'teacherId': ex.get('teacherId'), 'score': score, 'absent': absent,
                'via': it.get('via') or 'manual', 'answers': it.get('answers') if isinstance(it.get('answers'), list) else (cur or {}).get('answers')}
@@ -1085,7 +1089,7 @@ def settlement(store, teacher_id, ym, facts=None):
         n, mins = f['held'].get(g['id']) or (0, 0)
         per_group.append({'groupId': g['id'], 'name': g.get('name'), 'kind': g.get('kind') or 'center', 'revenue': round(f['rev'].get(g['id'], 0), 2),
                           'sessions': n, 'visits': f['visits'].get(g['id'], 0)})
-    saved = store.row('settlements', f'st-{teacher_id}-{ym}')
+    saved = store.row('settlements', D.settlement_id(teacher_id, ym))
     return {'teacherId': teacher_id, 'teacher': t.get('name'), 'period': ym, 'revenue': rev, 'sessions': sessions, 'visits': visits, 'centerShare': share,
             'schoolRevenue': school_rev, 'school': school, 'materials': round(mat_rev, 2), 'materialsCost': round(mat_cost, 2), 'deductions': deductions,
             'teacherShare': teacher_share, 'net': net, 'paid': paid, 'remaining': round(net - paid, 2), 'groups': per_group,
@@ -1107,7 +1111,7 @@ def approve_settlement(ctx, teacher_id, ym):
     ctx.need('settlements.manage')
     ctx.need_teacher(teacher_id)
     s = settlement(ctx.store, teacher_id, ym)
-    sid = f'st-{teacher_id}-{ym}'
+    sid = D.settlement_id(teacher_id, ym)
     cur = ctx.store.row('settlements', sid)
     row = {'teacherId': teacher_id, 'period': ym, 'revenue': s['revenue'], 'centerShare': s['centerShare'], 'teacherShare': s['teacherShare'],
            'deductions': s['deductions'], 'paid': s['paid'], 'status': 'approved', 'by': ctx.user, 'at': _now(),
@@ -1293,7 +1297,7 @@ def _header_map(values):
     return out
 
 
-def import_preview(store, data, filename, default_grade='', default_group=''):
+def import_preview(store, data, filename, default_grade='', default_group='', scopes=None):
     """Reads any spreadsheet (xlsx, xls, csv, ods...) and returns the rows it understood, matched against existing
     students (same name + same parent mobile = the same student) and the groups by name. Nothing is saved here."""
     import formats
@@ -1302,9 +1306,9 @@ def import_preview(store, data, filename, default_grade='', default_group=''):
     except formats.FormatError as e:
         raise Problem('err.file', str(e))
     existing = {}
-    for s in store.rows('students'):
+    for s in store.rows('students', scopes=scopes):
         existing.setdefault(s.get('nameKey'), []).append(s)
-    groups = {D.key_text(g['name']): g for g in store.rows('groups')}
+    groups = {D.key_text(g['name']): g for g in store.rows('groups', scopes=scopes)}
     rows = []
     for sh in wb.sheets:
         if sh.hidden:
@@ -1337,7 +1341,7 @@ def import_preview(store, data, filename, default_grade='', default_group=''):
                 item['warnings'].append('imp.badMobile')
             if not grade:
                 item['warnings'].append('imp.noGrade')
-            same = [s for s in existing.get(D.key_text(name), []) if not pm or not s.get('parentMobile') or s.get('parentMobile') == pm]
+            same = [s for s in existing.get(D.key_text(name), []) if s.get('parentMobile', '') == pm]
             item['match'] = same[0]['id'] if same else ''
             g = groups.get(D.key_text(item['groupText'])) if item['groupText'] else None
             item['groupId'] = g['id'] if g else ''
@@ -1353,6 +1357,7 @@ def import_preview(store, data, filename, default_grade='', default_group=''):
 def import_commit(ctx, rows, enrol=True):
     """Creates the new students (and their enrolments when a group was recognised) in ONE save."""
     ctx.need('students.manage')
+    ctx.need('contacts.view')
     if not isinstance(rows, list) or not rows:
         raise Problem('err.noRows', 'Nothing to import.')
     ops = []
@@ -1361,28 +1366,65 @@ def import_commit(ctx, rows, enrol=True):
         codes = [r[0] for r in ctx.store.conn.execute('SELECT code FROM students')]
     today = date.today().isoformat()
     n = 0
+    visible = {s['id']: s for s in ctx.store.rows('students', scopes=ctx.scopes)}
+    identities = {(s.get('nameKey') or D.key_text(s['name']), s.get('parentMobile') or ''): s['id'] for s in visible.values()}
+    enrolled = {(e['studentId'], e['groupId']) for e in ctx.store.rows('enrollments')
+                if e.get('status') == 'active' and e.get('from', '') <= today and (not e.get('to') or e['to'] >= today)}
     for it in rows[:5000]:
         if not isinstance(it, dict) or not D.norm_text(it.get('name')):
             continue
+        name = D.norm_text(it['name'])
+        pm, valid_pm = D.norm_mobile_eg(it.get('parentMobile') or '')
+        sm, valid_sm = D.norm_mobile_eg(it.get('mobile') or '')
+        if (it.get('parentMobile') and not valid_pm) or (it.get('mobile') and not valid_sm):
+            raise Problem('err.mobile', 'Check the mobile number.')
+        grade = it.get('gradeCode')
+        if not D.valid_grade(grade):
+            raise Problem('err.grade', 'Choose a valid grade.')
+        g = ctx.store.row('groups', it.get('groupId')) if enrol and it.get('groupId') else None
+        if enrol and it.get('groupId') and not g:
+            raise Problem('err.group', 'Choose an existing group.')
+        if g:
+            ctx.need_teacher(g.get('teacherId'))
+            if g.get('gradeCode') != grade:
+                raise Problem('err.grade', 'The student and group grades must match.')
         sid = it.get('match') or ''
+        if sid and sid not in visible:
+            raise Problem('err.scope', 'This student is not in your groups.')
+        identity = (D.key_text(name), pm)
+        if sid and identity != (visible[sid].get('nameKey') or D.key_text(visible[sid]['name']), visible[sid].get('parentMobile') or ''):
+            raise Problem('err.importMatch', 'The matched student changed. Preview the file again.')
+        sid = sid or identities.get(identity, '')
+        if sid in visible and g and visible[sid].get('gradeCode') != g.get('gradeCode'):
+            raise Problem('err.grade', 'The student and group grades must match.')
+        if ctx.scopes is not None and not sid and not g:
+            raise Problem('err.scope', 'Choose a group belonging to one of your teachers.')
         if not sid:
             sid = new_id('st')
             code = D.digits(it.get('code'))
             if not code or code in codes:
                 code = D.next_code(codes, pci)
             codes.append(code)
-            grade = it.get('gradeCode') if D.valid_grade(it.get('gradeCode')) else 'S3'
-            system = 'thanaweya' if grade[0] == 'S' else 'general'
+            system = g.get('system') if g else ('thanaweya' if grade[0] == 'S' else 'general')
+            system = system or ('thanaweya' if grade[0] == 'S' else 'general')
             ops.append({'e': 'students', 'id': sid, 'op': 'put', 'row': {
-                'code': code, 'name': D.norm_text(it['name']), 'gradeCode': grade, 'system': system, 'mobile': it.get('mobile') or '',
-                'parentMobile': it.get('parentMobile') or '', 'parentName': it.get('parentName') or '', 'school': it.get('school') or '',
-                'notes': it.get('notes') or '', 'joinedAt': today, 'active': True, 'consent': False}})
+                'code': code, 'name': name, 'gradeCode': grade, 'system': system, 'track': g.get('track') if g else '', 'mobile': sm,
+                'parentMobile': pm, 'parentName': it.get('parentName') or '', 'school': it.get('school') or '',
+                'notes': it.get('notes') or '', 'joinedAt': today, 'active': True, 'consent': bool(it.get('consent')),
+                'consentAt': today if it.get('consent') else ''}})
+            identities[identity] = sid
             n += 1
-        g = ctx.store.row('groups', it.get('groupId')) if enrol and it.get('groupId') else None
-        if g and ctx.teacher_ok(g.get('teacherId')):
-            if not (it.get('match') and any(e['groupId'] == g['id'] for e in active_enrollments(ctx.store, sid, date.today()))):
+        if g:
+            if (sid, g['id']) not in enrolled:
+                cap = int(g.get('capacity') or 0)
+                if g.get('kind') == 'school':
+                    cap = min(cap or 10**6, int(settings(ctx.store)['schoolMaxStudents']))
+                count = sum(group_id == g['id'] for _, group_id in enrolled)
+                if cap and count >= cap:
+                    raise Problem('err.groupFull', 'The group is full.', n=count, cap=cap)
                 ops.append({'e': 'enrollments', 'id': new_id('en'), 'op': 'put', 'row': {
                     'studentId': sid, 'groupId': g['id'], 'teacherId': g.get('teacherId'), 'from': today, 'status': 'active'}})
+                enrolled.add((sid, g['id']))
     if not ops:
         return {'students': 0, 'changes': 0}
     normalize_ops(ctx.store, ops, pci)

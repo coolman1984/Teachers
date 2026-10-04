@@ -253,11 +253,13 @@ def slots_on(group, d):
 
 def session_id(group_id, d, start):
     """The same session gets the same id on every PC (so two PCs that open the same session merge, never duplicate)."""
-    return f'se-{group_id}-{d.isoformat() if isinstance(d, date) else d}-{str(start).replace(":", "")}'
+    prefix = 'smp-se-' if str(group_id).startswith('smp-') else 'se-'
+    return f'{prefix}{group_id}-{d.isoformat() if isinstance(d, date) else d}-{str(start).replace(":", "")}'
 
 
 def attendance_id(sess_id, student_id):
-    return f'at-{sess_id[3:]}-{student_id}'
+    prefix, body = ('smp-at-', sess_id[7:]) if str(sess_id).startswith('smp-se-') else ('at-', sess_id[3:])
+    return f'{prefix}{body}-{student_id}'
 
 
 def door_window(sess, now_min, early, late):
@@ -440,3 +442,11 @@ def valid_month(ym):
 
 def now_local():
     return datetime.now()
+
+
+def mark_id(exam_id, student_id):
+    return ('smp-' if str(exam_id).startswith('smp-') else '') + f'mk-{exam_id}-{student_id}'
+
+
+def settlement_id(teacher_id, ym):
+    return ('smp-' if str(teacher_id).startswith('smp-') else '') + f'st-{teacher_id}-{ym}'

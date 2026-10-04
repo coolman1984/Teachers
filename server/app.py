@@ -738,8 +738,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, res)
         if p == '/api/import/preview':
             self.need('students.manage')
+            self.need('contacts.view')
             data, name = self.body(30 * 1048576), qs.get('name', '')[:120]
-            return self.send(200, center.import_preview(STORE, data, name, qs.get('grade', ''), qs.get('group', '')))
+            return self.send(200, center.import_preview(STORE, data, name, qs.get('grade', ''), qs.get('group', ''), self.u.get('scopes')))
         if p.startswith('/api/c/'):
             return self.center_post(p[len('/api/c/'):], self.json_body())
         if p.startswith('/api/gateway/'):
@@ -1018,6 +1019,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def center_post(self, action, d):
         c = self.ctx()
+        if action in ('sample', 'sample/delete'):
+            self.need('data.import')
+            self.need('users.manage')
+            self.need_all_scopes()
+            import sample
+            if action == 'sample' and not STORE.row('settings', 'smp-centre') and STORE.counts().get('Students'):
+                BACKUPS.create('pre-sample')
+            return self.send(200, sample.load(c, AUTH, self.u) if action == 'sample' else sample.remove(c, AUTH, self.u))
         if action == 'portal':
             self.need('messages.send')
             if not SECRETS.configured:

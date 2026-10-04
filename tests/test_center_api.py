@@ -237,6 +237,48 @@ class CenterApiTest(unittest.TestCase):
         self.assertEqual(len(delta['rows']['attendance']), 1)
         self.assertEqual(delta['gone'], {})
 
+    def test_import_preview_is_scoped_and_requires_contact_access(self):
+        path='/api/import/preview?name=test.csv'
+        data=('Name,Grade,Parent mobile,Group\nStudent Two '+self.p+',S1,01112345678,Group Two '+self.p+'\n').encode()
+        hidden=self.scoped_client(['students.manage','students.view'])
+        with self.assertRaises(ApiError) as caught:
+            hidden.call('POST',path,raw=data)
+        self.assertEqual(caught.exception.code,403)
+        self.error('/api/c/import',{'rows':[{'name':'Synthetic','gradeCode':'S1'}]},'err.perm',client=hidden)
+        # Grant contact access to the same scoped account, then verify matches stay scoped.
+        user=next(u for u in self.c.get('/api/users')['users'] if u['username']==self.p+'.scoped')
+        self.c.post('/api/users/save',dict(user,perms=['students.manage','students.view','contacts.view']))
+        version=self.c.get('/api/version')['version']
+        row=hidden.call('POST',path,raw=data)['rows'][0]
+        self.assertEqual(row['match'],'')
+        self.assertEqual(row['groupId'],'')
+        self.assertEqual(self.c.get('/api/version')['version'],version)
+        self.error('/api/c/import',{'rows':[dict(row,match=self.other_student)]},'err.scope',client=hidden)
+        self.error('/api/c/import',{'rows':[dict(row,groupId=self.other_group)]},'err.scope',client=hidden)
+        self.error('/api/c/import',{'rows':[row]},'err.scope',client=hidden)
+
+    def test_import_deduplicates_batch_preserves_consent_and_is_atomic(self):
+        row={'name':'Synthetic repeated '+self.p,'gradeCode':'S1','parentMobile':'٠١٠٩٠٠٠٠٠٠٠','groupId':self.group,'consent':True}
+        version=self.c.get('/api/version')['version']
+        self.error('/api/c/import',{'rows':[row,dict(row,name='Invalid grade '+self.p,gradeCode='')]},'err.grade')
+        self.assertEqual(self.c.get('/api/version')['version'],version)
+        result=self.c.post('/api/c/import',{'rows':[row,row]})
+        self.assertEqual(result['students'],1)
+        state=self.c.get('/api/state')
+        student=next(s for s in state['students'] if s['name']==row['name'])
+        self.assertTrue(student['consent'])
+        self.assertEqual(student['consentAt'],self.day)
+        self.assertEqual(student['parentMobile'],'01090000000')
+        self.assertEqual(len([e for e in state['enrollments'] if e['studentId']==student['id']]),1)
+        self.assertEqual(self.c.post('/api/c/import',{'rows':[row,row]})['changes'],0)
+        self.error('/api/c/import',{'rows':[dict(row,match=self.student)]},'err.importMatch')
+        self.error('/api/c/import',{'rows':[dict(row,gradeCode='P4')]},'err.grade')
+        group=next(g for g in self.c.get('/api/state')['groups'] if g['id']==self.group)
+        self.put([('groups',self.group,dict(group,capacity=2))])
+        version=self.c.get('/api/version')['version']
+        self.error('/api/c/import',{'rows':[dict(row,name='Over capacity '+self.p)]},'err.groupFull')
+        self.assertEqual(self.c.get('/api/version')['version'],version)
+
     def test_12_generic_batch_assigns_distinct_student_codes(self):
         ids = [self.p+'-auto-'+str(i) for i in range(2)]
         self.put([('students', sid, {'name': 'Synthetic Auto '+sid, 'gradeCode': 'S1', 'system': 'thanaweya'}) for sid in ids])

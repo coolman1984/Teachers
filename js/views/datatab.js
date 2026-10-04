@@ -34,11 +34,12 @@
   HS.dataTab = {
     render: function () {
       if (!state) return '<div class="skeleton" style="height:12rem"></div>';
-      return '<div class="stack">' + trashCard() + backupCard() +
+      return '<div class="stack">' + HS.sampleControls() + trashCard() + backupCard() +
         (HS.can('report.full') ? '<section class="card"><header><h3>' + HS.icon('download') + ' ' + HS.esc(HS.t('exp.title')) + '</h3></header><p class="muted">' + HS.esc(HS.t('exp.sub')) + '</p><div style="margin-top:1rem"><a class="btn" href="/api/export.xlsx">' + HS.icon('download', 'sm') + HS.esc(HS.t('exp.btn')) + '</a></div></section>' : '') + '</div>';
     },
     mount: function (root) {
       if (!state) { load().then(function () { HS.rerender(); }, function () { root.innerHTML = U.empty('alert', HS.t('common.error')); }); return; }
+      HS.mountSampleControls(root);
       root.addEventListener('click', function (e) {
         var r = e.target.closest('[data-restore]');
         if (r) { U.run(HS.post('/api/trash/restore', { txn: r.dataset.restore }), 'bin.restored', r).then(function () { state = null; return HS.data.load(); }).then(function () { HS.rerender(); }); return; }

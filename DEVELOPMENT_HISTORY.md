@@ -2,6 +2,42 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Fictional centre and safe real-student import (2026-10-04)
+
+**Why:** the owner requested sample data to test daily logic and an import path for real records.
+**What:** deterministic sample centre with 420 students, 24 groups, eight teachers, four rooms,
+eight weeks of attendance/fees/exams, cash differences, reversals, school-group settlements and all profitability signals.
+Sample business ids have an `smp-` prefix, including deterministic attendance/marks/settlements; regular ids are unchanged.
+The timetable allocates room/teacher slots without clashes. Sample codes skip existing and archived codes.
+Sample settings preserve explicit centre settings. Overview and Settings → Data load/archive only sample records;
+sample accounts use normal signed creation, mandatory password changes, and disable/re-enable on removal/reload.
+Account authority is required before either lifecycle operation touches business records.
+Added editable/selectable spreadsheet preview, atomic save, contact permissions, scoped matching, phone/grade/group/capacity
+validation, preserved consent, batch deduplication and re-import idempotence. Existing matched profiles remain unchanged.
+Both languages, sample/admin guides, CSV template headers and a local-only CLI are included.
+
+**Evidence:** broad gate: 107 Python tests in 308.380 seconds, OK (two existing skips), including real process/proxy
+two-PC partition checks. Frontend: 17 tests passed, including preview without writes, cancelled confirmations,
+HTML escaping, permission controls and dashboard retry. Sample benchmark: card 71 ms, dashboard 158 ms,
+startup 461 ms / 4,239,183 bytes; 26 warning students and all five profitability signals.
+AST syntax check: 45 Python files parsed; pyflakes remains unavailable. Final authority-guard/lifecycle/design check:
+21 tests in 112.521 seconds, OK; under concurrent local loading, benchmarks remained within limits (85/257/785 ms).
+Local owner app loaded 420 sample students, 384 sessions, 7,792 attendance rows, 3,218 receipts, 168 exams and 3,101 marks;
+administrator login verified; all 18 signed-history entries verified with no problems. Runtime data is ignored by git.
+
+**Limits:** no actual owner spreadsheet has been supplied, so no claim of testing real owner data.
+Chrome visual/keyboard/mobile checks remain pending because browser inspection transport is unavailable;
+Node flow tests are not browser evidence. Overview is an incremental dashboard, with the rest of P5.7 still unticked.
+P5–P10 remain incomplete. No push or complete-app readiness claim.
+
+**Lessons:** generated ledger rows need the sample prefix for safe removal; manual receipts must use normal reversals.
+Sample accounts should be disabled, not deleted, because deleted usernames are permanently reserved by the engine.
+Account updates require the complete current public record and version; re-enabling needs an explicit password reset.
+Import preview must enforce the same teacher/contact boundaries as a save, and duplicate rows must share reserved ids/codes.
+Initial targeted verification caught two untranslated new server errors; both dictionaries were corrected and rerun.
+Repository review found that NASCA converted a generated `.csv` template to an encrypted binary on this machine;
+the template is provided as plain-text headers in the guide instead. The generated binary was excluded and removed.
+
 ---
 
 ## Centre lists and settings forms; real two-PC centre test (2026-10-04)

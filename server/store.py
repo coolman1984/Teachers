@@ -318,6 +318,9 @@ class Store:
                     args = (cutoff,)
                 rows[e] = self._filter(e, [self._row_js(e, r) for r in self.conn.execute(sql + ' ORDER BY rowid', args)], allowed, students)
             settings = {r['id']: r.get('value') for r in rows.pop('settings')}
+            sample_settings = settings.get('smp-centre')
+            if isinstance(sample_settings, dict):
+                settings = {**sample_settings, **settings}
             initialized = self.conn.execute("SELECT 1 FROM meta WHERE key='initialized'").fetchone() is not None
             settings_ver = {r[0]: r[1] for r in self.conn.execute('SELECT id, ver FROM settings WHERE deleted=0')}
             return {'settings': settings, 'settingsVer': settings_ver, **rows, 'initialized': initialized, 'windowFrom': cutoff,

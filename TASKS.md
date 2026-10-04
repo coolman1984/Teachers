@@ -29,9 +29,9 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Real server/proxy partition scenario (test_center_network: 23.767 seconds)
 - [x] P2.4 WhatsApp text endpoint
 - [x] P2.5 Parent link endpoint
-- [ ] P2.6 Performance caches + indexes
+- [x] P2.6 Performance caches + indexes
   - [x] Versioned 30-second scoped caches, isolated results, composite centre indexes
-  - [ ] Sample-centre response-size and latency measurements (after P4)
+  - [x] Sample-centre response-size and latency measurements: card 71 ms, dashboard 158 ms, state 461 ms / 4,239,183 bytes
 
 ## Phase P3 – Lists and settings
 - [x] P3.1 Subjects, rooms, teachers (terms), handouts lists
@@ -40,16 +40,23 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [ ] Chrome visual and keyboard checks for P3 forms (browser transport pending)
 
 ## Phase P4 – Sample centre
-- [ ] P4 server/sample.py + tools/make_sample.py + tests/test_sample.py + "delete all sample data"
+- [x] P4 server/sample.py + tools/make_sample.py + tests/test_sample.py + "delete all sample data"
+  - [x] Deterministic centre, sample-account disable/reload, real-record preservation, scopes, history signatures
+  - [x] Load sample centre into the local owner app while preserving admin login
+  - [ ] Chrome visual checks for sample controls and import preview (desktop launch works; browser inspection transport unavailable)
 
 ## Phase P5 – Core screens
 - [ ] P5.1 Door
 - [ ] P5.2 Students + student panel + cards/receipt printing
+  - [x] Editable CSV/Excel import preview and atomic selected save: scoped matching, deduplication, consent, capacity
+  - [ ] Owner's actual real-data file test (source/path not yet supplied)
 - [ ] P5.3 Groups & timetable
 - [ ] P5.4 Roll call panel
 - [ ] P5.5 Money (shift, receipts, expenses, shifts, handouts)
 - [ ] P5.6 Exams & marks
 - [ ] P5.7 Overview
+  - [x] Live scoped dashboard numbers and sample-centre controls
+  - [ ] Greeting, SVG trends, getting-started guidance, running-session actions and system status
 
 ## Phase P6 – Differentiators 1
 - [ ] P6.1 Follow-up / early warning + debts
