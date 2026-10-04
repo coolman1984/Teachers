@@ -22,7 +22,7 @@ import uuid
 import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # the portable (embedded) Python does not add the script folder itself
@@ -327,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
     @property
     def log_path(self):
         """The address for logs: the secret part of a personal link is never written anywhere."""
-        return '/k/…' if self.path.startswith('/k/') else self.path
+        return '/k/â€¦' if self.path.startswith('/k/') else self.path
 
     @property
     def ip(self):
@@ -397,7 +397,7 @@ class Handler(BaseHTTPRequestHandler):
                         f'<b>{html.escape(now_in["full_name"])}</b>. Continuing logs {html.escape(now_in["full_name"])} out.</p>' + form +
                         '<p class="small"><a href="/">Stay as ' + html.escape(now_in['full_name']) + '</a></p>')
             else:
-                body = (f'<h1>Welcome, {html.escape(u["full_name"])}</h1><p>Opening the system for you…</p>' + form +
+                body = (f'<h1>Welcome, {html.escape(u["full_name"])}</h1><p>Opening the system for youâ€¦</p>' + form +
                         '<p class="small">This is your personal link. Do not give it to anybody - whoever has it works under your name.</p>'
                         '<script src="/js/quick.js"></script>')
         else:
@@ -528,11 +528,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, self.me())
         if p == '/api/state':
             full = qs.get('all') == '1' and self.u['scopes'] is None and self.can('money.view')
-            return self.send(200, {**STORE.state(self.u['scopes'], None if full else store_mod.WINDOW_DAYS), 'gateway': bool(SECRETS.configured),
+            return self.send(200, {**self.state_filter(STORE.state(self.u['scopes'], None if full else store_mod.WINDOW_DAYS)), 'gateway': bool(SECRETS.configured),
                                    'office': OFFICE_STATE, 'node': {'id': NODE.id, 'letter': self.ctx().letter()}})
         if p == '/api/delta':
             d = STORE.delta(int(qs.get('since') or -1), self.u['scopes'])
-            return self.send(200, d if d is not None else {'full': True})
+            return self.send(200, self.state_filter(d) if d is not None else {'full': True})
         if p.startswith('/api/c/'):
             return self.center_get(p[len('/api/c/'):], qs)
         if p == '/api/version':
@@ -711,8 +711,12 @@ class Handler(BaseHTTPRequestHandler):
                     BACKUPS.create('pre-import')
             if any(isinstance(o, dict) and 'resolve' in o for o in (d.get('ops') or []) if isinstance(d.get('ops'), list)):
                 raise Forbidden('Conflicts are decided only in Devices & Sync by an administrator.')
-            ops = d.get('ops') if force else center.normalize_ops(STORE, d.get('ops'), self.ctx().pc_index())
-            res = STORE.commit(self.user, self.ip, label, ops, force, guard=commit_guard(self.u), user_id=self.u['id'])
+            raw_ops = d.get('ops')
+            if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') in ('payments', 'expenses', 'shifts', 'settlements', 'attendance') for o in raw_ops):
+                raise Forbidden('Use the dedicated centre operation for attendance and money records.')
+            with STORE.lock:
+                ops = raw_ops if force else center.normalize_ops(STORE, raw_ops, self.ctx().pc_index())
+                res = STORE.commit(self.user, self.ip, label, ops, force, guard=commit_guard(self.u), user_id=self.u['id'])
             log.info('COMMIT %s (%s) "%s" %s changes', self.user, self.ip, label, res['changes'])
             return self.send(200, res)
         if p == '/api/import/preview':
@@ -882,6 +886,27 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ the centre (center.py)
     def center_get(self, action, qs):
         sc = self.u['scopes']
+        if action == 'wa':
+            self.need('messages.send')
+            self.need('contacts.view')
+            sid = qs.get('studentId', '')
+            file = center.student_file(STORE, sid, sc)
+            st = file['student']
+            cfg = center.settings(STORE)
+            lang = 'en' if qs.get('lang') == 'en' else 'ar'
+            kind = qs.get('kind', 'monthly')
+            templates = cfg.get('waTemplates') or {}
+            defaults = {'en': 'Dear parent of {student}, balance: {balance} EGP. {center} {link}',
+                        'ar': 'ولي أمر الطالب {student}، الرصيد: {balance} جنيه. {center} {link}'}
+            text = (templates.get(kind) or {}).get(lang) or defaults[lang]
+            token = gwc.link_token(SECRETS.data.get('linkSecret', ''), sid, st['portalNonce']) if SECRETS.configured and st.get('portalNonce') else ''
+            values = {'student': st['name'], 'group': ', '.join([STORE.row('groups', e['groupId'])['name'] for e in file['enrollments'] if STORE.row('groups', e['groupId'])]),
+                      'date': center.date.today().isoformat(), 'amount': qs.get('amount', ''),
+                      'balance': str(round(sum((e.get('money') or {}).get('balance', 0) for e in file['enrollments']), 2)),
+                      'center': str(cfg.get('systemName') or 'Hessa'), 'link': SECRETS.url + '/app/#' + token if token else ''}
+            for key, value in values.items():
+                text = text.replace('{' + key + '}', value)
+            return self.send(200, {'to': center.D.wa_number(st.get('parentMobile')), 'text': text})
         if action == 'today':
             self.need('door.use', 'groups.view', 'attendance.mark')
             d = center.D.as_date(qs.get('date')) or center.date.today()
@@ -958,6 +983,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.D.clashes(STORE.rows('groups'), {r['id']: r for r in STORE.rows('rooms')}))
         self.send(404, {'error': 'Not found'})
 
+    def state_filter(self, data):
+        if 'rows' in data:
+            data['rows'] = self.state_filter(data['rows'])
+        if 'students' in data:
+            data['students'] = [self.contact_filter(s) for s in data['students']]
+        if 'teachers' in data and not self.can('contacts.view'):
+            data['teachers'] = [{k: v for k, v in t.items() if k != 'mobile'} for t in data['teachers']]
+        return data
+
     def contact_filter(self, s):
         """Parents' numbers only for people allowed to see them."""
         if not s or self.can('contacts.view'):
@@ -966,6 +1000,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def center_post(self, action, d):
         c = self.ctx()
+        if action == 'portal':
+            self.need('messages.send')
+            if not SECRETS.configured:
+                raise center.Problem('err.noGateway', 'Configure parent links first.')
+            sid = str(d.get('studentId') or '')
+            st = center.student_file(STORE, sid, c.scopes)['student']
+            with STORE.lock:
+                st = STORE.row('students', sid)
+                nonce = gwc.new_nonce() if d.get('replace') or not st.get('portalNonce') else st['portalNonce']
+                token = gwc.link_token(SECRETS.data['linkSecret'], sid, nonce)
+                if nonce != st.get('portalNonce'):
+                    row = {k: v for k, v in st.items() if k not in ('id', 'ver')}
+                    row.update(portalNonce=nonce, portalHash=gwc.token_hash(token))
+                    c.commit('Parent link replaced' if d.get('replace') else 'Parent link created',
+                             [{'e': 'students', 'id': sid, 'op': 'put', 'ver': st['ver'], 'row': row}])
+            GATE.kick()
+            url = SECRETS.url + '/app/#' + token
+            phone = center.D.wa_number(st.get('parentMobile')) if self.can('contacts.view') else ''
+            return self.send(200, {'url': url, 'waUrl': 'https://wa.me/' + phone + '?text=' + quote(url) if phone else ''})
         if action == 'checkin':
             return self.send(200, center.checkin(c, str(d.get('studentId')), str(d.get('sessionId')), d.get('status'), str(d.get('via') or 'code')[:10]))
         if action == 'roll':

@@ -42,10 +42,11 @@ def wait_until(cond, timeout=30, step=0.2, what='condition'):
 
 
 class ApiError(Exception):
-    def __init__(self, code, msg):
+    def __init__(self, code, msg, data=None):
         super().__init__(f'{code}: {msg}')
         self.code = code
         self.msg = msg
+        self.data = data or {}
 
 
 class Client:
@@ -66,10 +67,12 @@ class Client:
         except urllib.error.HTTPError as e:
             payload = e.read()
             try:
-                msg = json.loads(payload).get('error')
+                error_data = json.loads(payload)
+                msg = error_data.get('error')
             except ValueError:
                 msg = payload[:200]
-            raise ApiError(e.code, msg)
+                error_data = {}
+            raise ApiError(e.code, msg, error_data)
         return json.loads(payload) if 'json' in ctype else payload
 
     def get(self, path):
@@ -141,6 +144,8 @@ class Server:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait()
+        if self.proc and self.proc.stdout:
+            self.proc.stdout.close()
         self.proc = None
 
     def kill(self):
@@ -148,6 +153,8 @@ class Server:
         if self.proc and self.proc.poll() is None:
             self.proc.kill()
             self.proc.wait()
+        if self.proc and self.proc.stdout:
+            self.proc.stdout.close()
         self.proc = None
 
     def client(self):

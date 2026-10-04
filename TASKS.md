@@ -22,12 +22,16 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P1.6 test_design.py updated and green
 
 ## Phase P2 – Server hardening
-- [ ] P2.1 tests/test_center_domain.py
-- [ ] P2.2 tests/test_center_api.py (11 scenarios) + fixes
+- [x] P2.1 tests/test_center_domain.py
+- [x] P2.2 tests/test_center_api.py (11 scenarios) + fixes
 - [ ] P2.3 Two-PC test for the centre
-- [ ] P2.4 WhatsApp text endpoint
-- [ ] P2.5 Parent link endpoint
+  - [x] Partitioned two-node journal/store test: attendance, receipts, code ranges, additive stock
+  - [ ] Real server/proxy partition scenario
+- [x] P2.4 WhatsApp text endpoint
+- [x] P2.5 Parent link endpoint
 - [ ] P2.6 Performance caches + indexes
+  - [x] Versioned 30-second scoped caches, isolated results, composite centre indexes
+  - [ ] Sample-centre response-size and latency measurements (after P4)
 
 ## Phase P3 – Lists and settings
 - [ ] P3.1 Subjects, rooms, teachers (terms), handouts lists

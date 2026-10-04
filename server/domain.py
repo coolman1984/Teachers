@@ -4,6 +4,7 @@ fees and balances, the early-warning score, teacher settlements and group profit
 Everything money-related is *computed* from the attendance and the receipts (never stored as a running balance), so
 two PCs that worked offline at the same time always agree once they have exchanged their changes."""
 import re
+import math
 import unicodedata
 from datetime import date, datetime, timedelta
 
@@ -84,7 +85,7 @@ def norm_mobile_eg(s):
         d = d[1:]
     if d.startswith('01') and len(d) == 11 and d[2] in '0125':
         return d, True
-    return norm_text(s), not d
+    return norm_text(s), not norm_text(s)
 
 
 def wa_number(mobile):
@@ -225,6 +226,8 @@ def clashes(groups, rooms=None):
             if g1.get('teacherId') and g1.get('teacherId') == g2.get('teacherId'):
                 out.append({**base, 'kind': 'teacher', 'teacherId': g1['teacherId']})
     for g in groups:
+        if g.get('active') is False:
+            continue
         for s in clean_slots(g.get('slots')):
             room = rooms.get(s['roomId'] or g.get('roomId'))
             if room and room.get('capacity') and g.get('capacity') and g['capacity'] > room['capacity']:
@@ -313,7 +316,8 @@ def balance_info(group, enrollment, student, visits, paid, today):
     if ft == 'package':
         per = int(group.get('packageSessions') or 0) or 1
         info['sessionPrice'] = round(unit / per, 2) if unit else 0
-        info['sessionsLeft'] = int(bal // info['sessionPrice']) if info['sessionPrice'] and bal > 0 else 0
+        # Count bought visits before rounding the displayed per-session price.
+        info['sessionsLeft'] = max(0, math.floor(paid * per / unit - visits + 1e-9)) if unit else 0
     # the suggestion at the door: what to pay now so the student is clear
     if bal < 0:
         info['due'] = -bal

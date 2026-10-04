@@ -4,6 +4,7 @@
   var HS = window.HS;
   HS.dict = HS.dict || {};
   HS.dict.ar = {
+    'err.noGateway': 'يرجى إعداد روابط أولياء الأمور أولاً.',
     'acc.add': 'إضافة مستخدم',
     'acc.adminGroup': 'للمديرين فقط',
     'acc.allTeachers': 'جميع المعلمين',

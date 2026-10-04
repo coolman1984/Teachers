@@ -4,6 +4,10 @@ not at all, one line in the history), checked against the user's permissions and
 Reads (door card, balances, early warning, settlements, profitability, reports) are computed from the rows with SQL
 aggregates, so they stay fast with years of attendance and are identical on every PC."""
 import json
+import copy
+import math
+import time
+from functools import wraps
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -84,12 +88,22 @@ def _next_no(store, table, prefix, letter, year):
     return D.doc_no(prefix, year, letter, (p[3] if p else 0) + 1)
 
 
+def atomic_operation(fn):
+    """Check balances and write together so concurrent requests cannot spend the same money twice."""
+    @wraps(fn)
+    def run(ctx, *args, **kwargs):
+        with ctx.store.lock:
+            return fn(ctx, *args, **kwargs)
+    return run
+
+
 # ---------------------------------------------------------------- cleaning generic saves (lists edited in the pages)
 def normalize_ops(store, ops, pc_index=0):
     """Clean names and mobiles on the server, give new students a code, check grades, timetables and the limits of
     school support groups. Refuses duplicates of things that must be unique (a student code, a teacher)."""
     if not isinstance(ops, list):
         return ops
+    reserved_codes = set()
     for op in ops:
         if not isinstance(op, dict) or op.get('op') != 'put' or not isinstance(op.get('row'), dict):
             continue
@@ -110,9 +124,12 @@ def normalize_ops(store, ops, pc_index=0):
             with store.lock:
                 if not row.get('code'):
                     cur = store.conn.execute('SELECT code FROM students WHERE id=?', (op.get('id'),)).fetchone()
-                    row['code'] = cur[0] if cur and cur[0] else D.next_code([r[0] for r in store.conn.execute('SELECT code FROM students')], pc_index)
+                    row['code'] = cur[0] if cur and cur[0] else D.next_code([r[0] for r in store.conn.execute('SELECT code FROM students')] + list(reserved_codes), pc_index)
                 row['code'] = D.digits(row['code']) or row['code']
                 other = store.conn.execute('SELECT name FROM students WHERE code=? AND deleted=0 AND id<>?', (row['code'], op.get('id'))).fetchone()
+            if str(row['code']) in reserved_codes:
+                raise Problem('err.codeTaken', 'Another student in this batch already has this code.', name=row.get('name', ''))
+            reserved_codes.add(str(row['code']))
             if other:
                 raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0])
             if row.get('discountPct') not in (None, ''):
@@ -294,13 +311,13 @@ def door_card(store, student_id, now=None, scopes=None):
     if scopes is not None and not store._filter('students', [st], *store._visible(scopes)):
         raise Problem('err.scope', 'This student is not in your groups.')
     cfg = settings(store)
-    ens = active_enrollments(store, student_id, d)
-    groups = {g['id']: g for g in store.rows('groups')}
+    ens = [e for e in active_enrollments(store, student_id, d) if scopes is None or e.get('teacherId') in scopes]
+    groups = {g['id']: g for g in store.rows('groups', scopes=scopes)}
     bals = balances(store, ens, d, groups, {student_id: st})
-    todays = [s for s in sessions_on(store, d)]
+    todays = [s for s in sessions_on(store, d, scopes)]
     mins = now.hour * 60 + now.minute
     mine = {e['groupId'] for e in ens}
-    att = {a['sessionId']: a for a in store.rows('attendance', 'student_id=? AND date=?', (student_id, d.isoformat()))}
+    att = {a['sessionId']: a for a in store.rows('attendance', 'student_id=? AND date=?', (student_id, d.isoformat()), scopes)}
     candidates = []
     for s in todays:
         if s.get('status') == 'cancelled':
@@ -316,12 +333,13 @@ def door_card(store, student_id, now=None, scopes=None):
     best = next((c for c in candidates if c['own'] and c['now'] and not c['done']), None)
     if best is None:
         best = next((c for c in candidates if c['own'] and c['now']), None)
-    r = risk_for_student(store, student_id, d)
-    return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens], 'wallet': wallet(store, student_id),
+    r = risk_for_student(store, student_id, d, scopes)
+    return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens], 'wallet': wallet(store, student_id) if scopes is None else 0,
             'candidates': candidates[:8], 'suggested': best['session']['id'] if best else None, 'risk': r,
             'today': [a for a in att.values()]}
 
 
+@atomic_operation
 def checkin(ctx, student_id, session_id, status=None, via='code', now=None):
     """Records the student in the session (creating the session record when it is the first one), idempotent:
     a second scan of the same student in the same session changes nothing."""
@@ -353,6 +371,10 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None):
         if not home:
             raise Problem('err.notEnrolled', 'The student is not enrolled in this group. Enrol first.')
         makeup = True
+    ctx.need_teacher(home.get('teacherId'))
+    existing = ctx.store.row('attendance', D.attendance_id(sess['id'], student_id))
+    if existing and status is None:
+        return {'id': existing['id'], 'status': existing['status'], 'already': True, 'makeup': bool(existing.get('makeup'))}
     cfg = settings(ctx.store)
     mins = now.hour * 60 + now.minute
     if status not in D.ATT_STATUSES:
@@ -377,13 +399,19 @@ def _strip(row):
     return {k: v for k, v in row.items() if k not in ('id', 'ver', 'virtual', 'present', 'enrolled')}
 
 
+@atomic_operation
 def mark_many(ctx, session_id, marks):
     """The teacher's or assistant's roll call: {studentId: status} for one session in ONE save."""
     ctx.need('attendance.mark')
     sess = _find_session(ctx.store, session_id)
     if not sess:
         raise Problem('err.noSession', 'This session does not exist.')
+    if sess.get('status') == 'cancelled':
+        raise Problem('err.cancelled', 'This session was cancelled.')
     ctx.need_teacher(sess.get('teacherId'))
+    eligible = {r['student']['id'] for r in roster(ctx.store, session_id, ctx.scopes)['rows'] if r.get('student')}
+    if set(marks) - eligible:
+        raise Problem('err.notEnrolled', 'The student is not enrolled in this group. Enrol first.')
     if sess['date'] != date.today().isoformat() and not ctx.can('attendance.edit'):
         raise Problem('err.pastDay', 'Changing attendance of another day needs the permission to edit attendance.')
     ops = []
@@ -454,6 +482,7 @@ def set_session_status(ctx, session_id, status, topic=None):
 
 
 # ---------------------------------------------------------------- enrolment, transfer
+@atomic_operation
 def enroll(ctx, student_id, group_id, start=None, fee=None):
     ctx.need('students.manage', 'students.transfer')
     st, g = ctx.store.row('students', student_id), ctx.store.row('groups', group_id)
@@ -482,6 +511,7 @@ def _check_capacity(ctx, g, day):
         raise Problem('err.groupFull', 'The group is full.', n=n, cap=cap)
 
 
+@atomic_operation
 def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     """Moves a student to another group from a day: the old enrolment ends the day before, a new one starts.
     Money already paid to the old group stays there (the balances show it); both changes are ONE save."""
@@ -500,7 +530,7 @@ def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     st = ctx.store.row('students', e['studentId']) or {}
     old = ctx.store.row('groups', e['groupId']) or {}
     ops = [{'e': 'enrollments', 'id': e['id'], 'op': 'put', 'ver': e['ver'],
-            'row': {**_strip(e), 'to': max(prev, e.get('from') or prev), 'status': 'moved', 'note': D.norm_text(reason)[:200] or e.get('note')}},
+            'row': {**_strip(e), 'to': prev, 'status': 'moved', 'note': D.norm_text(reason)[:200] or e.get('note')}},
            {'e': 'enrollments', 'id': new_id('en'), 'op': 'put',
             'row': {'studentId': e['studentId'], 'groupId': g['id'], 'teacherId': g.get('teacherId'), 'from': day, 'status': 'active',
                     **({'fee': e['fee']} if e.get('fee') is not None and old.get('teacherId') == g.get('teacherId') else {})}}]
@@ -508,6 +538,7 @@ def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     return {'ok': True}
 
 
+@atomic_operation
 def end_enrollment(ctx, enrollment_id, day=None, reason=''):
     ctx.need('students.transfer')
     e = ctx.store.row('enrollments', enrollment_id)
@@ -527,6 +558,7 @@ def my_shift(store, user_id, node_id):
     return rows[-1] if rows else None
 
 
+@atomic_operation
 def open_shift(ctx, opening):
     ctx.need('money.collect', 'expenses.add')
     if my_shift(ctx.store, ctx.user_id, ctx.node_id):
@@ -535,7 +567,7 @@ def open_shift(ctx, opening):
         opening = round(float(opening or 0), 2)
     except (TypeError, ValueError):
         raise Problem('err.amount', 'Write the amount.')
-    if opening < 0:
+    if not math.isfinite(opening) or opening < 0:
         raise Problem('err.amount', 'Write the amount.')
     with ctx.store.lock:
         no = _next_no(ctx.store, 'shifts', 'S', ctx.letter(), date.today().year)
@@ -559,6 +591,7 @@ def shift_summary(store, shift_id):
             'payments': pays[-300:], 'expenseRows': exps[-100:]}
 
 
+@atomic_operation
 def close_shift(ctx, shift_id, counted, reason=''):
     """Closing = counting the drawer. The difference is saved with its reason and never hidden."""
     sh = ctx.store.row('shifts', shift_id)
@@ -585,6 +618,7 @@ def close_shift(ctx, shift_id, counted, reason=''):
 
 
 # ---------------------------------------------------------------- receipts
+@atomic_operation
 def pay(ctx, d):
     """Takes money: a group fee, a handout, money in advance (wallet) or other. Needs this user's open cash shift
     on this PC (also for e-wallet payments, so every receipt belongs to one person's day). Returns the receipt."""
@@ -599,7 +633,7 @@ def pay(ctx, d):
         amount = round(float(d.get('amount')), 2)
     except (TypeError, ValueError):
         raise Problem('err.amount', 'Write the amount.')
-    if amount <= 0:
+    if not math.isfinite(amount) or amount <= 0:
         raise Problem('err.amount', 'Write the amount.')
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
     if not shift:
@@ -624,6 +658,8 @@ def pay(ctx, d):
         m = ctx.store.row('materials', d.get('materialId'))
         if not m:
             raise Problem('err.notFound', 'Handout not found.')
+        if m.get('teacherId'):
+            ctx.need_teacher(m['teacherId'])
         qty = max(1, int(d.get('qty') or 1))
         row.update({'materialId': m['id'], 'qty': qty, 'teacherId': m.get('teacherId') or ''})
         ops.append({'e': 'materials', 'id': m['id'], 'op': 'put', 'ver': m['ver'], 'row': {**_strip(m), 'stock': (m.get('stock') or 0) - qty}})
@@ -649,6 +685,7 @@ def pay(ctx, d):
     return {'id': pid, **row}
 
 
+@atomic_operation
 def void_payment(ctx, payment_id, reason):
     """A receipt is never changed or deleted: a reversing receipt with the opposite amount is added."""
     ctx.need('money.void')
@@ -682,6 +719,7 @@ def void_payment(ctx, payment_id, reason):
     return {'id': vid, 'no': row['no']}
 
 
+@atomic_operation
 def add_expense(ctx, d):
     ctx.need('expenses.add')
     cat = d.get('category') or 'other'
@@ -696,7 +734,7 @@ def add_expense(ctx, d):
         amount = round(float(d.get('amount')), 2)
     except (TypeError, ValueError):
         raise Problem('err.amount', 'Write the amount.')
-    if amount <= 0:
+    if not math.isfinite(amount) or amount <= 0:
         raise Problem('err.amount', 'Write the amount.')
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
     if method == 'cash' and not shift:
@@ -714,6 +752,7 @@ def add_expense(ctx, d):
     return {'id': eid, **row}
 
 
+@atomic_operation
 def void_expense(ctx, expense_id, reason):
     ctx.need('money.void')
     reason = D.norm_text(reason)
@@ -758,6 +797,27 @@ def _risk_inputs(store, student_ids=None, since_days=90):
     return ens, sess, att, marks, recent
 
 
+def cached_read(fn):
+    """Versioned, bounded per-store cache; callers receive independent mutable results."""
+    @wraps(fn)
+    def read(store, *args, **kwargs):
+        with store.lock:
+            version = store.version()
+            key = (fn.__name__, repr(args), repr(sorted(kwargs.items())))
+            cache = getattr(store, '_centre_cache', {})
+            entry = cache.get(key)
+            if entry and entry[0] == version and time.monotonic() - entry[1] < 30:
+                return copy.deepcopy(entry[2])
+            result = fn(store, *args, **kwargs)
+            if len(cache) >= 128:
+                cache.clear()
+            cache[key] = (version, time.monotonic(), copy.deepcopy(result))
+            store._centre_cache = cache
+            return result
+    return read
+
+
+@cached_read
 def risk_list(store, scopes=None, limit=500):
     """Students who may drop out, highest score first, with reasons - the "call today" list."""
     ens, sess, att, marks, recent = _risk_inputs(store)
@@ -785,9 +845,10 @@ def risk_list(store, scopes=None, limit=500):
     return out[:limit]
 
 
-def risk_for_student(store, student_id, d=None):
+def risk_for_student(store, student_id, d=None, scopes=None):
     ens, sess, att, marks, recent = _risk_inputs(store, {student_id})
-    groups = {g['id']: g for g in store.rows('groups')}
+    groups = {g['id']: g for g in store.rows('groups', scopes=scopes)}
+    ens = [e for e in ens if scopes is None or e.get('teacherId') in scopes]
     st = store.row('students', student_id) or {}
     bals = balances(store, ens, d, groups, {student_id: st})
     worst = {'score': 0, 'why': []}
@@ -852,7 +913,7 @@ def student_file(store, student_id, scopes=None):
     return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id']), 'held': held.get(e['id'], 0)} for e in ens],
             'attendance': sorted(att, key=lambda a: a.get('date') or '', reverse=True), 'payments': sorted(pays, key=lambda p: (p.get('date') or '', p.get('no') or ''), reverse=True),
             'marks': marks, 'followups': sorted(fus, key=lambda f: f.get('date') or '', reverse=True), 'wallet': wallet(store, student_id),
-            'risk': risk_for_student(store, student_id), 'family': [{'id': f['id'], 'name': f['name'], 'code': f.get('code')} for f in family]}
+            'risk': risk_for_student(store, student_id, scopes=scopes), 'family': [{'id': f['id'], 'name': f['name'], 'code': f.get('code')} for f in family]}
 
 
 def exam_rank(store, exam_id, student_id=None):
@@ -899,6 +960,7 @@ def exam_results(store, exam_id, scopes=None):
     return {'exam': ex, 'rows': rows, 'stats': stats}
 
 
+@atomic_operation
 def save_marks(ctx, exam_id, items):
     """items: [{studentId, score|None, absent, answers, via}] -> ONE save. Ids are fixed per exam and student, so the same
     sheet entered on two PCs merges instead of counting twice."""
@@ -1021,6 +1083,7 @@ def settlements(store, ym, scopes=None):
     return out
 
 
+@atomic_operation
 def approve_settlement(ctx, teacher_id, ym):
     """Freezes the month's numbers (a fixed record per teacher and month, so approving on two PCs merges)."""
     ctx.need('settlements.manage')
@@ -1079,6 +1142,7 @@ def profitability(store, ym, scopes=None):
 
 
 # ---------------------------------------------------------------- the overview numbers
+@cached_read
 def dashboard(store, scopes=None, d=None):
     d = d or _today()
     day = d.isoformat()
@@ -1267,6 +1331,7 @@ def import_preview(store, data, filename, default_grade='', default_group=''):
     return {'filename': filename, 'rows': rows[:5000], 'new': sum(1 for r in rows if not r['match']), 'existing': sum(1 for r in rows if r['match'])}
 
 
+@atomic_operation
 def import_commit(ctx, rows, enrol=True):
     """Creates the new students (and their enrolments when a group was recognised) in ONE save."""
     ctx.need('students.manage')

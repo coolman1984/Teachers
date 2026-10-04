@@ -4,6 +4,27 @@ Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
 ---
 
+## Centre server hardening and daily-operation regressions (2026-10-04)
+
+**Why:** P2 operations had no domain-specific HTTP evidence, and screens must rely on correct scoped money and attendance.
+**What:** table-driven domain tests and real HTTP scenarios for peak scanning, make-up sessions, all fee models, cash shifts,
+reversals, wallet, transfers, scopes, settlement, handouts, Arabic CSV import, deltas, messaging and parent-link replacement.
+Generic commits reject money/attendance/shift/settlement writes even for administrators. Batch student codes reserve each assigned
+code under the same lock as commit. State and delta redact contacts; door candidates, balances and warnings obey teacher scopes.
+Scoped enrollment deltas request a full refresh when student visibility changes. Scanner repeats keep the original status even
+when the student scans again after the late threshold. Roll calls reject unenrolled students and cancelled sessions.
+Money operations validate finite amounts and hold the store lock across balance checks and writes; concurrent wallet spends cannot
+overdraft. Handout payments check teacher scope. Transfers end the old enrollment the previous day. Package counts avoid price
+rounding loss, inactive groups do not generate capacity warnings, and alphabetic phone input is invalid.
+Added permission-checked WhatsApp text and parent-token APIs, versioned bounded caches and composite attendance/payment/session indexes.
+Windows rebuild now closes its SQLite reader before renaming the database; the existing disaster-recovery regression proves the fix.
+**Evidence so far:** 54 targeted domain/API/design/two-node tests pass (32.869 seconds) before the final scanner/visibility additions.
+The Windows tools checks also passed. Final combined run: 97 tests in 179.421 seconds, OK (2 existing skips); Node frontend: 11 passed. No push or production-ready claim.
+**Limits:** real network partition scenario, sample performance benchmarks and Chrome verification remain pending; parent worker/page
+migration and persistent revocation of previously published cards remain P7 work.
+**Lessons:** API fixtures must send structured settings values and current record versions. Atomic numbering alone is insufficient:
+wallet checks must be inside the transaction lock. Windows SQLite context managers commit/rollback but do not close connections.
+
 ## Centre shell, translations and incremental refresh (2026-10-04)
 
 **Why:** P1.2–P1.6 still used the previous domain and reloaded all data on every remote write.

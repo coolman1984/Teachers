@@ -589,3 +589,6 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |
+
+### P2 implementation evidence (2026-10-04)
+Domain/API regression modules now exist. Centre operations are covered through real local HTTP; offline journal merging has a separate test_center_multinode module. Real process/proxy partition checks and sample response benchmarks remain pending. Money and attendance must use dedicated /api/c operations, never generic commits.

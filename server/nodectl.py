@@ -97,6 +97,7 @@ def cmd_verify():
 
 def cmd_rebuild():
     """The history (journal.db) is the source of truth: fold it again into a fresh center.db."""
+    from contextlib import closing
     import sqlite3
     cfg, data, uploads, backups, extra = load_cfg()
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -104,7 +105,7 @@ def cmd_rebuild():
     legacy = []
     if os.path.exists(old):
         try:  # keep labels of recycle-bin groups made before the upgrade
-            with sqlite3.connect(old) as db:
+            with closing(sqlite3.connect(old)) as db:
                 legacy = db.execute('SELECT * FROM transactions').fetchall()
         except sqlite3.Error:
             pass

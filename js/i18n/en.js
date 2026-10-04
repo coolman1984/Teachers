@@ -4,6 +4,7 @@
   var HS = window.HS;
   HS.dict = HS.dict || {};
   HS.dict.en = {
+    'err.noGateway': 'Configure parent links first.',
     'acc.add': 'Add a person',
     'acc.adminGroup': 'Administrators only',
     'acc.allTeachers': 'All teachers',

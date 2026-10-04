@@ -228,6 +228,8 @@ class Store:
                 if col in ('student_id', 'group_id', 'teacher_id', 'session_id', 'exam_id', 'shift_id', 'date', 'code', 'name_key',
                            'import_key', 'portal_hash', 'period', 'no', 'void_of'):
                     conn.execute(f'CREATE INDEX IF NOT EXISTS ix_{table}_{col} ON {table}({col})')
+        for table, columns in (('attendance', 'student_id, group_id'), ('payments', 'student_id, group_id'), ('sessions', 'group_id, date')):
+            conn.execute(f'CREATE INDEX IF NOT EXISTS ix_{table}_centre ON {table}({columns})')
         conn.executescript('''
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, ts TEXT, user TEXT, ip TEXT, label TEXT, changes INTEGER);
@@ -362,7 +364,7 @@ class Store:
             for v, k in self._changes:
                 if v > since:
                     keys |= k
-            if len(keys) > 3000 or any(e == 'settings' for e, _ in keys):
+            if len(keys) > 3000 or any(e == 'settings' or scopes is not None and e == 'enrollments' for e, _ in keys):
                 return None
             allowed, students = self._visible(scopes)
             rows, gone = {}, {}
