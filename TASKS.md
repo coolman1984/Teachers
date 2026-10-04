@@ -11,7 +11,9 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P0.5 Execution plan for the next agents → `docs/EXECUTION_PLAN.md`
 
 ## Phase P1 – Make the fork run again
-- [ ] P1.1 index.html script list + skeleton view files
+- [x] P1.1 index.html script list + skeleton view files
+  - [x] Startup-order regression, both-language placeholders, failed-load retry
+  - [ ] Chrome visual verification after P1.2 makes centre navigation reachable; full P1 checks still pending
 - [ ] P1.2 shell.js pages, palette, shortcuts, tour, slides
 - [ ] P1.3 ui.js / data.js helpers (money, grade, att badges; error keys)
 - [ ] P1.4 Fast refresh with /api/delta

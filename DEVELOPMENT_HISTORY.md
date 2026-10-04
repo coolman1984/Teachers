@@ -4,6 +4,29 @@ Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
 ---
 
+## Startup assets and centre page scaffolds (2026-10-04)
+
+**Why:** P1.1 loaded deleted trip view files, and the prescribed script order would load centre views before their data wrapper existed.
+**What:** replaced the body script list with the exact P1.1 order; retained the pre-paint boot script; added eleven translated,
+read-only centre page scaffolds; changed the favicon to a graduation cap and corrected the bilingual noscript notice.
+Moved `HS.withData` from the list editor to shared UI, with accessible loading status and a retry state on load failure.
+**Tests:** `node --test --test-isolation=none tests/test_startup.js`: 3 passed. Executes the actual startup order,
+checks both dictionaries and placeholder rendering, and exercises failed loading followed by retry.
+`git diff --check`: passed.
+**Required checks:** `python -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx`
+outside the sandbox: 56 tests, 2 failures, 4 errors, 2 skipped (112.940 s). Failures: the Windows rebuild command cannot
+rename an open database (WinError 32), and centre permissions are not yet translated (P1.5).
+Errors: two design checks still read deleted trip views (P1.6), and the P2 centre test modules do not exist yet.
+Browser command: 14 tests, 1 error (missing `test_e2e_center`), 13 skipped (configured Chromium path unavailable).
+Pyflakes unavailable in this Python installation. Old-domain scan: 432 matches in 22 files, to be removed in remaining P1 tasks.
+No gateway changes, so its tests were not required. Sample tests do not exist yet; no PR was prepared.
+**Limits:** this repairs startup assets, not the complete shell. Navigation, palette, overview, settings and dictionaries still
+need their planned conversion. No Chrome visual verification or claim that P1 is complete. Nothing pushed while checks are red.
+**Mistakes and lessons:** ordinary Node test isolation cannot spawn in this sandbox; use `--test-isolation=none`.
+Python temporary directories remained inaccessible even under the workspace; re-running the existing suite outside the sandbox
+removed those permission errors. Shared page helpers must be defined before the earliest page in the declared script order.
+The owner's current-session instruction is to respond in English.
+
 ## Execution plan for the next agents (2026-10-04)
 
 **Why:** the owner asked for a complete, exact plan so other agents (Sonnet 5.5, ChatGPT) can finish the build.

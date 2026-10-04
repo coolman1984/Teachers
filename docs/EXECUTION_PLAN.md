@@ -176,7 +176,7 @@ Plus `POST /api/import/preview?name=&grade=&group=` (raw file body) and `GET /ap
 Errors: HTTP 400 `{error, key, vars}` from `center.Problem` → the page shows `HS.t(key, vars)`; 403 `{error}`; 409 conflict.
 
 ### C7. Known gaps in the current code (fix in task P1)
-1. `index.html` still loads deleted views (`trips.js`, `board.js`, `excel.js`, `reports.js`, `mailbox.js`, `print.js`) → the page fails.
+1. **P1.1 implemented 2026-10-04:** startup assets now exist in the prescribed order, with centre scaffolds and the shared data wrapper in `ui.js`. Centre navigation and visual verification remain dependent on P1.2.
 2. `js/shell.js` `PAGES`, palette actions (`HS.newTrip`), shortcuts (`N`), tour and slides are trip pages.
 3. `js/views/lists.js`, `overview.js`, `settings.js` (tabs rules/money/gateway), `access.js` ("categories") are trip-shaped.
 4. `js/i18n/en.js`/`ar.js` hold trip texts; `tests/test_design.py` `JS_FILES` lists deleted views (it fails now — expected).
@@ -551,6 +551,7 @@ groups with free seats, WhatsApp booking link) pushed as a public card (no stude
 ## Part G — Checks before every push
 ```
 cd /home/user/Teachers
+node --test --test-isolation=none tests/test_startup.js                                                # startup asset/order regression
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 cd tests
 python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)

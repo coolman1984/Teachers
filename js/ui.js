@@ -4,6 +4,30 @@
   var HS = window.HS;
   var U = HS.ui = {};
 
+  /* Shared here because centre views load before the list editor. */
+  HS.withData = function (view) {
+    var failed = false;
+    return {
+      render: function (ctx) {
+        if (HS.data.state) return view.render(ctx);
+        if (failed) return U.empty('alert', HS.t('common.error'), '',
+          '<button class="btn primary" data-load-retry>' + HS.esc(HS.t('common.retry')) + '</button>');
+        return '<div class="stack" role="status" aria-label="' + HS.esc(HS.t('common.loading')) + '">' +
+          [1, 2, 3, 4].map(function () { return '<div class="skeleton" aria-hidden="true" style="height:3rem"></div>'; }).join('') + '</div>';
+      },
+      mount: function (root, ctx) {
+        if (HS.data.state) { failed = false; if (view.mount) view.mount(root, ctx); return; }
+        function load() {
+          failed = false;
+          HS.data.load().then(function () { HS.rerender(); }, function () { failed = true; HS.rerender(); });
+        }
+        if (failed) {
+          root.querySelector('[data-load-retry]').addEventListener('click', function () { failed = false; HS.rerender(); });
+        } else load();
+      }
+    };
+  };
+
   /* ---------- name matching (mirrors server/domain.py key_text) ---------- */
   U.key = function (s) {
     return String(s || '').normalize('NFKC').replace(/ـ/g, '').replace(/[ً-ٰٟ]/g, '')

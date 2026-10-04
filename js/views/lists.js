@@ -217,22 +217,7 @@
     return '<div class="toolbar"><div class="seg" role="tablist">' + ids.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t + '" aria-pressed="' + (t === active) + '">' + HS.esc(HS.t('tab.' + t)) + '</button>'; }).join('') + '</div></div>';
   }
-  function needData(fn) {
-    return function (ctx) {
-      if (!HS.data.state) return '<div class="stack">' + [1, 2, 3, 4].map(function () { return '<div class="skeleton" style="height:3rem"></div>'; }).join('') + '</div>';
-      return fn(ctx);
-    };
-  }
-  function withData(view) {
-    return {
-      render: needData(view.render),
-      mount: function (root, ctx) {
-        if (!HS.data.state) { HS.data.load().then(function () { HS.rerender(); }); return; }
-        view.mount(root, ctx);
-      }
-    };
-  }
-  HS.withData = withData;
+  var withData = HS.withData;
   HS.pageHead = head;
 
   function grouped(pageId, ids, descFor) {   // a page with tabs, one list per tab
