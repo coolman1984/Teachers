@@ -44,11 +44,62 @@
       '<button class="btn primary sm" type="button">' + HS.esc(HS.t('common.save')) + '</button>' +
       '<button class="btn sm" type="button">' + HS.esc(HS.t('common.cancel')) + '</button></div></div></aside>';
   }
-  function later(tab) {
-    return '<div class="empty"><div class="art">' + HS.icon('lock', 'lg') + '</div><h3>' + HS.esc(HS.t('set.tab.' + tab)) + '</h3><p>' + HS.esc(HS.t('set.later')) + ' · ' + HS.esc(HS.t('set.admin.only')) + '</p></div>';
+  function settingFields(tab) {
+    var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear']
+      : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds'];
+    return keys.map(function (key) { return { key: key, label: 'set.' + key,
+      type: tab === 'centre' ? (key === 'receiptFooter' ? 'textarea' : 'text') : (key === 'autoCheckin' || key === 'doorSounds' ? 'bool' : 'number') }; });
+  }
+  var KINDS = ['monthly','absence','late','payment','risk','portal'];
+  function templatesFields() {
+    var fields = [];
+    KINDS.forEach(function (kind) { ['ar','en'].forEach(function (lang) { fields.push({ key: kind + '_' + lang, label: 'msg.' + kind + '.' + lang, type: 'textarea' }); }); });
+    return fields;
+  }
+  function templateValues(settings) {
+    var out = {}, templates = settings.waTemplates || {};
+    KINDS.forEach(function (kind) { ['ar','en'].forEach(function (lang) { out[kind + '_' + lang] = (templates[kind] || {})[lang] || ''; }); }); return out;
+  }
+  var DEFAULTS = { lateMinutes:15, doorEarlyMinutes:90, doorLateMinutes:30, schoolTreasuryPct:15, schoolTeacherPct:80,
+    schoolMaxFee:100, schoolMaxStudents:25, riskCall:35, riskHigh:60, autoCheckin:true, doorSounds:true, currency:'EGP' };
+  function settingsBody(tab) {
+    var settings = Object.assign({}, DEFAULTS, (HS.data.state || {}).settings || {});
+    var fields = tab === 'messages' ? templatesFields() : settingFields(tab);
+    return '<form data-settings-form class="card">' + (tab === 'messages' ? '<p class="notice">' + HS.esc(HS.t('msg.variables')) + '</p>' : '') +
+      HS.ui.fields(fields, tab === 'messages' ? templateValues(settings) : settings) +
+      (tab === 'messages' ? '<div class="notice" data-message-preview role="status"></div>' : '') +
+      (HS.can('settings.edit') ? '<button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button>' : '') + '</form>';
+  }
+  function mountSettings(root, tab) {
+    var form = root.querySelector('[data-settings-form]');
+    var fields = tab === 'messages' ? templatesFields() : settingFields(tab);
+    if (!HS.can('settings.edit')) form.querySelectorAll('input,textarea,select').forEach(function (el) { el.disabled = true; });
+    if (tab === 'messages') {
+      var preview = form.querySelector('[data-message-preview]');
+      function update(e) {
+        var text = e && e.target && e.target.tagName === 'TEXTAREA' ? e.target.value : form.querySelector('textarea').value;
+        var examples = { student:HS.t('msg.exampleStudent'), group:HS.t('msg.exampleGroup'), date:HS.ui.today(), amount:'100', balance:'-50', center:'Hessa', link:'https://example.invalid/parent' };
+        Object.keys(examples).forEach(function (key) { text = text.split('{' + key + '}').join(examples[key]); });
+        preview.textContent = text;
+      }
+      form.addEventListener('input', update); update();
+    }
+    form.addEventListener('submit', function (e) {
+      e.preventDefault(); if (!HS.can('settings.edit')) return;
+      var read = HS.ui.read(form, fields), values = read.values;
+      if (tab === 'messages') {
+        var templates = {};
+        KINDS.forEach(function (kind) { templates[kind] = { ar:values[kind + '_ar'], en:values[kind + '_en'] }; }); values = { waTemplates:templates };
+      }
+      var ver = (HS.data.state || {}).settingsVer || {};
+      var ops = Object.keys(values).map(function (key) { return { e:'settings', id:key, op:'put', ver:ver[key] || null, row:{ value:values[key] } }; });
+      HS.ui.run(HS.data.commit('Save centre ' + tab + ' settings', ops), 'common.saved', form.querySelector('[type="submit"]'))
+        .then(function () { HS.rerender(); }).catch(function () {});
+    });
   }
 
-  HS.views.settings = {
+
+  HS.views.settings = HS.withData({
     render: function (ctx) {
       var tab = TABS.indexOf(ctx.route.q.tab) >= 0 ? ctx.route.q.tab : 'appearance';
       var tabs = '<div class="seg" role="tablist" style="max-width:100%;overflow:auto">' + TABS.map(function (t) {
@@ -60,9 +111,12 @@
           : tab === 'access' ? HS.accessTab.render()
           : tab === 'data' ? HS.dataTab.render()
           : tab === 'gateway' ? HS.mailboxTab.render()
-          : '<section class="card">' + later(tab) + '</section>');
+          : tab === 'lists' ? '<div class="stack">' + ['subjects','rooms','teachers','materials'].map(HS.lists.render).join('') + '</div>'
+          : settingsBody(tab));
     },
     mount: function (root, ctx) {
+      if (['centre','rules','messages'].indexOf(ctx.route.q.tab) >= 0) mountSettings(root, ctx.route.q.tab);
+      if (ctx.route.q.tab === 'lists') HS.lists.mount(root);
       if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
       if (ctx.route.q.tab === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
@@ -74,5 +128,5 @@
         if (e.target.closest('[data-reset]')) { HS.prefs.reset(); HS.rerender(); }
       });
     }
-  };
+  });
 })();

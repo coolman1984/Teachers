@@ -112,6 +112,24 @@ def normalize_ops(store, ops, pc_index=0):
             row['name'] = D.norm_text(row['name'])
             if not row['name']:
                 raise Problem('err.name', 'Write the name.')
+        if e == 'settings' and op.get('id') in D.DEFAULTS and isinstance(D.DEFAULTS[op['id']], (int, float)):
+            try:
+                number = float(row.get('value'))
+            except (TypeError, ValueError):
+                raise Problem('err.setting', 'Check the setting value.')
+            upper = 100 if op['id'] in ('schoolTreasuryPct', 'schoolTeacherPct', 'riskCall', 'riskHigh') else 100000
+            if not math.isfinite(number) or number < 0 or number > upper or op['id'] == 'schoolMaxStudents' and (number < 1 or number != int(number)):
+                raise Problem('err.setting', 'Check the setting value.')
+            row['value'] = number
+        if e == 'teachers':
+            for key in ('rentMonth', 'rentSession', 'rentStudent', 'centerPct'):
+                if row.get(key) not in (None, ''):
+                    try:
+                        value = float(row[key])
+                    except (TypeError, ValueError):
+                        raise Problem('err.amount', 'Write a valid amount.')
+                    if not math.isfinite(value) or value < 0 or key == 'centerPct' and value > 100:
+                        raise Problem('err.amount', 'Write a valid amount.')
         if e in ('students', 'teachers'):
             row['nameKey'] = D.key_text(row.get('name'))
             for f in ('mobile', 'parentMobile', 'parentMobile2'):

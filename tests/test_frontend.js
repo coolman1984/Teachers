@@ -136,3 +136,67 @@ test('a pending refresh cannot repopulate data after logout', async () => {
   assert.equal(HS.data.version, null);
   assert.equal(HS.data.get('students', 's1'), null);
 });
+
+
+test('multi-select fields escape choices, keep selection and validate empty required values', () => {
+  const HS = startup('en');
+  const field = {key:'subjects', label:'f.subjectIds', type:'multi', required:true,
+    options:[{v:'a',l:'<script>'},{v:'b',l:'Beta'}]};
+  const html = HS.ui.field(field, ['b']);
+  assert.ok(html.includes('multiple'));
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(html.includes('value="b" selected'));
+  const el = { options:[{value:'a',selected:false},{value:'b',selected:true}] };
+  const root = { querySelector:() => el };
+  assert.deepEqual(Array.from(HS.ui.read(root,[field]).values.subjects), ['b']);
+  el.options[1].selected=false;
+  assert.equal(HS.ui.read(root,[field]).missing.length, 1);
+});
+
+test('reference list editors hide contacts, preserve mixed settlement terms and escape names', () => {
+  const HS = startup('en');
+  HS.me = {perms:['teachers.manage']};
+  HS.data.state = {teachers:[{id:'t1',name:'<img onerror=attack()>',active:true}], subjects:[]};
+  assert.equal(HS.lists.config('teachers').fields.some(f => f.key === 'mobile'), false);
+  const html=HS.lists.render('teachers');
+  assert.ok(html.includes('&lt;img onerror=attack()&gt;'));
+  assert.equal(html.includes('<img onerror='), false);
+  const terms={settleModel:'mixed',rentMonth:1000,rentSession:50,rentStudent:2,centerPct:20};
+  assert.equal(HS.lists.terms(HS.lists.normalizeTerms(terms)), 4600);
+  terms.settleModel='rentSession';
+  HS.lists.normalizeTerms(terms);
+  assert.equal(HS.lists.terms(terms), 1000);
+  let opened=false;
+  HS.panel.open=()=>{opened=true;};
+  HS.me.perms=[];
+  HS.lists.edit('teachers','t1');
+  assert.equal(opened,false);
+});
+
+test('settings show centre forms and keep save controls permission aware in both languages', () => {
+  for (const lang of ['en','ar']) {
+    const HS=startup(lang);
+    HS.lang=lang;
+    HS.data.state={settings:{systemName:'<script>bad</script>'},subjects:[],rooms:[],teachers:[],materials:[]};
+    HS.me={perms:[]};
+    const ctx={route:{q:{tab:'centre'}}};
+    let html=HS.views.settings.render(ctx);
+    assert.ok(html.includes('&lt;script&gt;bad&lt;/script&gt;'));
+    assert.equal(html.includes('type="submit"'),false);
+    HS.me.perms=['settings.edit','rooms.manage','gateway.manage'];
+    html=HS.views.settings.render(ctx);
+    assert.ok(html.includes('type="submit"'));
+    ctx.route.q.tab='lists';
+    html=HS.views.settings.render(ctx);
+    assert.ok(html.includes(HS.t('list.subjects')));
+    assert.ok(html.includes('data-list-new="rooms"'));
+    ctx.route.q.tab='messages';
+    html=HS.views.settings.render(ctx);
+    assert.equal((html.match(/<textarea/g)||[]).length,12);
+    assert.ok(html.includes('data-message-preview'));
+    ctx.route.q.tab='gateway';
+    html=HS.views.settings.render(ctx);
+    assert.ok(html.includes('data-gateway-form'));
+    assert.equal(html.includes('officeSecret'),false);
+  }
+});

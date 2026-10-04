@@ -91,7 +91,11 @@
     var id = 'f-' + f.key, lab = HS.t(f.label), val = value === undefined || value === null ? '' : value;
     var attrs = (f.required ? ' required' : '') + (f.ltr ? ' dir="ltr"' : '') + (f.placeholder ? ' placeholder="' + HS.esc(HS.t(f.placeholder)) + '"' : '');
     var input;
-    if (f.type === 'select') {
+    if (f.type === 'multi') {
+      input = '<select class="input" multiple id="' + id + '" name="' + f.key + '"' + attrs + '>' + f.options.map(function (o) {
+        return '<option value="' + HS.esc(o.v) + '"' + (Array.isArray(val) && val.indexOf(o.v) >= 0 ? ' selected' : '') + '>' + HS.esc(o.l) + '</option>';
+      }).join('') + '</select>';
+    } else if (f.type === 'select') {
       input = '<select class="input" id="' + id + '" name="' + f.key + '">' + (f.blank !== false ? '<option value="">–</option>' : '') + f.options.map(function (o) {
         return '<option value="' + HS.esc(o.v) + '"' + (String(val) === String(o.v) ? ' selected' : '') + '>' + HS.esc(o.l) + '</option>'; }).join('') + '</select>';
     } else if (f.type === 'ref') {
@@ -119,14 +123,15 @@
       var el = root.querySelector('[name="' + f.key + '"]');
       if (!el) return;
       var v;
-      if (f.type === 'bool') v = el.checked;
+      if (f.type === 'multi') v = Array.prototype.filter.call(el.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
+      else if (f.type === 'bool') v = el.checked;
       else if (f.type === 'number') v = el.value === '' ? null : Number(el.value);
       else if (f.type === 'datetime') v = el.value ? el.value + ':00' : '';
       else if (f.type === 'ref') {
         var text = el.value.trim(), hit = refOptions(f).filter(function (o) { return U.key(o.l) === U.key(text); })[0];
         if (hit) v = hit.v; else if (text && f.allowNew) { v = ''; newRefs.push({ field: f.key, entity: f.entity, text: text }); } else { v = ''; if (text) missing.push(HS.t(f.label)); }
       } else v = el.value.trim();
-      if (f.required && (v === '' || v === null)) missing.push(HS.t(f.label));
+      if (f.required && (v === '' || v === null || Array.isArray(v) && !v.length)) missing.push(HS.t(f.label));
       values[f.key] = v;
     });
     return { values: values, missing: missing, newRefs: newRefs };

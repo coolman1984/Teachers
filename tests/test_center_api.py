@@ -362,5 +362,32 @@ class CenterApiTest(unittest.TestCase):
         self.assertIn(self.other_student, {s['id'] for s in client.get('/api/state')['students']})
 
 
+    def test_21_settings_gateway_status_hides_secrets_and_contacts_survive_edit(self):
+        status = self.c.get('/api/gateway')
+        self.assertNotIn('officeSecret', status)
+        self.assertNotIn('linkSecret', status)
+        client = self.scoped_client(['students.manage', 'students.view'])
+        row = next(s for s in client.get('/api/state')['students'] if s['id'] == self.student)
+        row['name'] = 'Renamed synthetic student'
+        client.post('/api/commit', {'ops': [{'e':'students', 'id':self.student, 'op':'put', 'ver':row['ver'], 'row':row}]})
+        saved = next(s for s in self.c.get('/api/state')['students'] if s['id'] == self.student)
+        self.assertEqual(saved['parentMobile'], '01012345678')
+        row['ver'] = saved['ver']
+        row['parentMobile'] = '01112345678'
+        self.error('/api/commit', {'ops': [{'e':'students', 'id':self.student, 'op':'put', 'ver':row['ver'], 'row':row}]}, None, 403, client)
+        with self.assertRaises(ApiError) as denied:
+            client.get('/api/gateway')
+        self.assertEqual(denied.exception.code, 403)
+
+
+    def test_22_rules_and_settlement_terms_are_validated_before_save(self):
+        for key, value in [('riskCall', -1), ('schoolTeacherPct', 101), ('schoolMaxStudents', 0), ('lateMinutes', 'NaN')]:
+            self.error('/api/commit', {'ops':[{'e':'settings','id':key,'op':'put','row':{'value':value}}]}, 'err.setting')
+        row = next(t for t in self.c.get('/api/state')['teachers'] if t['id'] == self.teacher)
+        for key, value in [('rentMonth', -1), ('centerPct', 101), ('rentSession', 'Infinity')]:
+            changed = {**row, key:value}
+            self.error('/api/commit', {'ops':[{'e':'teachers','id':self.teacher,'op':'put','ver':row['ver'],'row':changed}]}, 'err.amount')
+
+
 if __name__ == '__main__':
     unittest.main()

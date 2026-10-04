@@ -138,7 +138,10 @@ class Server:
 
     def stop(self):
         if self.proc and self.proc.poll() is None:
-            self.proc.send_signal(signal.SIGINT)
+            if os.name == 'nt':
+                self.proc.terminate()  # Windows Popen has no SIGINT; committed WAL/journal state survives termination.
+            else:
+                self.proc.send_signal(signal.SIGINT)
             try:
                 self.proc.wait(10)
             except subprocess.TimeoutExpired:

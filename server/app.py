@@ -245,6 +245,8 @@ def commit_guard(u):
             if scope is not None and e not in SHARED_LISTS and not {sc, c.get('scope_before', sc)} <= scope:
                 raise Forbidden('You are limited to certain teachers and cannot add new ones.' if e == 'teachers' and op == 'insert'
                                 else 'You can only change the work of the teachers assigned to you.')
+            if e in ('students', 'teachers') and set(c['changes']) & {'mobile', 'parentMobile', 'parentMobile2'} and 'contacts.view' not in perms:
+                raise Forbidden('Contact details require the permission to view contacts.')
             need = required(e, op, c['changes'])
             if not perms.intersection(need):
                 raise Forbidden(f'You are not allowed to {OP_WORD[op]} {ENTITY_TITLE[e]}. Ask the administrator for the permission "{PERM_LABEL[need[0]]}".')
@@ -538,6 +540,14 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/version':
             return self.send(200, {'version': STORE.version(), 'me': self.u['ver'], 'mustChange': bool(self.u['must_change']),
                                    'sync': SYNC.summary(), 'gateway': SECRETS.configured})
+        if p in ('/api/gateway', '/api/gateway/code'):
+            self.need('gateway.manage')
+            self.need_all_scopes()
+            if p.endswith('/code'):
+                if not SECRETS.configured:
+                    raise center.Problem('err.noGateway', 'Configure parent links first.')
+                return self.send(200, {'code': SECRETS.setup_code()})
+            return self.send(200, GATE.status())
         if p == '/api/info':
             urls = lan_urls(CFG['port'])
             if not self.can('settings.view'):
@@ -715,6 +725,13 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') in ('payments', 'expenses', 'shifts', 'settlements', 'attendance') for o in raw_ops):
                 raise Forbidden('Use the dedicated centre operation for attendance and money records.')
             with STORE.lock:
+                if not force and not self.can('contacts.view') and isinstance(raw_ops, list):
+                    for op in raw_ops:
+                        if isinstance(op, dict) and op.get('e') in ('students', 'teachers') and op.get('op') == 'put' and isinstance(op.get('row'), dict):
+                            old = STORE.row(op['e'], op.get('id')) or {}
+                            for key in ('mobile', 'parentMobile', 'parentMobile2'):
+                                if key not in op['row'] and key in old:
+                                    op['row'][key] = old[key]
                 ops = raw_ops if force else center.normalize_ops(STORE, raw_ops, self.ctx().pc_index())
                 res = STORE.commit(self.user, self.ip, label, ops, force, guard=commit_guard(self.u), user_id=self.u['id'])
             log.info('COMMIT %s (%s) "%s" %s changes', self.user, self.ip, label, res['changes'])
@@ -727,6 +744,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.center_post(p[len('/api/c/'):], self.json_body())
         if p.startswith('/api/gateway/'):
             self.need('gateway.manage')
+            self.need_all_scopes()
             d = self.json_body()
             action = p[len('/api/gateway/'):]
             try:

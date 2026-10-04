@@ -24,9 +24,9 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 ## Phase P2 – Server hardening
 - [x] P2.1 tests/test_center_domain.py
 - [x] P2.2 tests/test_center_api.py (11 scenarios) + fixes
-- [ ] P2.3 Two-PC test for the centre
+- [x] P2.3 Two-PC test for the centre
   - [x] Partitioned two-node journal/store test: attendance, receipts, code ranges, additive stock
-  - [ ] Real server/proxy partition scenario
+  - [x] Real server/proxy partition scenario (test_center_network: 23.767 seconds)
 - [x] P2.4 WhatsApp text endpoint
 - [x] P2.5 Parent link endpoint
 - [ ] P2.6 Performance caches + indexes
@@ -34,8 +34,10 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [ ] Sample-centre response-size and latency measurements (after P4)
 
 ## Phase P3 – Lists and settings
-- [ ] P3.1 Subjects, rooms, teachers (terms), handouts lists
-- [ ] P3.2 Settings tabs (centre, rules, lists, messages, gateway, access by teachers, data)
+- [x] P3.1 Subjects, rooms, teachers (terms), handouts lists
+- [x] P3.2 Settings tabs (centre, rules, lists, messages, gateway, access by teachers, data)
+
+  - [ ] Chrome visual and keyboard checks for P3 forms (browser transport pending)
 
 ## Phase P4 – Sample centre
 - [ ] P4 server/sample.py + tools/make_sample.py + tests/test_sample.py + "delete all sample data"

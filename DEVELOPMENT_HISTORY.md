@@ -4,6 +4,25 @@ Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
 ---
 
+## Centre lists and settings forms; real two-PC centre test (2026-10-04)
+
+**What:** subjects, rooms, teacher terms and handout list editors use audited optimistic saves and soft deletion.
+Shared multi-select fields retain arrays and check required selections. Teacher terms show conditional fields and a live settlement
+example; switching models clears unused terms. Settings now edits centre details, rules, all six message templates in EN/Arabic,
+with an escaped live preview. Appearance, user access and data tools remain available. Parent gateway settings saves the URL,
+generates keys, tests connectivity and explicitly reveals the private setup code only to an authorised unscoped user.
+Status responses expose no secrets; secrets stay in the local gateway file. Rule numbers and teacher terms reject invalid values.
+Users without contact permission do not get a phone editor; omitted hidden contact fields survive generic saves, and attempts to
+change them are rejected. No user password or account data was added to source control.
+**Verification:** Node frontend 14 passed; centre/domain/design/in-process two-node checks 57 passed in 32.591 seconds.
+The new real HTTP/TLS two-server proxy test passed in 23.767 seconds: both PCs scanned and took payments offline, then converged
+with one attendance row, both unique receipts, distinct student codes, stock 4 and valid complete signed histories.
+**Mistakes and lessons:** Windows Popen cannot send SIGINT. The harness now terminates and waits on Windows; restarted servers
+retain committed journal/WAL data. The network test registers cleanup even when setup fails. Multi-select rendering must be paired
+with array reading. Shared password policy is unchanged; the owner's requested local account was provisioned separately.
+**Final gates:** 100 Python tests in 204.187 seconds: OK (2 existing skips); Node frontend 14 passed; Python AST checked 42 files; git diff --check passed. Pyflakes is not installed.
+**Limits:** Chrome visual/keyboard checks remain pending. The full product still requires P4–P10 and no readiness claim is made.
+
 ## Centre server hardening and daily-operation regressions (2026-10-04)
 
 **Why:** P2 operations had no domain-specific HTTP evidence, and screens must rely on correct scoped money and attendance.
