@@ -79,8 +79,12 @@ class TwoPcCentre(Base):
             self.assertEqual(next(m for m in st['materials'] if m['id'] == 'ma1')['stock'], 5, 'both sales of handouts count')
             codes = {s['id']: s['code'] for s in st['students']}
             self.assertEqual(len(set(codes.values())), len(codes), 'no two students share a card code')
-            self.assertTrue(10000 <= int(codes['nw1']) <= 49999)
-            self.assertTrue(50000 <= int(codes['nw2']) <= 69999)
+            # Which PC is "A" depends on who was enrolled first; two PCs enrolled in the same second are ordered by their random
+            # ids, so the test must not assume the owner is A. What matters: each PC's codes come from the range of its own letter.
+            ranges = {'A': (10000, 49999), 'B': (50000, 69999)}
+            for new, receipt in (('nw1', p_owner), ('nw2', p_door)):
+                lo, hi = ranges[receipt['no'].split('-')[1]]
+                self.assertTrue(lo <= int(codes[new]) <= hi, f'{new} code {codes[new]} is outside the range of PC {receipt["no"].split("-")[1]}')
             self.assertEqual(len([s for s in st['shifts'] if s['status'] == 'open']), 2)
         # money facts are the same on both PCs
         a = owner.get('/api/c/student?id=st1')['enrollments'][0]['money']

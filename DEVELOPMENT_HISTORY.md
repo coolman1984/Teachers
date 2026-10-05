@@ -17,6 +17,11 @@ the same lock; an interrupted edit left half the trial UI unapplied (re-checked 
 make-up session yet. Browser coverage for trial and credit screens is by API tests, not a Chrome scenario.
 **CI repair:** the workflow ran `node --test --test-isolation=none`, a flag Node 22 rejects, so the `test` job failed in 7 seconds on
 every run before any test started; the flag is dropped (the frontend tests pass without it) and `test_ci` follows.
+**Flaky test fixed:** `test_door_and_owner_pc_offline_together` assumed the owner PC is always PC "A". PCs are ordered by
+`enrolled_at` (one-second resolution) then random id, so two PCs enrolled in the same second - a fast CI runner - swap
+letters. With tied timestamps the old assertion failed 5 of 8 runs on untouched `main` code; the product ordering is
+consistent on every PC (no duplicate codes), so the test now checks that each PC's codes come from the range of its own
+receipt letter (8 of 8 under the same conditions).
 **Evidence:** Python gate 167 OK in 206 s (3 skips); performance card 46 ms, dashboard 151 ms, state 496 ms; frontend 18;
 browser test_e2e_center 12 OK; pyflakes clean.
 
