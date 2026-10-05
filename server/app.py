@@ -1054,7 +1054,8 @@ class Handler(BaseHTTPRequestHandler):
             phone = center.D.wa_number(st.get('parentMobile')) if self.can('contacts.view') else ''
             return self.send(200, {'url': url, 'waUrl': 'https://wa.me/' + phone + '?text=' + quote(url) if phone else ''})
         if action == 'checkin':
-            return self.send(200, center.checkin(c, str(d.get('studentId')), str(d.get('sessionId')), d.get('status'), str(d.get('via') or 'code')[:10]))
+            return self.send(200, center.checkin(c, str(d.get('studentId')), str(d.get('sessionId')), d.get('status'), str(d.get('via') or 'code')[:10],
+                                                 trial=bool(d.get('trial'))))
         if action == 'roll':
             return self.send(200, center.mark_many(c, str(d.get('sessionId')), d.get('marks') or {}))
         if action == 'session':
@@ -1065,6 +1066,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.enroll(c, str(d.get('studentId')), str(d.get('groupId')), d.get('from'), d.get('fee'), d.get('billFrom') or None))
         if action == 'transfer':
             return self.send(200, center.transfer(c, str(d.get('enrollmentId')), str(d.get('groupId')), d.get('from'), d.get('reason') or ''))
+        if action == 'credit/move':
+            return self.send(200, center.move_credit(c, str(d.get('studentId')), str(d.get('from')), str(d.get('to')), d.get('amount'), d.get('reason') or ''))
         if action == 'leave':
             return self.send(200, center.end_enrollment(c, str(d.get('enrollmentId')), d.get('to'), d.get('reason') or ''))
         if action == 'shift/open':
@@ -1073,6 +1076,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.close_shift(c, str(d.get('shiftId')), d.get('counted'), d.get('reason') or ''))
         if action == 'pay':
             return self.send(200, center.pay(c, d))
+        if action == 'pay/many':
+            return self.send(200, center.pay_many(c, d))
         if action == 'void':
             return self.send(200, center.void_payment(c, str(d.get('id')), d.get('reason')))
         if action == 'expense':

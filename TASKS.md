@@ -79,9 +79,11 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] E5 Day off: cancel every session of a day in one step (holiday, power cut, exams); attended sessions kept
 - [x] E6 Advisor: monthly students who stopped coming but are still charged
 - [x] E7 RTL toasts were half off the phone screen (regression test in test_design)
-- [ ] E8 Owner decisions: discount changes from today?, debt forgiveness, mid-year break for monthly groups (defaults in EXECUTION_PLAN Part I)
-- [ ] E9 Move a credit to the new group on transfer; one receipt for siblings; repeated e-wallet reference warning
-- [ ] E10 Temporary (Ramadan) timetable; extra make-up session; free trial session; school name in door search results
+- [x] E8 Owner decisions (2026-10-05, "agree on the defaults"): discount changes stay retroactive, no debt forgiveness, full months during the mid-year break, "next month" default from day 21
+- [x] E9 Move prepaid credit on transfer (`/api/c/credit/move`, same teacher only, two linked non-cash rows); family payment in one commit (`/api/c/pay/many`, server done, no screen yet); repeated transfer-reference warning at the door
+  - [ ] Sibling payment screen (door card lists the family, one dialog, one printed sheet)
+- [x] E10a Free trial session at the door (once per group, never charged)
+- [ ] E10b Temporary (Ramadan) timetable; extra make-up session; school name in door search results
 
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)

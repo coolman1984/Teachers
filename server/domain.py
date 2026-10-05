@@ -30,7 +30,7 @@ TRACKS = {
 }
 FEE_TYPES = ('session', 'month', 'package')
 GROUP_KINDS = ('center', 'school', 'online', 'home')
-PAY_METHODS = ('cash', 'vodafone', 'instapay', 'fawry', 'card', 'wallet', 'bank')
+PAY_METHODS = ('cash', 'vodafone', 'instapay', 'fawry', 'card', 'wallet', 'bank', 'transfer')   # 'transfer' = credit moved between groups (server only)
 FEE_KINDS = ('fee',)                          # payments that pay a group fee (session, month or package)
 PAY_KINDS = ('fee', 'material', 'wallet_topup', 'refund', 'other')
 EXPENSE_CATS = ('rent', 'salary', 'utilities', 'printing', 'supplies', 'marketing', 'maintenance', 'teacher_payout', 'handover', 'other')

@@ -593,3 +593,82 @@ class CenterMoneyEdgeTest(CenterFixture):
         day = {s['id']: s for s in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
         self.assertEqual((day[planned]['status'], day[planned]['note']), ('cancelled', 'Armed Forces Day'))
         self.assertEqual(scoped.post('/api/c/dayoff', {'date': tomorrow.isoformat(), 'reason': 'Again'})['cancelled'], 0)
+
+    def test_30_free_trial_is_free_once_per_group_and_enrol_continues(self):
+        # a student who is not in this subject attends ONE free session of the group; it is never charged or counted as revenue
+        newcomer = self.p + '-new'
+        self.put([('students', newcomer, {'code': str(20000 + type(self).serial), 'name': 'Trial Student ' + self.p, 'gradeCode': 'S1',
+                                          'system': 'thanaweya', 'consent': True, 'active': True})])
+        self.error('/api/c/checkin', {'studentId': newcomer, 'sessionId': self.session}, 'err.notEnrolled')
+        card = self.c.get('/api/c/card?id=' + newcomer)
+        cand = next(x for x in card['candidates'] if x['session']['id'] == self.session)
+        self.assertEqual((cand.get('trial'), cand.get('trialUsed')), (True, False))
+        r = self.c.post('/api/c/checkin', {'studentId': newcomer, 'sessionId': self.session, 'trial': True})
+        self.assertTrue(r['trial'] and not r['already'])
+        self.assertTrue(self.c.post('/api/c/checkin', {'studentId': newcomer, 'sessionId': self.session, 'trial': True})['already'])
+        roster = self.c.get('/api/c/roster?session=' + self.session)['rows']
+        self.assertTrue(next(x for x in roster if x['student']['id'] == newcomer)['trial'])
+        # a trial visit is not billed: enrolling afterwards starts at zero
+        eid = self.c.post('/api/c/enroll', {'studentId': newcomer, 'groupId': self.group})['id']
+        info = next(e for e in self.c.get('/api/c/student?id=' + newcomer)['enrollments'] if e['id'] == eid)['money']
+        self.assertEqual((info['owed'], info['balance']), (0, 0))
+        # a second trial of the same group (other day) is refused
+        other = self.p + '-new2'
+        self.put([('students', other, {'code': str(21000 + type(self).serial), 'name': 'Trial Two ' + self.p, 'gradeCode': 'S1',
+                                       'system': 'thanaweya', 'consent': True, 'active': True})])
+        self.c.post('/api/c/checkin', {'studentId': other, 'sessionId': self.session, 'trial': True})
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        sid = D.session_id(self.group, yesterday, '10:00')
+        self.put([('sessions', sid, {'groupId': self.group, 'teacherId': self.teacher, 'date': yesterday, 'start': '10:00', 'end': '11:00', 'status': 'held'})])
+        self.error('/api/c/checkin', {'studentId': other, 'sessionId': sid, 'trial': True}, 'err.trialUsed')
+
+    def test_31_credit_moves_between_groups_of_one_teacher_without_touching_the_drawer(self):
+        twin = self.p + '-twin'
+        g = self.group_row()
+        g.pop('id', None); g.pop('ver', None)
+        self.put([('groups', twin, {**g, 'name': 'Twin ' + self.p, 'slots': [{'day': (D.weekday(date.today()) + 3) % 7, 'start': '09:00', 'end': '10:00'}]})])
+        shift = self.open_shift()
+        self.pay(200)
+        before = self.c.get('/api/c/shift?id=' + shift['id'])
+        self.error('/api/c/credit/move', {'studentId': self.student, 'from': self.group, 'to': self.other_group}, 'err.creditTeacher')
+        self.error('/api/c/credit/move', {'studentId': self.student, 'from': self.group, 'to': twin, 'amount': 500}, 'err.amount')
+        r = self.c.post('/api/c/credit/move', {'studentId': self.student, 'from': self.group, 'to': twin, 'amount': 150, 'reason': 'Moved to the twin'})
+        self.assertEqual(r['amount'], 150)
+        after = self.c.get('/api/c/shift?id=' + shift['id'])
+        self.assertEqual(after['expected'], before['expected'])               # not cash: the drawer is untouched
+        pays = [p for p in self.c.get('/api/state')['payments'] if p['method'] == 'transfer']
+        self.assertEqual(sorted(p['amount'] for p in pays), [-150, 150])
+        self.assertEqual(len({p['batch'] for p in pays}), 1)
+        self.assertEqual(len({p['no'] for p in pays}), 2)
+        self.assertEqual(self.money()[self.enrollment]['balance'], 50)
+        eid = self.c.post('/api/c/enroll', {'studentId': self.student, 'groupId': twin})['id']
+        self.assertEqual(self.money()[eid]['balance'], 150)
+        self.error('/api/c/void', {'id': pays[0]['id'], 'reason': 'oops'}, 'err.voidTransfer')
+        self.error('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 5, 'method': 'transfer'}, None)
+        self.assertEqual(self.c.post('/api/c/credit/move', {'studentId': self.student, 'from': twin, 'to': self.group})['amount'], 150)
+
+    def test_32_family_payment_is_one_commit_and_repeated_reference_is_flagged(self):
+        sib = self.p + '-sib'
+        self.put([('students', sib, {'code': str(22000 + type(self).serial), 'name': 'Sibling ' + self.p, 'gradeCode': 'S1', 'system': 'thanaweya',
+                                     'familyKey': 'fam-' + self.p, 'consent': True, 'active': True})])
+        self.c.post('/api/c/enroll', {'studentId': sib, 'groupId': self.group})
+        self.open_shift()
+        r = self.c.post('/api/c/pay/many', {'method': 'instapay', 'ref': 'IP-' + self.p, 'items': [
+            {'studentId': self.student, 'groupId': self.group, 'amount': 60}, {'studentId': sib, 'groupId': self.group, 'amount': 40}]})
+        self.assertEqual(r['total'], 100)
+        nos = [x['no'] for x in r['receipts']]
+        self.assertEqual(len(set(nos)), 2)
+        self.assertEqual(len({x['batch'] for x in r['receipts']}), 1)
+        # an item that fails (unknown group) saves nothing at all
+        before = len(self.c.get('/api/state')['payments'])
+        self.error('/api/c/pay/many', {'method': 'cash', 'items': [{'studentId': sib, 'groupId': self.group, 'amount': 5},
+                                                                   {'studentId': sib, 'groupId': 'missing', 'amount': 5}]}, 'err.chooseGroup')
+        self.assertEqual(len(self.c.get('/api/state')['payments']), before)
+        # the same reference again is flagged, and saved only when confirmed
+        self.error('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 10, 'method': 'instapay', 'ref': 'IP-' + self.p}, 'err.refUsed')
+        self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 10, 'method': 'instapay',
+                                   'ref': 'IP-' + self.p, 'confirmDuplicate': True})
+        # a reversed receipt frees its reference
+        one = self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 7, 'method': 'vodafone', 'ref': 'VF-' + self.p})
+        self.c.post('/api/c/void', {'id': one['id'], 'reason': 'typo'})
+        self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 7, 'method': 'vodafone', 'ref': 'VF-' + self.p})

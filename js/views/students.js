@@ -232,7 +232,20 @@
             if (e.target.closest('[data-wa]')) { HS.get('/api/c/wa?studentId=' + encodeURIComponent(id) + '&kind=monthly&lang=' + HS.lang).then(function (r) { if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener'); }, function (er) { HS.toast(U.errorText(er), 'bad'); }); return; }
             if (e.target.closest('[data-enrol]')) { pickGroup(f.student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: id, groupId: gid }, extra || {})); }, function () { reload('groups'); }); return; }
             var tr = e.target.closest('[data-transfer]');
-            if (tr) { pickGroup(f.student, tr.dataset.transfer, function (gid) { return HS.post('/api/c/transfer', { enrollmentId: tr.dataset.transfer, groupId: gid }); }, function () { reload('groups'); }); return; }
+            if (tr) {
+              var from = f.enrollments.filter(function (x) { return x.id === tr.dataset.transfer; })[0] || {}, credit = Number((from.money || {}).balance) || 0;
+              pickGroup(f.student, tr.dataset.transfer, function (gid) {
+                return HS.post('/api/c/transfer', { enrollmentId: tr.dataset.transfer, groupId: gid }).then(function (r) {
+                  var to = D.get('groups', gid) || {}, old = D.get('groups', from.groupId) || {};
+                  // money paid in advance stays in the old group unless it is moved: offer it when the teacher is the same
+                  if (!(credit > 0.009) || !seesMoney() || !HS.can(['money.collect', 'money.void']) || to.teacherId !== old.teacherId) return r;
+                  return U.confirm({ title: HS.t('cred.title'), body: HS.t('cred.body', { a: HS.fmt.num(credit), g: to.name || '' }), ok: HS.t('cred.move') }).then(function (yes) {
+                    return yes ? U.run(HS.post('/api/c/credit/move', { studentId: id, from: from.groupId, to: gid, amount: credit }), 'cred.done') : r;
+                  });
+                });
+              }, function () { reload('groups'); });
+              return;
+            }
             var lv = e.target.closest('[data-leave]');
             if (lv) U.confirm({ title: HS.t('stu.leave'), body: HS.t('stu.leave.b'), reason: HS.t('stu.reason'), danger: true, ok: HS.t('stu.leave') }).then(function (reason) {
               if (reason) U.run(HS.post('/api/c/leave', { enrollmentId: lv.dataset.leave, reason: reason }), 'common.saved').then(function () { D.load(); reload('groups'); });

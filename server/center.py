@@ -286,7 +286,7 @@ def active_enrollments(store, student_id, d):
 # ---------------------------------------------------------------- money facts per enrolment (bulk, SQL)
 def _visits(store, student_id=None, group_id=None):
     """{(student, home group): [visit dates]} - each visit is priced on its own day (a price change is not retroactive)."""
-    sql = "SELECT student_id, group_id, date FROM attendance WHERE deleted=0 AND status IN ('present','late')"
+    sql = "SELECT student_id, group_id, date FROM attendance WHERE deleted=0 AND status IN ('present','late') AND (trial IS NULL OR trial=0)"
     args = []
     if student_id:
         sql += ' AND student_id=?'
@@ -406,8 +406,10 @@ def door_card(store, student_id, now=None, scopes=None):
         same_subject = any((groups.get(gid) or {}).get('subjectId') == g.get('subjectId') and g.get('subjectId') for gid in mine)
         if not own and not same_subject and not (g.get('gradeCode') == st.get('gradeCode')):
             continue
+        trial = not own and not same_subject   # not enrolled in this subject: a free trial session, once per group
         candidates.append({'session': s, 'own': own, 'makeup': not own and same_subject, 'now': D.door_window(s, mins, cfg['doorEarlyMinutes'], cfg['doorLateMinutes']),
-                           'done': s['id'] in att, 'status': (att.get(s['id']) or {}).get('status')})
+                           'done': s['id'] in att, 'status': (att.get(s['id']) or {}).get('status'),
+                           **({'trial': True, 'trialUsed': trial_used(store, student_id, s['groupId'])} if trial else {})})
     candidates.sort(key=lambda c: (not c['own'], not c['now'], abs((D.hm(c['session']['start']) or 0) - mins)))
     best = next((c for c in candidates if c['own'] and c['now'] and not c['done']), None)
     if best is None:
@@ -426,9 +428,10 @@ def door_card(store, student_id, now=None, scopes=None):
 
 
 @atomic_operation
-def checkin(ctx, student_id, session_id, status=None, via='code', now=None):
+def checkin(ctx, student_id, session_id, status=None, via='code', now=None, trial=False):
     """Records the student in the session (creating the session record when it is the first one), idempotent:
-    a second scan of the same student in the same session changes nothing."""
+    a second scan of the same student in the same session changes nothing. trial: a student who is not enrolled
+    attends one free session of this group (never charged, once per group) before deciding."""
     ctx.need('attendance.mark')
     now = now or datetime.now()
     st = ctx.store.row('students', student_id)
@@ -454,6 +457,8 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None):
         home = next((e for e in ens if (groups.get(e['groupId']) or {}).get('subjectId') == group.get('subjectId')
                      and (groups.get(e['groupId']) or {}).get('teacherId') == group.get('teacherId')), None) or \
             next((e for e in ens if (groups.get(e['groupId']) or {}).get('subjectId') == group.get('subjectId')), None)
+        if not home and trial:
+            return _trial_checkin(ctx, st, sess, group, status, via, now)
         if not home:
             raise Problem('err.notEnrolled', 'The student is not enrolled in this group. Enrol first.')
         makeup = True
@@ -479,6 +484,35 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None):
     ops.append({'e': 'attendance', 'id': aid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
     ctx.commit(f'Attendance: {st.get("name")} ({status})', ops)
     return {'id': aid, 'status': status, 'already': False, 'makeup': makeup}
+
+
+def trial_used(store, student_id, group_id):
+    with store.lock:
+        return store.conn.execute("SELECT 1 FROM attendance WHERE deleted=0 AND trial=1 AND student_id=? AND group_id=? LIMIT 1",
+                                  (student_id, group_id)).fetchone() is not None
+
+
+def _trial_checkin(ctx, st, sess, group, status, via, now):
+    aid = D.attendance_id(sess['id'], st['id'])
+    cur = ctx.store.row('attendance', aid)
+    if cur:
+        return {'id': aid, 'status': cur['status'], 'already': True, 'makeup': False, 'trial': bool(cur.get('trial'))}
+    if trial_used(ctx.store, st['id'], group['id']):
+        raise Problem('err.trialUsed', 'This student already had the free trial session of this group. Enrol first.')
+    cfg = settings(ctx.store)
+    day = date.fromisoformat(sess['date'])
+    if status not in D.ATT_STATUSES or status in ('absent', 'excused'):
+        status = 'late' if day == now.date() and D.is_late(sess, now.hour * 60 + now.minute, cfg['lateMinutes']) else 'present'
+    ops = []
+    if sess.get('virtual') or not ctx.store.row('sessions', sess['id']):
+        ops.append({'e': 'sessions', 'id': sess['id'], 'op': 'put', 'row': _session_row(sess)})
+    elif sess.get('status') == 'planned':
+        ops.append({'e': 'sessions', 'id': sess['id'], 'op': 'put', 'ver': sess['ver'], 'row': {**_strip(sess), 'status': 'held'}})
+    ops.append({'e': 'attendance', 'id': aid, 'op': 'put', 'row': {
+        'sessionId': sess['id'], 'studentId': st['id'], 'groupId': group['id'], 'teacherId': group.get('teacherId'), 'date': sess['date'],
+        'status': status, 'at': now.strftime('%H:%M'), 'via': via, 'makeup': False, 'trial': True, 'by': ctx.user}})
+    ctx.commit(f'Free trial session: {st.get("name")} in {group.get("name")}', ops)
+    return {'id': aid, 'status': status, 'already': False, 'makeup': False, 'trial': True}
 
 
 def _strip(row):
@@ -570,7 +604,7 @@ def roster(store, session_id, scopes=None):
                      'money': bals.get(e['id']), 'enrollmentId': e['id']})
     for sid, a in att.items():
         if sid not in {e['studentId'] for e in ens}:
-            rows.append({'student': students.get(sid), 'status': a.get('status'), 'at': a.get('at'), 'guest': True})
+            rows.append({'student': students.get(sid), 'status': a.get('status'), 'at': a.get('at'), 'guest': True, 'trial': bool(a.get('trial'))})
     rows = [r for r in rows if r['student']]
     rows.sort(key=lambda r: D.key_text(r['student'].get('name')))
     return {'session': sess, 'group': group, 'rows': rows}
@@ -771,16 +805,17 @@ def close_shift(ctx, shift_id, counted, reason=''):
 
 
 # ---------------------------------------------------------------- receipts
-@atomic_operation
-def pay(ctx, d):
-    """Takes money: a group fee, a handout, money in advance (wallet) or other. Needs this user's open cash shift
-    on this PC (also for e-wallet payments, so every receipt belongs to one person's day). Returns the receipt."""
+
+
+def _build_payment(ctx, d):
+    """Validates one payment and builds its receipt row, stock change and label (nothing is saved). Takes money: a group fee, a handout, money in advance (wallet) or other. Needs this user's open cash shift
+    on this PC (also for e-wallet payments, so every receipt belongs to one person's day)."""
     ctx.need('money.collect')
     kind = d.get('kind') or 'fee'
     if kind not in D.PAY_KINDS or kind == 'refund':
         raise BadRequest('Unknown payment kind')
     method = d.get('method') or 'cash'
-    if method not in D.PAY_METHODS:
+    if method not in D.PAY_METHODS or method == 'transfer':
         raise BadRequest('Unknown payment method')
     try:
         amount = round(float(d.get('amount')), 2)
@@ -791,6 +826,11 @@ def pay(ctx, d):
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
     if not shift:
         raise Problem('err.noShift', 'Open your cash shift first.')
+    ref = D.norm_text(d.get('ref'))[:60]
+    if ref and method in ('vodafone', 'instapay', 'fawry', 'bank', 'card') and not d.get('confirmDuplicate'):
+        dup = ref_used(ctx.store, method, ref)
+        if dup:
+            raise Problem('err.refUsed', 'This transfer reference was already used on a receipt.', no=dup['no'], name=dup['name'])
     st = ctx.store.row('students', d.get('studentId')) if d.get('studentId') else None
     if d.get('studentId') and not st:
         raise Problem('err.noStudent', 'Student not found.')
@@ -830,12 +870,105 @@ def pay(ctx, d):
             raise Problem('err.noStudent', 'Student not found.')
         if wallet(ctx.store, st['id']) + 0.001 < amount:
             raise Problem('err.walletLow', 'There is not enough money in advance.', have=wallet(ctx.store, st['id']))
+    return row, ops, label
+
+
+def ref_used(store, method, ref):
+    """The live receipt that already carries this transfer reference (a reversed one does not count): a parent showing
+    the same InstaPay or Vodafone Cash screenshot twice, or a typed number that repeats."""
+    with store.lock:
+        r = store.conn.execute(
+            "SELECT p.no, p.student_id FROM payments p WHERE p.deleted=0 AND p.method=? AND p.ref=? AND p.amount>0 AND (p.void_of IS NULL OR p.void_of='') "
+            "AND NOT EXISTS (SELECT 1 FROM payments v WHERE v.deleted=0 AND v.void_of=p.id) LIMIT 1", (method, ref)).fetchone()
+    if not r:
+        return None
+    st = store.row('students', r[1]) if r[1] else None
+    return {'no': r[0], 'name': (st or {}).get('name') or ''}
+
+
+@atomic_operation
+def pay(ctx, d):
+    row, ops, label = _build_payment(ctx, d)
     with ctx.store.lock:  # numbering and saving under one lock: two clicks never get the same number
         row['no'] = _next_no(ctx.store, 'payments', 'R', ctx.letter(), date.today().year)
         pid = new_id('pa')
         ops.insert(0, {'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
         ctx.commit(f'{label} ({row["no"]})', ops)
     return {'id': pid, **row}
+
+
+
+
+@atomic_operation
+def pay_many(ctx, d):
+    """One parent, one payment, several children (siblings): each line is an ordinary fee receipt of its own group,
+    all saved together in ONE commit under one batch id, with consecutive numbers. Returns the receipts to print."""
+    ctx.need('money.collect')
+    items = d.get('items')
+    if not isinstance(items, list) or not 1 <= len(items) <= 12:
+        raise Problem('err.chooseGroup', 'Choose the student and the group.')
+    if (d.get('method') or 'cash') == 'wallet':
+        raise BadRequest('Pay each child from his own money in advance')
+    built = []
+    for it in items:
+        if not isinstance(it, dict):
+            raise BadRequest('Bad item')
+        built.append(_build_payment(ctx, {**{k: d.get(k) for k in ('method', 'ref', 'confirmDuplicate', 'note')},
+                                         'kind': 'fee', 'studentId': it.get('studentId'), 'groupId': it.get('groupId'), 'amount': it.get('amount'),
+                                         'period': it.get('period') or ''}))
+    batch = new_id('fm')
+    ops, receipts = [], []
+    with ctx.store.lock:
+        first = D.parse_doc_no(_next_no(ctx.store, 'payments', 'R', ctx.letter(), date.today().year))
+        for n, (row, o, _label) in enumerate(built):
+            row['no'] = D.doc_no(first[0], 2000 + first[1], first[2], first[3] + n)
+            row['batch'] = batch
+            pid = new_id('pa')
+            ops.append({'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
+            ops.extend(o)
+            receipts.append({'id': pid, **row})
+        total = round(sum(r['amount'] for r in receipts), 2)
+        ctx.commit(f'Family payment {total:g} for {len(receipts)} children ({receipts[0]["no"]}-{receipts[-1]["no"]})', ops)
+    return {'batch': batch, 'total': total, 'receipts': receipts}
+
+
+@atomic_operation
+def move_credit(ctx, student_id, from_group_id, to_group_id, amount=None, reason=''):
+    """Moves money a student paid in advance from one group to another of the SAME teacher (a transfer to a new class
+    of the same teacher, a group that merged). Two linked receipts - minus in the old group, plus in the new one - so
+    nothing is edited or deleted, the drawer is untouched (method 'transfer' is never cash) and the teacher's
+    revenue is unchanged. Moving to another teacher is a refund and a new payment, because the money changes owner."""
+    ctx.need('money.collect', 'money.void')
+    st = ctx.store.row('students', student_id)
+    a, b = ctx.store.row('groups', from_group_id), ctx.store.row('groups', to_group_id)
+    if not st or not a or not b:
+        raise Problem('err.notFound', 'Student or group not found.')
+    if a['id'] == b['id']:
+        raise Problem('err.sameGroup', 'Choose another group.')
+    if a.get('teacherId') != b.get('teacherId'):
+        raise Problem('err.creditTeacher', 'Credit can only move between groups of the same teacher. Refund it and take a new payment instead.')
+    ctx.need_teacher(a.get('teacherId'))
+    ens = [e for e in ctx.store.rows('enrollments', 'student_id=?', (student_id,)) if e['groupId'] == a['id']]
+    bal = balances(ctx.store, ens, None, {a['id']: a}, {student_id: st}) if ens else {}
+    credit = max([v['balance'] for v in bal.values()] + [0.0])
+    try:
+        amt = round(float(amount if amount not in (None, '') else credit), 2)
+    except (TypeError, ValueError):
+        raise Problem('err.amount', 'Write the amount.')
+    if not math.isfinite(amt) or amt <= 0 or amt > credit + 0.001:
+        raise Problem('err.amount', 'Write the amount.')
+    shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
+    base = {'date': date.today().isoformat(), 'at': datetime.now().strftime('%H:%M'), 'studentId': student_id, 'teacherId': a.get('teacherId'),
+            'kind': 'fee', 'method': 'transfer', 'shiftId': shift['id'] if shift else '', 'by': ctx.user, 'period': '', 'note': D.norm_text(reason)[:200]}
+    batch = new_id('mv')
+    with ctx.store.lock:
+        n1 = _next_no(ctx.store, 'payments', 'R', ctx.letter(), date.today().year)
+        ops = [{'e': 'payments', 'id': new_id('pa'), 'op': 'put', 'row': {**base, 'no': n1, 'groupId': a['id'], 'amount': -amt, 'batch': batch}}]
+        pn = D.parse_doc_no(n1)
+        n2 = D.doc_no(pn[0], 2000 + pn[1], pn[2], pn[3] + 1)   # the next number: both rows are saved in the same commit
+        ops.append({'e': 'payments', 'id': new_id('pa'), 'op': 'put', 'row': {**base, 'no': n2, 'groupId': b['id'], 'amount': amt, 'batch': batch}})
+        ctx.commit(f'Credit {amt:g} of {st["name"]} moved from {a["name"]} to {b["name"]} ({n1}, {n2})', ops)
+    return {'amount': amt, 'from': n1, 'to': n2}
 
 
 @atomic_operation
@@ -850,6 +983,8 @@ def void_payment(ctx, payment_id, reason):
         raise Problem('err.notFound', 'Receipt not found.')
     if p.get('voidOf'):
         raise Problem('err.voidVoid', 'A reversal cannot be reversed again.')
+    if p.get('method') == 'transfer':
+        raise Problem('err.voidTransfer', 'Money moved between groups is moved back with "Move credit", not reversed.')
     if p.get('teacherId'):
         ctx.need_teacher(p['teacherId'])
     if ctx.store.rows('payments', 'void_of=?', (payment_id,)):
@@ -881,7 +1016,7 @@ def add_expense(ctx, d):
     if cat == 'teacher_payout':
         ctx.need('settlements.manage')
     method = d.get('method') or 'cash'
-    if method not in D.PAY_METHODS or method == 'wallet':
+    if method not in D.PAY_METHODS or method in ('wallet', 'transfer'):
         raise BadRequest('Unknown payment method')
     try:
         amount = round(float(d.get('amount')), 2)
@@ -1179,7 +1314,8 @@ def _month_facts(store, ym):
             "(CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))) FROM sessions "
             "WHERE deleted=0 AND status='held' AND date>=? AND date<=? GROUP BY group_id", (a, b))}
         visits = {r[0]: r[1] for r in store.conn.execute(
-            "SELECT group_id, COUNT(*) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND date>=? AND date<=? GROUP BY group_id", (a, b))}
+            "SELECT group_id, COUNT(*) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND (trial IS NULL OR trial=0) "
+            "AND date>=? AND date<=? GROUP BY group_id", (a, b))}
         exp = {}
         for r in store.conn.execute("SELECT teacher_id, category, SUM(amount) FROM expenses WHERE deleted=0 AND teacher_id<>'' AND teacher_id IS NOT NULL "
                                     "AND date>=? AND date<=? GROUP BY teacher_id, category", (a, b)):

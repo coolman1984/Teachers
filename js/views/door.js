@@ -39,6 +39,7 @@
       return '<button class="cand-btn' + (sel ? ' on' : '') + (x.done ? ' done' : '') + '" data-pick="' + HS.esc(s.id) + '" aria-pressed="' + sel + '">' +
         '<span class="num">' + U.bdi(s.start + '–' + s.end) + '</span><b class="ellipsis">' + HS.esc(groupLabel(s.groupId)) + '</b>' +
         '<span class="row" style="gap:.3rem;flex-wrap:wrap">' + (x.makeup ? '<span class="badge info">' + HS.esc(HS.t('door.makeup')) + '</span>' : '') +
+          (x.trial ? '<span class="badge ' + (x.trialUsed ? 'warn' : 'ok') + '">' + HS.esc(HS.t(x.trialUsed ? 'door.trialUsed' : 'door.trial')) + '</span>' : '') +
           (!x.now ? '<span class="badge">' + HS.esc(HS.t('door.notNow')) + '</span>' : '') + (x.done ? U.att(x.status) : '') + '</span></button>';
     }).join('') + '</div>';
   }
@@ -55,6 +56,18 @@
   function enrolButton(main) {
     return HS.can('students.manage') && HS.pickGroup ? '<button class="btn sm' + (main ? ' primary' : '') + '" data-enrol>' + HS.icon('plus', 'sm') + HS.esc(HS.t('door.enrol')) + '</button>' : '';
   }
+  function picked(c) { return c.candidates.filter(function (x) { return x.session.id === c.pick; })[0]; }
+  // not enrolled in this subject: one free trial session per group, then "enrol in this group" is one click away
+  function checkinButton(c, done, canCheck) {
+    if (done) return '<div class="done-banner">' + HS.icon('check') + '<span>' + HS.esc(HS.t('door.already', { status: HS.t('att.' + done.status) })) + '</span></div>';
+    var x = picked(c);
+    if (x && x.trial) {
+      return (x.trialUsed ? '<div class="tip warn">' + HS.icon('info') + '<span>' + HS.esc(HS.t('door.trialUsed.b')) + '</span></div>'
+          : '<button class="btn primary xl" data-checkin' + (canCheck ? '' : ' disabled') + '>' + HS.icon('spark') + HS.esc(HS.t('door.trialGo')) + '</button>') +
+        (HS.can('students.manage') ? '<button class="btn' + (x.trialUsed ? ' primary xl' : '') + '" data-enrol-g="' + HS.esc(x.session.groupId) + '">' + HS.icon('plus', 'sm') + HS.esc(HS.t('door.enrolHere')) + '</button>' : '');
+    }
+    return '<button class="btn primary xl" data-checkin' + (canCheck ? '' : ' disabled') + '>' + HS.icon('check') + HS.esc(HS.t('door.checkin')) + ' <i class="kbd">Enter</i></button>';
+  }
   function cardHTML(c) {
     var s = c.student, done = c.candidates.filter(function (x) { return x.session.id === c.pick && x.done; })[0];
     var canCheck = HS.can('attendance.mark') && c.pick && !done;
@@ -64,8 +77,7 @@
         (HS.can('students.view') ? '<a class="icon-btn" href="#/students?id=' + encodeURIComponent(s.id) + '" title="' + HS.esc(HS.t('door.file')) + '" aria-label="' + HS.esc(HS.t('door.file')) + '">' + HS.icon('external') + '</a>' : '') + '</div>' +
       riskBadge(c.risk) +
       '<section><h3 class="sec">' + HS.esc(HS.t('door.session')) + '</h3>' + sessionButtons(c) + '</section>' +
-      '<div class="checkin-row">' + (done ? '<div class="done-banner">' + HS.icon('check') + '<span>' + HS.esc(HS.t('door.already', { status: HS.t('att.' + done.status) })) + '</span></div>'
-        : '<button class="btn primary xl" data-checkin' + (canCheck ? '' : ' disabled') + '>' + HS.icon('check') + HS.esc(HS.t('door.checkin')) + ' <i class="kbd">Enter</i></button>') + '</div>' +
+      '<div class="checkin-row">' + checkinButton(c, done, canCheck) + '</div>' +
       '<section><h3 class="sec">' + HS.esc(HS.t('door.money')) + '</h3>' + moneyRows(c) + '</section>' +
       (c.lastReceipt ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.t('door.receipt', { no: { html: U.bdi(c.lastReceipt.no) } }) + ' · ' + U.money(c.lastReceipt.amount) + '</span>' +
         '<button class="btn sm" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
@@ -138,13 +150,14 @@
         }
         btn.disabled = true;
         HS.post('/api/c/pay', { studentId: card.student.id, groupId: enrolment.groupId, kind: 'fee', amount: amount.value, method: method,
-          ref: (el.querySelector('#pay-r') || {}).value || '', period: p ? p.value : '' }).then(function (r) {
+          ref: (el.querySelector('#pay-r') || {}).value || '', period: p ? p.value : '', confirmDuplicate: dupSeen }).then(function (r) {
           HS.overlay.close(); beep('ok');
           HS.toast(HS.t('pay.done', { no: r.no }));
           if (HS.printReceipt && HS.prefs.data.autoReceipt) HS.printReceipt(r);
           done(r);
-        }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); });
+        }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       }
+      var dupSeen = false;   // the same transfer number twice is shown once; pressing Save again confirms it is a real second payment
       el.querySelector('[data-ok]').addEventListener('click', save);
       amount.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
     }, function () { /* the shift was not opened: nothing happens */ });
@@ -182,7 +195,7 @@
       function rowsHTML() {
         return '<ul class="roll">' + r.rows.map(function (x) {
           var st = marks[x.student.id];
-          return '<li><div class="grow"><b>' + HS.esc(x.student.name) + '</b> <span class="faint num">' + U.bdi(x.student.code || '') + '</span>' + (x.guest ? ' <span class="badge info">' + HS.esc(HS.t('door.makeup')) + '</span>' : '') + '</div>' +
+          return '<li><div class="grow"><b>' + HS.esc(x.student.name) + '</b> <span class="faint num">' + U.bdi(x.student.code || '') + '</span>' + (x.guest ? ' <span class="badge info">' + HS.esc(HS.t(x.trial ? 'door.trial' : 'door.makeup')) + '</span>' : '') + '</div>' +
             '<div class="seg att-seg" role="group" data-sid="' + HS.esc(x.student.id) + '">' + STATES.map(function (k) {
               return '<button type="button" class="st-' + k + '" data-st="' + k + '" aria-pressed="' + (st === k) + '"' + (can ? '' : ' disabled') + ' title="' + HS.esc(HS.t('att.' + k)) + '">' + HS.esc(HS.t('att.short.' + k)) + '</button>'; }).join('') + '</div></li>';
         }).join('') + '</ul>';
@@ -287,9 +300,11 @@
       function checkin() {
         if (!card || !card.pick) return;
         var btn = cardBox.querySelector('[data-checkin]'); if (btn) btn.disabled = true;
-        HS.post('/api/c/checkin', { studentId: card.student.id, sessionId: card.pick, via: fromScanner ? 'scan' : 'code' }).then(function (r) {
+        var x = picked(card);
+        if (x && x.trial && x.trialUsed) { beep('warn'); return; }
+        HS.post('/api/c/checkin', { studentId: card.student.id, sessionId: card.pick, via: fromScanner ? 'scan' : 'code', trial: !!(x && x.trial) }).then(function (r) {
           beep(r.already ? 'warn' : 'ok');
-          HS.toast(HS.t(r.already ? 'door.already' : 'door.done', { name: card.student.name, status: HS.t('att.' + r.status) }), r.already ? 'bad' : '');
+          HS.toast(HS.t(r.already ? 'door.already' : r.trial ? 'door.trialDone' : 'door.done', { name: card.student.name, status: HS.t('att.' + r.status) }), r.already ? 'bad' : '');
           q.value = ''; lastQuery = ''; list = []; paintResults(); q.focus();
           paintToday();
           return openCard(card.student.id, false);
@@ -330,6 +345,8 @@
         }
         if (e.target.closest('[data-print]') && card.lastReceipt) { HS.printReceipt(card.lastReceipt); return; }
         if (e.target.closest('[data-enrol]')) { var sid = card.student.id; HS.pickGroup(card.student, function () { openCard(sid, false); }); return; }
+        var eg = e.target.closest('[data-enrol-g]');
+        if (eg) { var sid2 = card.student.id; U.run(HS.post('/api/c/enroll', { studentId: sid2, groupId: eg.dataset.enrolG }), 'common.saved', eg).then(function () { return openCard(sid2, false); }, function () {}); return; }
         if (e.target.closest('[data-wa]')) {
           HS.get('/api/c/wa?studentId=' + encodeURIComponent(card.student.id) + '&kind=monthly&lang=' + HS.lang).then(function (r) {
             if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener');

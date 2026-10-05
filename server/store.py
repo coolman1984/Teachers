@@ -58,7 +58,7 @@ ENTITIES = {
         ('gradeCode', 'grade_code', T, 'Grade'), ('system', 'system', T, 'System'), ('track', 'track', T, 'Track'),
         ('roomId', 'room_id', T, 'Room'), ('slots', 'slots', J, 'Weekly Times'), ('capacity', 'capacity', I, 'Capacity'),
         ('feeType', 'fee_type', T, 'Fee Type'), ('fee', 'fee', R, 'Fee'), ('packageSessions', 'package_sessions', I, 'Sessions per Package'),
-        ('feeHistory', 'fee_history', J, 'Earlier Prices'),
+        ('feeHistory', 'fee_history', J, 'Earlier Prices'), ('tempSlots', 'temp_slots', J, 'Temporary Times'),
         ('startDate', 'start_date', T, 'Start'), ('endDate', 'end_date', T, 'End'), ('kind', 'kind', T, 'Kind'),
         ('color', 'color', T, 'Colour'), ('active', 'active', B, 'Active'), ('notes', 'notes', T, 'Notes')]),
     'enrollments': ('enrollments', 'Enrollments', [
@@ -72,13 +72,15 @@ ENTITIES = {
     'attendance': ('attendance', 'Attendance', [
         ('sessionId', 'session_id', T, 'Session'), ('studentId', 'student_id', T, 'Student'), ('groupId', 'group_id', T, 'Group'),
         ('teacherId', 'teacher_id', T, 'Teacher'), ('date', 'date', T, 'Date'), ('status', 'status', T, 'Status'),
-        ('at', 'at', T, 'Time'), ('via', 'via', T, 'Recorded By'), ('makeup', 'makeup', B, 'Make-up'), ('by', 'by_user', T, 'User')]),
+        ('at', 'at', T, 'Time'), ('via', 'via', T, 'Recorded By'), ('makeup', 'makeup', B, 'Make-up'), ('by', 'by_user', T, 'User'),
+        ('trial', 'trial', B, 'Free Trial')]),
     'payments': ('payments', 'Payments', [
         ('no', 'no', T, 'Receipt No'), ('date', 'date', T, 'Date'), ('at', 'at', T, 'Time'), ('studentId', 'student_id', T, 'Student'),
         ('teacherId', 'teacher_id', T, 'Teacher'), ('groupId', 'group_id', T, 'Group'), ('kind', 'kind', T, 'Kind'),
         ('period', 'period', T, 'Month'), ('sessions', 'sessions', I, 'Sessions'), ('materialId', 'material_id', T, 'Handout'),
         ('qty', 'qty', I, 'Quantity'), ('amount', 'amount', R, 'Amount'), ('method', 'method', T, 'Method'), ('ref', 'ref', T, 'Reference'),
-        ('shiftId', 'shift_id', T, 'Cash Shift'), ('voidOf', 'void_of', T, 'Reverses'), ('note', 'note', T, 'Note'), ('by', 'by_user', T, 'User')]),
+        ('shiftId', 'shift_id', T, 'Cash Shift'), ('voidOf', 'void_of', T, 'Reverses'), ('note', 'note', T, 'Note'), ('by', 'by_user', T, 'User'),
+        ('batch', 'batch', T, 'Paid Together')]),
     'shifts': ('shifts', 'Cash Shifts', [
         ('no', 'no', T, 'Shift No'), ('user', 'user_name', T, 'User'), ('userId', 'user_id', T, 'User ID'), ('node', 'node', T, 'PC'),
         ('openedAt', 'opened_at', T, 'Opened'), ('openingCash', 'opening_cash', R, 'Opening Cash'), ('closedAt', 'closed_at', T, 'Closed'),

@@ -2,6 +2,22 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Free trial, moving credit, family payments, repeated references (2026-10-05)
+
+**Why:** the owner agreed on the defaults and asked for the remaining edge cases of the market study.
+**What:** a free trial session at the door (one per group, `attendance.trial`, never charged and not counted as revenue
+visits); prepaid credit moves to another group of the same teacher as two linked non-cash receipts (`method transfer`,
+cannot be used for payments or reversed, the drawer is untouched), offered right after a transfer; a family payment
+saved as one commit with consecutive receipt numbers (`pay/many`, all-or-nothing); a transfer reference already on a live
+receipt is flagged once and saved only when confirmed (a reversed receipt frees its reference). `pay()` was split into a
+builder and a commit step so the family payment reuses every existing check.
+**Mistakes:** a numbering helper has no "next number" argument, so the second number is derived from the first inside
+the same lock; an interrupted edit left half the trial UI unapplied (re-checked the tree before continuing).
+**Limits:** the sibling payment screen is not built yet (server and tests only); no temporary Ramadan timetable or extra
+make-up session yet. Browser coverage for trial and credit screens is by API tests, not a Chrome scenario.
+**Evidence:** Python gate 167 OK in 206 s (3 skips); performance card 46 ms, dashboard 151 ms, state 496 ms; frontend 18;
+browser test_e2e_center 12 OK; pyflakes clean.
+
 ## Field edge cases: money that survives a real school year (2026-10-05)
 
 **Why:** the owner asked to re-check the Egyptian market and prepare the app for the deep edge cases of a real centre.
