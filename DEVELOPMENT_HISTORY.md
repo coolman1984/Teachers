@@ -2,6 +2,17 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Personal link of a staff member works again (2026-10-05)
+
+**Why:** review item A03 - the personal-link page asked for `js/quick.js`, which did not exist, so the link never signed in by itself; the
+page was English only and showed broken characters ("â€¦") where an ellipsis was meant.
+**What:** `js/quick.js` sends the page's own sign-in form once (a chat preview or a scanner does not run it, so it signs nobody in; the
+POST rule on the server is unchanged). When another person is signed in, the page still asks first and never switches by itself. The
+page is Arabic first with English below, and the log address `/k/…` is written correctly.
+**Mistakes:** the file was referenced since the fork and no test opened the link in a browser - the console error went unnoticed.
+**Evidence:** `tests/test_center_links.py` (the script is served, a preview signs nobody in, POST signs in, another signed-in person is
+asked, a dead link answers 404, and Chromium lands in the app without console errors) - fails without the script, passes with it.
+
 ## Parent link: the right address, and old links really revoked (2026-10-05)
 
 **Why:** the completion review (A01, A02) found that the link sent to parents could not open their child's page, and that replacing a

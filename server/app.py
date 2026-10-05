@@ -383,7 +383,7 @@ class Handler(BaseHTTPRequestHandler):
     @property
     def log_path(self):
         """The address for logs: the secret part of a personal link is never written anywhere."""
-        return '/k/â€¦' if self.path.startswith('/k/') else self.path
+        return '/k/…' if self.path.startswith('/k/') else self.path
 
     @property
     def ip(self):
@@ -446,25 +446,28 @@ class Handler(BaseHTTPRequestHandler):
         if now_in and now_in['id'] == u['id']:
             return self.send(303, b'', 'text/plain', {'Location': '/'})  # already logged in as this person
         if ok:
-            form = (f'<form id="{"ask" if now_in else "go"}" method="post" action="/k/{html.escape(token)}">'
-                    f'<button type="submit">{"Continue as " + html.escape(u["full_name"]) if now_in else "Open the system"}</button></form>')
+            name = html.escape(u['full_name'])
+            label = (f'المتابعة باسم {name} · Continue as {name}' if now_in else 'افتح النظام · Open the system')
+            form = f'<form id="{"ask" if now_in else "go"}" method="post" action="/k/{html.escape(token)}"><button type="submit">{label}</button></form>'
             if now_in:  # somebody else is logged in in this browser: never switch without asking
-                body = (f'<h1>Personal link of {html.escape(u["full_name"])}</h1><p>This browser is logged in as '
-                        f'<b>{html.escape(now_in["full_name"])}</b>. Continuing logs {html.escape(now_in["full_name"])} out.</p>' + form +
-                        '<p class="small"><a href="/">Stay as ' + html.escape(now_in['full_name']) + '</a></p>')
+                other = html.escape(now_in['full_name'])
+                body = (f'<h1>الرابط الشخصي لـ {name}</h1><p>هذا المتصفح مسجّل الآن باسم <b>{other}</b>. المتابعة تُخرج {other}.</p>'
+                        f'<p class="en" dir="ltr">Personal link of {name}. This browser is signed in as <b>{other}</b>; continuing signs {other} out.</p>' + form +
+                        f'<p class="small"><a href="/">البقاء باسم {other} · Stay as {other}</a></p>')
             else:
-                body = (f'<h1>Welcome, {html.escape(u["full_name"])}</h1><p>Opening the system for youâ€¦</p>' + form +
-                        '<p class="small">This is your personal link. Do not give it to anybody - whoever has it works under your name.</p>'
-                        '<script src="/js/quick.js"></script>')
+                body = (f'<h1>أهلًا {name}</h1><p>جارٍ فتح النظام لك…</p><p class="en" dir="ltr">Welcome, {name}. Opening the system for you…</p>' + form +
+                        '<p class="small">هذا رابطك الشخصي، لا تعطه لأحد: من معه الرابط يعمل باسمك.<br><span dir="ltr">This is your personal link. '
+                        'Do not give it to anybody - whoever has it works under your name.</span></p><script src="/js/quick.js"></script>')
         else:
-            body = ('<h1>This link does not work any more</h1><p>Please ask the administrator for your new link, '
-                    'or <a href="/">log in with your user name and password</a>.</p>')
-        page = (f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            body = ('<h1>هذا الرابط لم يعد يعمل</h1><p>اطلب رابطك الجديد من المسؤول، أو <a href="/">ادخل باسم المستخدم وكلمة المرور</a>.</p>'
+                    '<p class="en" dir="ltr">This link does not work any more. Ask the administrator for your new link, or '
+                    '<a href="/">sign in with your user name and password</a>.</p>')
+        page = (f'<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                 f'<title>{html.escape(title)}</title><style>body{{font-family:system-ui,Segoe UI,Arial,'
                 'sans-serif;background:#f3f5f8;color:#1b2533;display:flex;min-height:90vh;align-items:center;justify-content:center;margin:0 16px}'
                 'main{background:#fff;border-radius:12px;padding:28px 32px;max-width:440px;box-shadow:0 4px 18px #0001;text-align:center}'
                 'h1{font-size:1.35rem}button{font-size:1.05rem;padding:10px 26px;border:0;border-radius:8px;background:#1f6feb;color:#fff;cursor:pointer}'
-                '.small{font-size:.85rem;color:#5b6675;margin-top:18px}</style></head><body><main>' + body + '</main></body></html>')
+                '.small{font-size:.85rem;color:#5b6675;margin-top:18px}.en{color:#5b6675;font-size:.9rem}</style></head><body><main>' + body + '</main></body></html>')
         return self.send(200 if ok else 404, page, 'text/html; charset=utf-8', {'Cache-Control': 'no-store'})
 
     def set_session(self, token):
