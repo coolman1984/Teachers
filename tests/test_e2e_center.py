@@ -221,6 +221,67 @@ class DoorTest(BrowserBase):
         self.assertEqual(sum(1 for r in res['rows'] if r['mark'] and r['mark'].get('absent')), 1)
         self.assertEqual(self.errors, [])
 
+    def test_walk_in_enrol_cash_change_typo_guard_day_off_and_price_rise(self):
+        from datetime import timedelta
+        tomorrow = date.today() + timedelta(days=1)
+        self.c.post('/api/commit', {'label': 'E2E walk-in', 'ops': [
+            {'e': 'students', 'id': 'e2e-walk', 'op': 'put', 'row': {'code': '41900', 'name': 'Synthetic Walk In', 'gradeCode': 'S1',
+                                                                    'system': 'thanaweya', 'consent': True, 'active': True}},
+            {'e': 'teachers', 'id': 'e2e-t2', 'op': 'put', 'row': {'name': 'Synthetic Second Teacher'}},
+            {'e': 'groups', 'id': 'e2e-g2', 'op': 'put', 'row': {'name': 'Synthetic Monthly Group', 'teacherId': 'e2e-t2', 'gradeCode': 'S1',
+                'feeType': 'month', 'fee': 300, 'capacity': 20, 'active': True, 'slots': [{'day': D.weekday(tomorrow), 'start': '09:00', 'end': '09:45'}]}}]})
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/door')
+        pg.wait_for_selector('#door-q').type('41900', delay=5)
+        pg.keyboard.press('Enter')
+        # a walk-in with no group is enrolled from the door card without leaving the page
+        pg.click('[data-card] [data-enrol]')
+        pg.click('.dialog [data-g="e2e-g"]')
+        pg.wait_for_selector('[data-card] [data-pay]')
+        pg.click('[data-checkin]')
+        pg.wait_for_selector('.done-banner')
+        pg.click('[data-card] [data-pay]')
+        if pg.wait_for_selector('#sh-o, #pay-a').get_attribute('id') == 'sh-o':
+            pg.fill('#sh-o', '500')
+            pg.click('.dialog [data-ok]')
+            pg.wait_for_selector('#pay-a')
+        # a typed extra zero is stopped once before a receipt that can only be reversed is written
+        pg.fill('#pay-a', '600')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.dialog [data-err]:not([hidden])')
+        self.assertIn('much more than the fee', pg.inner_text('.dialog [data-err]'))
+        self.assertFalse([p for p in self.c.get('/api/state')['payments'] if p['studentId'] == 'e2e-walk'])
+        # the parent hands over 100 for 60: the dialog says what to give back
+        pg.fill('#pay-a', '60')
+        pg.fill('#pay-g', '100')
+        self.assertIn('Give back 40', pg.inner_text('.dialog [data-change]'))
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-print]')
+        self.assertEqual([p['amount'] for p in self.c.get('/api/state')['payments'] if p['studentId'] == 'e2e-walk'], [60])
+        # tomorrow is an official holiday: every session of the day is cancelled in one step
+        pg.click('[data-dayoff]')
+        pg.fill('.dialog #off-d', tomorrow.isoformat())
+        pg.click('.dialog [data-r="holiday"]')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.toast')
+        day = {s['id']: s for s in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
+        self.assertEqual(day[D.session_id('e2e-g2', tomorrow.isoformat(), '09:00')]['status'], 'cancelled')
+        # raising the monthly price asks from when; earlier months keep the old price
+        pg.goto(self.S.base + '/#/groups?tab=list')
+        pg.click('tr[data-id="e2e-g2"]')
+        pg.click('.drawer [data-edit]')
+        pg.wait_for_selector('[data-gform]')
+        self.assertTrue(pg.is_hidden('[data-feefrom]'))
+        pg.fill('[data-gform] [name=fee]', '350')
+        pg.wait_for_selector('[data-feefrom]:not([hidden])')
+        first = pg.input_value('#gf-feeFrom')
+        self.assertTrue(first.endswith('-01') or first == date.today().isoformat())
+        pg.click('.drawer:last-of-type [data-save]')
+        pg.wait_for_selector('[data-gform]', state='detached')
+        g = next(g for g in self.c.get('/api/state')['groups'] if g['id'] == 'e2e-g2')
+        self.assertEqual((g['fee'], g['feeHistory'][0]['fee']), (350, 300))
+        self.assertEqual(self.errors, [])
+
     def test_zz_settlement_approve_payout_and_reports(self):
         # runs last (zz): a fee of the fixture group is collected, then the teacher is settled and paid
         mine = self.c.get('/api/c/shift')

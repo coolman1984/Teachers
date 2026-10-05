@@ -43,14 +43,17 @@
     }).join('') + '</div>';
   }
   function moneyRows(c) {
-    if (!c.enrollments.length) return '<p class="muted">' + HS.esc(HS.t('door.noGroups')) + '</p>';
+    if (!c.enrollments.length) return '<p class="muted">' + HS.esc(HS.t('door.noGroups')) + '</p>' + enrolButton(true);
     return '<ul class="money-rows">' + c.enrollments.map(function (e) {
       var m = e.money || {}, bal = Number(m.balance) || 0;
-      return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + '</b><span class="muted">' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) +
+      return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + (e.left ? ' <span class="badge warn">' + HS.esc(HS.t('enr.' + (e.status || 'left'))) + '</span>' : '') + '</b><span class="muted">' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) +
           (m.unit ? ' · ' + U.money(m.unit) : '') + (m.sessionsLeft !== undefined ? ' · ' + HS.esc(HS.t('door.left', { n: m.sessionsLeft })) : '') + '</span></div>' +
         '<span class="bal ' + (bal < 0 ? 'bad' : bal > 0 ? 'ok' : '') + '">' + U.money(Math.abs(bal)) + '<small>' + HS.esc(HS.t(bal < 0 ? 'door.owes' : bal > 0 ? 'door.credit' : 'door.clear')) + '</small></span>' +
         (HS.can('money.collect') ? '<button class="btn sm' + (bal < 0 ? ' primary' : '') + '" data-pay="' + HS.esc(e.id) + '">' + HS.icon('sheet', 'sm') + HS.esc(HS.t('door.pay')) + '</button>' : '') + '</li>';
     }).join('') + '</ul>' + (c.wallet ? '<p class="muted">' + HS.esc(HS.t('door.wallet')) + ' ' + U.money(c.wallet) + '</p>' : '');
+  }
+  function enrolButton(main) {
+    return HS.can('students.manage') && HS.pickGroup ? '<button class="btn sm' + (main ? ' primary' : '') + '" data-enrol>' + HS.icon('plus', 'sm') + HS.esc(HS.t('door.enrol')) + '</button>' : '';
   }
   function cardHTML(c) {
     var s = c.student, done = c.candidates.filter(function (x) { return x.session.id === c.pick && x.done; })[0];
@@ -66,7 +69,8 @@
       '<section><h3 class="sec">' + HS.esc(HS.t('door.money')) + '</h3>' + moneyRows(c) + '</section>' +
       (c.lastReceipt ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.t('door.receipt', { no: { html: U.bdi(c.lastReceipt.no) } }) + ' · ' + U.money(c.lastReceipt.amount) + '</span>' +
         '<button class="btn sm" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
-      (HS.can('messages.send') && HS.can('contacts.view') && s.parentMobile ? '<div class="row wrap"><button class="btn sm" data-wa>' + HS.icon('chat', 'sm') + HS.esc(HS.t('door.message')) + '</button></div>' : '');
+      '<div class="row wrap">' + (HS.can('messages.send') && HS.can('contacts.view') && s.parentMobile ? '<button class="btn sm" data-wa>' + HS.icon('chat', 'sm') + HS.esc(HS.t('door.message')) + '</button>' : '') +
+        (c.enrollments.length ? enrolButton(false) : '') + '</div>';
   }
 
   /* ---------- payments ---------- */
@@ -101,6 +105,8 @@
         '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span><div class="seg wrap" role="group" data-methods>' + METHODS.filter(function (x) { return x !== 'wallet' || card.wallet > 0; }).map(function (x) {
           return '<button type="button" data-m="' + x + '" aria-pressed="' + (x === method) + '">' + HS.esc(HS.t('pay.method.' + x)) + '</button>'; }).join('') + '</div></div>' +
         '<div class="field" data-ref hidden><label for="pay-r">' + HS.esc(HS.t('pay.ref')) + '</label><input class="input" id="pay-r" dir="ltr" autocomplete="off"></div>' +
+        '<div class="field" data-cash><label for="pay-g">' + HS.esc(HS.t('pay.given')) + '</label><div class="row"><input class="input" id="pay-g" type="number" inputmode="decimal" min="0" step="any" dir="ltr" placeholder="' + HS.esc(HS.t('pay.given.ph')) + '">' +
+          '<b class="change num" data-change aria-live="polite"></b></div></div>' +
         (m.feeType === 'month' ? '<div class="field"><label for="pay-p">' + HS.esc(HS.t('pay.period')) + '</label><input class="input" id="pay-p" type="month" value="' + U.today().slice(0, 7) + '"></div>' : '') +
         '<div class="tip bad" data-err hidden role="alert"></div>',
         footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.icon('check', 'sm') + HS.esc(HS.t('pay.save')) + '</button>' });
@@ -110,9 +116,26 @@
         method = b.dataset.m;
         el.querySelectorAll('[data-m]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
         el.querySelector('[data-ref]').hidden = ['vodafone', 'instapay', 'fawry'].indexOf(method) < 0;
+        el.querySelector('[data-cash]').hidden = method !== 'cash';
       });
+      // cash at the door: the parent hands over a 200 note for 150 - say what to give back
+      var given = el.querySelector('#pay-g'), change = el.querySelector('[data-change]');
+      function showChange() {
+        var a = Number(amount.value) || 0, g = Number(given.value) || 0;
+        change.className = 'change num' + (g && g < a ? ' neg' : '');
+        change.innerHTML = !g ? '' : g < a ? HS.esc(HS.t('pay.short', { a: HS.fmt.num(Math.round((a - g) * 100) / 100) })) : HS.esc(HS.t('pay.change', { a: HS.fmt.num(Math.round((g - a) * 100) / 100) }));
+      }
+      given.addEventListener('input', showChange); amount.addEventListener('input', function () { showChange(); confirmBig = false; });
+      given.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+      // receipts cannot be edited (only reversed), so a typed extra zero is caught before it is saved
+      var unit = Number(m.unit) || 0, ceiling = Math.max(Number(m.due) || 0, unit) * 3, confirmBig = false;
       function save() {
         var err = el.querySelector('[data-err]'), btn = el.querySelector('[data-ok]'), p = el.querySelector('#pay-p');
+        if (ceiling > 0 && Number(amount.value) > ceiling && !confirmBig) {
+          confirmBig = true; err.hidden = false; beep('warn');
+          err.textContent = HS.t('pay.big', { a: HS.fmt.num(Number(amount.value)), u: HS.fmt.num(unit || Number(m.due) || 0) });
+          return;
+        }
         btn.disabled = true;
         HS.post('/api/c/pay', { studentId: card.student.id, groupId: enrolment.groupId, kind: 'fee', amount: amount.value, method: method,
           ref: (el.querySelector('#pay-r') || {}).value || '', period: p ? p.value : '' }).then(function (r) {
@@ -126,6 +149,28 @@
       amount.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
     }, function () { /* the shift was not opened: nothing happens */ });
   }
+
+  /* ---------- a day off: every session of a day cancelled in one save (also used by Groups) ---------- */
+  HS.dayOff = function (done) {
+    var reasons = ['holiday', 'power', 'exams', 'teacher'];
+    var el = HS.dialog({ title: HS.t('off.title'), body: '<p class="muted">' + HS.esc(HS.t('off.b')) + '</p>' +
+        '<div class="field"><label for="off-d">' + HS.esc(HS.t('f.date')) + '</label><input class="input" id="off-d" type="date" value="' + U.today() + '" min="' + U.today() + '"></div>' +
+        '<div class="field"><label for="off-r">' + HS.esc(HS.t('off.reason')) + '</label><div class="chip-row" data-reasons>' + reasons.map(function (k) { return '<button type="button" class="btn sm" data-r="' + k + '">' + HS.esc(HS.t('off.r.' + k)) + '</button>'; }).join('') + '</div>' +
+          '<input class="input" id="off-r" autocomplete="off" style="margin-top:.4rem"></div><div class="tip bad" data-err hidden role="alert"></div>',
+      footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn danger" data-ok>' + HS.esc(HS.t('off.ok')) + '</button>' });
+    var r = el.querySelector('#off-r');
+    el.querySelector('[data-reasons]').addEventListener('click', function (e) { var b = e.target.closest('[data-r]'); if (b) { r.value = HS.t('off.r.' + b.dataset.r); r.focus(); } });
+    el.querySelector('[data-ok]').addEventListener('click', function () {
+      var btn = this, err = el.querySelector('[data-err]');
+      if (r.value.trim().length < 3) { r.focus(); err.hidden = false; err.textContent = HS.t('err.reason'); return; }
+      btn.disabled = true;
+      HS.post('/api/c/dayoff', { date: el.querySelector('#off-d').value, reason: r.value.trim() }).then(function (res) {
+        HS.overlay.close();
+        HS.toast(HS.t(res.kept ? 'off.doneKept' : 'off.done', { n: res.cancelled, k: res.kept }), res.cancelled ? 'ok' : 'warn', 6000);
+        if (done) done(res);
+      }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); });
+    });
+  };
 
   /* ---------- roll call panel (also used by Groups and the overview) ---------- */
   var STATES = ['present', 'late', 'absent', 'excused'];
@@ -194,7 +239,8 @@
             '<ul class="door-results" data-results role="listbox"></ul></section>' +
           '<section class="card door-card" data-card aria-live="polite">' + U.empty('board', HS.t('door.wait'), HS.t('door.wait.b')) + '</section>' +
         '</div>' +
-        '<section class="card" style="margin-top:var(--gap)"><header><span class="tile-ic">' + HS.icon('clock') + '</span><h3>' + HS.esc(HS.t('door.today')) + '</h3><span class="faint">' + HS.esc(HS.t('door.today.b')) + '</span></header><div data-today><div class="skeleton" style="height:5rem"></div></div></section>';
+        '<section class="card" style="margin-top:var(--gap)"><header><span class="tile-ic">' + HS.icon('clock') + '</span><h3>' + HS.esc(HS.t('door.today')) + '</h3><span class="faint desk-only">' + HS.esc(HS.t('door.today.b')) + '</span>' +
+          (HS.can('attendance.mark') ? '<button class="btn sm ghost" data-dayoff>' + HS.icon('x', 'sm') + HS.esc(HS.t('off.btn')) + '</button>' : '') + '</header><div data-today><div class="skeleton" style="height:5rem"></div></div></section>';
     },
     mount: function (root, ctx) {
       var q = root.querySelector('#door-q'), results = root.querySelector('[data-results]'), cardBox = root.querySelector('[data-card]');
@@ -283,6 +329,7 @@
           return;
         }
         if (e.target.closest('[data-print]') && card.lastReceipt) { HS.printReceipt(card.lastReceipt); return; }
+        if (e.target.closest('[data-enrol]')) { var sid = card.student.id; HS.pickGroup(card.student, function () { openCard(sid, false); }); return; }
         if (e.target.closest('[data-wa]')) {
           HS.get('/api/c/wa?studentId=' + encodeURIComponent(card.student.id) + '&kind=monthly&lang=' + HS.lang).then(function (r) {
             if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener');
@@ -292,6 +339,7 @@
       root.addEventListener('click', function (e) {
         var r = e.target.closest('[data-roster]'); if (r) { HS.openRoster(r.dataset.roster); return; }
         if (e.target.closest('[data-openshift]')) ensureShift().then(paintShift, function () {});
+        if (e.target.closest('[data-dayoff]')) HS.dayOff(paintToday);
         if (e.target.closest('[data-camera]')) scanCamera(function (code) { q.value = code; q.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); });
       });
       refreshToday = paintToday;

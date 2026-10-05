@@ -156,7 +156,10 @@
           (HS.can('students.transfer') ? '<span class="row" style="gap:.3rem"><button class="btn sm" data-transfer="' + HS.esc(e.id) + '">' + HS.esc(HS.t('stu.transfer')) + '</button><button class="btn sm ghost" data-leave="' + HS.esc(e.id) + '">' + HS.esc(HS.t('stu.leave')) + '</button></span>' : '') + '</li>';
       }).join('') + '</ul>' : U.empty('layers', HS.t('door.noGroups'), HS.t('stu.enrol.b'))) +
         (HS.can('students.manage') ? '<button class="btn primary" data-enrol>' + HS.icon('plus', 'sm') + HS.esc(HS.t('stu.enrol')) + '</button>' : '') +
-        (old.length ? '<section><h3 class="sec">' + HS.esc(HS.t('stu.history')) + '</h3><ul class="notes">' + old.map(function (e) { return '<li>' + HS.esc(D.groupName(e.groupId)) + ' · ' + HS.esc(HS.t('enr.' + e.status)) + ' ' + U.day(e.to) + '</li>'; }).join('') + '</ul></section>' : '');
+        (old.length ? '<section><h3 class="sec">' + HS.esc(HS.t('stu.history')) + '</h3><ul class="notes">' + old.map(function (e) {
+          var b = (e.money || {}).balance || 0;   // a group left with money still open keeps showing it (leaving never wipes a debt)
+          return '<li>' + HS.esc(D.groupName(e.groupId)) + ' · ' + HS.esc(HS.t('enr.' + e.status)) + ' ' + U.day(e.to) +
+            (seesMoney() && Math.abs(b) >= 0.01 ? ' · <b class="' + (b < 0 ? 'neg' : '') + '">' + HS.esc(HS.t(b < 0 ? 'door.owes' : 'door.credit')) + ' ' + U.money(Math.abs(b)) + '</b>' : '') + '</li>'; }).join('') + '</ul></section>' : '');
     }
     if (tab === 'attendance') {
       var a = f.attendance, pres = a.filter(function (x) { return x.status === 'present' || x.status === 'late'; }).length;
@@ -227,7 +230,7 @@
             if (e.target.closest('[data-edit]')) { editStudent(id); return; }
             if (e.target.closest('[data-card]')) { HS.printCards([f.student]); return; }
             if (e.target.closest('[data-wa]')) { HS.get('/api/c/wa?studentId=' + encodeURIComponent(id) + '&kind=monthly&lang=' + HS.lang).then(function (r) { if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener'); }, function (er) { HS.toast(U.errorText(er), 'bad'); }); return; }
-            if (e.target.closest('[data-enrol]')) { pickGroup(f.student, null, function (gid) { return HS.post('/api/c/enroll', { studentId: id, groupId: gid }); }, function () { reload('groups'); }); return; }
+            if (e.target.closest('[data-enrol]')) { pickGroup(f.student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: id, groupId: gid }, extra || {})); }, function () { reload('groups'); }); return; }
             var tr = e.target.closest('[data-transfer]');
             if (tr) { pickGroup(f.student, tr.dataset.transfer, function (gid) { return HS.post('/api/c/transfer', { enrollmentId: tr.dataset.transfer, groupId: gid }); }, function () { reload('groups'); }); return; }
             var lv = e.target.closest('[data-leave]');
@@ -258,7 +261,13 @@
     var from = fromEnrolment ? D.get('enrollments', fromEnrolment) : null, fromG = from ? D.get('groups', from.groupId) : null;
     var list = D.list('groups').filter(function (g) { return g.active !== false && !mine[g.id] && (!fromG || g.subjectId === fromG.subjectId); })
       .sort(function (a, b) { return (a.gradeCode !== student.gradeCode) - (b.gradeCode !== student.gradeCode) || String(a.name).localeCompare(String(b.name), HS.lang); });
+    // a month group joined after the 1st: charge this month or start with the next one (late in the month by default)
+    var today = U.today(), day = Number(today.slice(8, 10)), next = nextMonth(today), bill = day >= 21 ? 'next' : 'this';
+    var askBill = !from && day > 1 && list.some(function (g) { return g.feeType === 'month'; });
     var el = HS.dialog({ title: HS.t(from ? 'stu.transfer' : 'stu.enrol') + ' · ' + student.name, wide: true, body:
+      (askBill ? '<div class="field"><span class="lbl">' + HS.esc(HS.t('enr.firstMonth')) + '</span><div class="seg wrap" role="group" data-bill>' +
+        ['this', 'next'].map(function (k) { return '<button type="button" data-b="' + k + '" aria-pressed="' + (k === bill) + '">' + HS.esc(HS.t('enr.bill.' + k, { m: monthName(k === 'this' ? today : next) })) + '</button>'; }).join('') +
+        '</div><small class="faint">' + HS.esc(HS.t('enr.firstMonth.b')) + '</small></div>' : '') +
       '<input class="input" data-gq placeholder="' + HS.esc(HS.t('grp.search')) + '">' +
       '<ul class="pick-list" data-gl>' + list.map(function (g) {
         var n = counts[g.id] || 0, cap = Number(g.capacity) || 0, full = cap && n >= cap;
@@ -267,11 +276,23 @@
           '<span class="faint">' + HS.esc(slotsText(g)) + '</span></div><span class="seat' + (full ? ' bad' : cap && n / cap > .85 ? ' warn' : '') + '"><b class="num">' + HS.fmt.num(n) + '</b><span class="num">/' + HS.fmt.num(cap || 0) + '</span><small>' + HS.esc(HS.t(full ? 'grp.full' : 'grp.seats')) + '</small></span></button></li>';
       }).join('') + '</ul>' + (list.length ? '' : U.empty('layers', HS.t('grp.none'), '')) });
     el.querySelector('[data-gq]').addEventListener('input', function (e) { var n = U.key(e.target.value); el.querySelectorAll('[data-k]').forEach(function (b) { b.parentNode.hidden = n && b.dataset.k.indexOf(n) < 0; }); });
+    var bs = el.querySelector('[data-bill]');
+    if (bs) bs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-b]'); if (!b) return;
+      bill = b.dataset.b; bs.querySelectorAll('[data-b]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+    });
     el.querySelector('[data-gl]').addEventListener('click', function (e) {
       var b = e.target.closest('[data-g]'); if (!b) return;
-      U.run(call(b.dataset.g), 'common.saved', b).then(function () { HS.overlay.close(); return D.load(); }).then(done, function () {});
+      var g = D.get('groups', b.dataset.g) || {};
+      U.run(call(b.dataset.g, askBill && bill === 'next' && g.feeType === 'month' ? { billFrom: next } : {}), 'common.saved', b).then(function () { HS.overlay.close(); return D.load(); }).then(done, function () {});
     });
   }
+  function nextMonth(day) { var d = new Date(day.slice(0, 7) + '-01T12:00:00'); d.setMonth(d.getMonth() + 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-01'; }
+  function monthName(day) { return new Date(day.slice(0, 10) + 'T12:00:00').toLocaleDateString(HS.lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-GB', { month: 'long' }); }
+  // the door enrols a walk-in student without leaving the page
+  HS.pickGroup = function (student, done) {
+    pickGroup(student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: student.id, groupId: gid }, extra || {})); }, done);
+  };
 
   /* ---------- the page ---------- */
   function refresh() { HS.rerender(); }

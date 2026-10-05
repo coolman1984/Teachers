@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ser
 import domain as D
 
 
-class CenterApiTest(unittest.TestCase):
+class CenterFixture(unittest.TestCase):
+    """One server and an administrator; every test gets its own teachers, groups and students."""
     @classmethod
     def setUpClass(cls):
         cls.server = Server('centre-api').start()
@@ -78,6 +79,17 @@ class CenterApiTest(unittest.TestCase):
         return self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group,
             'kind': 'fee', 'amount': amount, 'method': method, **extra})
 
+
+    def scoped_client(self, perms=None):
+        username = self.p + '.scoped'
+        self.c.post('/api/users/save', {'username': username, 'full_name': 'Synthetic scoped user',
+            'password': 'Strong-pass1', 'must_change': False, 'scopes': [self.teacher],
+            'perms': perms or ['students.view', 'door.use', 'groups.view', 'attendance.mark', 'followup.view', 'reports.view']})
+        client = self.server.client()
+        client.login(username, 'Strong-pass1')
+        return client
+
+class CenterApiTest(CenterFixture):
     def test_01_door_peak_and_delta(self):
         students = [( 'students', self.p + '-peak-' + str(i),
                      {'code': str(30000+i), 'name': 'Synthetic Peak ' + str(i), 'gradeCode': 'S1',
@@ -160,15 +172,6 @@ class CenterApiTest(unittest.TestCase):
         for fee, cap, error in [(101, 25, 'err.schoolFee'), (100, 26, 'err.schoolSize')]:
             self.error('/api/commit', {'ops': [{'e': 'groups', 'id': self.p+'-school', 'op': 'put',
                 'row': {'name': 'School ' + self.p, 'teacherId': self.teacher, 'kind': 'school', 'fee': fee, 'capacity': cap}}]}, error)
-
-    def scoped_client(self, perms=None):
-        username = self.p + '.scoped'
-        self.c.post('/api/users/save', {'username': username, 'full_name': 'Synthetic scoped user',
-            'password': 'Strong-pass1', 'must_change': False, 'scopes': [self.teacher],
-            'perms': perms or ['students.view', 'door.use', 'groups.view', 'attendance.mark', 'followup.view', 'reports.view']})
-        client = self.server.client()
-        client.login(username, 'Strong-pass1')
-        return client
 
     def test_07_teacher_scope_and_contact_privacy(self):
         client = self.scoped_client()
@@ -481,3 +484,112 @@ class CenterApiTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CenterMoneyEdgeTest(CenterFixture):
+    """Money edge cases of a real Egyptian school year: price rises, students who leave and come back, mid-month moves."""
+    def visit(self, days_ago, group=None, teacher=None, start='10:00'):
+        day = (date.today() - timedelta(days=days_ago)).isoformat()
+        sid = D.session_id(group or self.group, day, start)
+        self.put([('sessions', sid, {'groupId': group or self.group, 'teacherId': teacher or self.teacher, 'date': day,
+                                     'start': start, 'end': '11:00', 'status': 'held'})])
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': sid, 'status': 'present'})
+
+    def group_row(self, gid=None):
+        return next(g for g in self.c.get('/api/state')['groups'] if g['id'] == (gid or self.group))
+
+    def backdate(self, eid, day):
+        row = next(e for e in self.c.get('/api/state')['enrollments'] if e['id'] == eid)
+        row['from'] = day
+        self.put([('enrollments', eid, row)])
+
+    def money(self):
+        return {e['id']: e['money'] for e in self.c.get('/api/c/student?id=' + self.student)['enrollments']}
+
+    def test_25_price_rise_keeps_what_was_owed_before(self):
+        self.backdate(self.enrollment, (date.today() - timedelta(days=30)).isoformat())
+        self.visit(10)
+        self.visit(5)
+        g = self.group_row()
+        g.update(fee=80, feeHistory=[{'to': '2099-12-31', 'fee': 0, 'type': 'session'}])   # a page cannot forge old prices
+        self.c.post('/api/commit', {'label': 'Price rise', 'ops': [{'e': 'groups', 'id': self.group, 'op': 'put', 'ver': g['ver'],
+                                                                   'row': g, 'feeFrom': date.today().isoformat()}]})
+        g = self.group_row()
+        self.assertEqual(g['fee'], 80)
+        self.assertEqual(g['feeHistory'], [{'to': (date.today() - timedelta(days=1)).isoformat(), 'fee': 50, 'type': 'session'}])
+        self.visit(0)
+        self.assertEqual(self.money()[self.enrollment]['owed'], 180)   # 50 + 50 + 80, not 3 x 80
+        g.update(fee=90)    # corrected the same day: the price before stays 50
+        self.c.post('/api/commit', {'label': 'Price fix', 'ops': [{'e': 'groups', 'id': self.group, 'op': 'put', 'ver': g['ver'], 'row': g,
+                                                                 'feeFrom': date.today().isoformat()}]})
+        self.assertEqual(self.money()[self.enrollment]['owed'], 190)
+
+    def test_26_leaving_never_wipes_a_debt_and_coming_back_continues_it(self):
+        self.backdate(self.enrollment, (date.today() - timedelta(days=30)).isoformat())
+        self.visit(10)
+        self.visit(5)
+        self.c.post('/api/c/leave', {'enrollmentId': self.enrollment, 'to': (date.today() - timedelta(days=2)).isoformat()})
+        bal = self.c.get('/api/c/balances')
+        self.assertEqual(bal['students'][self.student], -100)
+        self.assertIn(self.student, bal['left'])
+        self.assertTrue(bal['enrollments'][self.enrollment]['left'])
+        self.assertGreaterEqual(self.c.get('/api/c/dashboard')['owed'], 100)
+        back = self.c.post('/api/c/enroll', {'studentId': self.student, 'groupId': self.group})['id']
+        self.open_shift()
+        self.pay(50)
+        self.visit(0)
+        money = self.money()
+        self.assertEqual((money[back]['owed'], money[back]['balance']), (150, -100))   # one account, nothing counted twice
+        self.assertTrue(money[self.enrollment]['carried'])
+        self.assertEqual(self.c.get('/api/c/balances')['students'][self.student], -100)
+
+    def test_27_mid_month_move_between_month_groups_charges_the_month_once(self):
+        month = (date.today().replace(day=1) - timedelta(days=1)).replace(day=1)          # first day of last month
+        before = (month - timedelta(days=1)).replace(day=1)                              # first day of the month before
+        for gid in (self.group, self.other_group):
+            g = self.group_row(gid)
+            g.update(feeType='month', fee=300, teacherId=self.teacher)
+            self.put([('groups', gid, g)])
+        self.backdate(self.enrollment, before.isoformat())
+        self.c.post('/api/c/transfer', {'enrollmentId': self.enrollment, 'groupId': self.other_group, 'from': month.replace(day=15).isoformat()})
+        money = self.c.get('/api/c/student?id=' + self.student)['enrollments']
+        new = next(e for e in money if e['status'] == 'active')
+        self.assertEqual(new['billFrom'], date.today().replace(day=1).isoformat())
+        self.assertEqual(sum(e['money']['owed'] for e in money), 900)                    # 3 months, not 4
+        self.error('/api/c/enroll', {'studentId': self.student, 'groupId': self.group, 'billFrom': '2000-01-01'}, 'err.billFrom')
+
+    def test_28_advisor_finds_monthly_students_who_stopped_coming(self):
+        g = self.group_row()
+        g.update(feeType='month', fee=300)
+        self.put([('groups', self.group, g)])
+        self.backdate(self.enrollment, (date.today() - timedelta(days=60)).isoformat())
+        for ago in (3, 10):
+            day = (date.today() - timedelta(days=ago)).isoformat()
+            self.put([('sessions', D.session_id(self.group, day, '10:00'), {'groupId': self.group, 'teacherId': self.teacher, 'date': day,
+                                                                          'start': '10:00', 'end': '11:00', 'status': 'held'})])
+        ids = lambda: {a['id']: a for a in self.c.get('/api/c/advice')}
+        self.assertGreaterEqual(ids()['ghosts']['vars']['n'], 1)
+        day = (date.today() - timedelta(days=3)).isoformat()
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': D.session_id(self.group, day, '10:00'), 'status': 'present'})
+        self.assertNotIn('ghosts', ids())
+
+    def test_29_day_off_cancels_the_day_but_keeps_attended_sessions(self):
+        tomorrow = date.today() + timedelta(days=1)
+        g = self.group_row()
+        g['slots'] = [{'day': D.weekday(date.today()), 'start': '00:00', 'end': '23:59'},
+                      {'day': D.weekday(tomorrow), 'start': '09:00', 'end': '10:00'}]
+        self.put([('groups', self.group, g)])
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': self.session})
+        self.error('/api/c/dayoff', {'date': tomorrow.isoformat(), 'reason': ''}, 'err.reason')
+        scoped = self.scoped_client(['attendance.mark', 'groups.view'])
+        self.error('/api/c/dayoff', {'date': '2000-01-01', 'reason': 'Holiday'}, 'err.pastDay', client=scoped)
+        res = self.c.post('/api/c/dayoff', {'date': date.today().isoformat(), 'reason': 'Power cut'})
+        self.assertGreaterEqual(res['kept'], 1)              # students were checked in: stays held and charged
+        statuses = {s['id']: s['status'] for s in self.c.get('/api/c/today')['sessions']}
+        self.assertEqual(statuses[self.session], 'held')
+        self.assertEqual(statuses[self.other_session], 'cancelled')
+        res = self.c.post('/api/c/dayoff', {'date': tomorrow.isoformat(), 'reason': 'Armed Forces Day'})
+        planned = D.session_id(self.group, tomorrow.isoformat(), '09:00')
+        day = {s['id']: s for s in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
+        self.assertEqual((day[planned]['status'], day[planned]['note']), ('cancelled', 'Armed Forces Day'))
+        self.assertEqual(scoped.post('/api/c/dayoff', {'date': tomorrow.isoformat(), 'reason': 'Again'})['cancelled'], 0)

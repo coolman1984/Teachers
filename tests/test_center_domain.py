@@ -118,6 +118,45 @@ class CenterDomainTest(unittest.TestCase):
             result = D.balance_info(group, {}, {}, visits, 100, date(2026, 10, 4))
             self.assertEqual(result['sessionsLeft'], 6 - visits)
 
+    def test_price_change_is_not_retroactive(self):
+        # 200 until 31 October, 250 from November (second-term price rise); a type change ignores old prices
+        g = {'feeType': 'session', 'fee': 250, 'feeHistory': [{'to': '2026-10-31', 'fee': 200, 'type': 'session'}]}
+        self.assertEqual(D.fee_on(g, '2026-10-31'), 200)
+        self.assertEqual(D.fee_on(g, '2026-11-01'), 250)
+        self.assertEqual(D.fee_on(g), 250)
+        visits = ['2026-10-20', '2026-10-27', '2026-11-03']
+        self.assertEqual(D.charges(g, {}, {}, visits, date(2026, 11, 5)), (650, 3))
+        self.assertEqual(D.charges(g, {}, {'discountPct': 10}, visits, date(2026, 11, 5)), (585, 3))
+        self.assertEqual(D.charges(g, {'fee': 100}, {}, visits, date(2026, 11, 5)), (300, 3))   # special fee wins
+        month = {**g, 'feeType': 'month', 'feeHistory': [{'to': '2026-10-31', 'fee': 200, 'type': 'month'}]}
+        self.assertEqual(D.charges(month, {'from': '2026-09-15'}, {}, 0, date(2026, 12, 1)), (900, 4))
+        self.assertEqual(D.fee_on({**month, 'feeType': 'package'}, '2026-10-01'), 250)
+
+    def test_one_account_per_student_and_group(self):
+        today = date(2027, 3, 10)
+        session = {'feeType': 'session', 'fee': 50}
+        left = {'id': 'e1', 'from': '2026-10-01', 'to': '2026-11-30', 'status': 'left'}
+        back = {'id': 'e2', 'from': '2027-02-06', 'status': 'active'}
+        visits = ['2026-10-03', '2026-11-07', '2027-02-10']
+        res = D.account(session, [back, left], {}, visits, 100, today)
+        self.assertEqual((res['e2']['owed'], res['e2']['balance']), (150, -50))   # not 300 owed / 200 paid
+        self.assertEqual((res['e1']['balance'], res['e1']['carried']), (0, True))
+        month = {'feeType': 'month', 'fee': 300}
+        res = D.account(month, [left, back], {}, [], 600, today)
+        self.assertEqual(res['e2']['owed'], 1200)                                 # Oct, Nov, Feb, Mar
+        self.assertEqual(res['e2']['balance'], -600)
+        again = {'id': 'e3', 'from': '2026-10-20', 'status': 'active'}             # left on the 10th, back on the 20th
+        res = D.account(month, [{'id': 'e1', 'from': '2026-10-01', 'to': '2026-10-10', 'status': 'left'}, again], {}, [], 0, date(2026, 10, 25))
+        self.assertEqual(res['e3']['owed'], 300)                                  # October once
+        self.assertEqual(D.account(month, [], {}, [], 0, today), {})
+
+    def test_billing_start_for_late_joiners_and_moves(self):
+        month = {'feeType': 'month', 'fee': 300}
+        e = {'from': '2026-10-25', 'billFrom': '2026-11-01'}
+        self.assertEqual(D.charges(month, e, {}, 0, date(2026, 10, 31)), (0, 0))
+        self.assertEqual(D.charges(month, e, {}, 0, date(2026, 11, 2)), (300, 1))
+        self.assertEqual(D.charges(month, {**e, 'billFrom': '2026-09-01'}, {}, 0, date(2026, 11, 2)), (600, 2))   # never before joining
+
     def test_wallet_balance_and_reversals(self):
         receipts = [{'kind': 'wallet_topup', 'amount': 300, 'method': 'cash'},
                     {'kind': 'fee', 'amount': 120, 'method': 'wallet'},

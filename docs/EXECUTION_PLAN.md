@@ -112,8 +112,8 @@ Every row also has engine columns: `id, ver, created_at/by, updated_at/by, delet
 | `rooms` | rooms | name, capacity, costPerHour, active, notes | shared |
 | `teachers` | teachers | name, nameKey, mobile, subjectIds[], gradeCodes[], settleModel, rentMonth, rentSession, rentStudent, centerPct, color, bio, slug, active, notes | its own id |
 | `students` | students | code, name, nameKey, gradeCode, system, track, school, gender, mobile, parentName, parentMobile, parentMobile2, familyKey, discountPct, discountReason, exempt, consent, consentAt, joinedAt, active, notes, portalHash, portalNonce, importKey | visible if enrolled with an allowed teacher |
-| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
-| `enrollments` | enrollments | studentId, groupId, teacherId, from, to, status(active/moved/left), fee (special fee), note | teacherId |
+| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, **feeHistory[{to, fee, type}] (server-written)**, startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
+| `enrollments` | enrollments | studentId, groupId, teacherId, from, to, status(active/moved/left), fee (special fee), note, **billFrom** (first billed day of a month group) | teacherId |
 | `sessions` | sessions | groupId, teacherId, date, start, end, roomId, status(planned/held/cancelled), kind, topic, note | teacherId |
 | `attendance` | attendance | sessionId, studentId, groupId (**the student's home group**), teacherId, date, status(present/late/absent/excused), at, via, makeup, by | teacherId |
 | `payments` | payments | no, date, at, studentId, teacherId, groupId, kind(fee/material/wallet_topup/refund/other), period, sessions, materialId, qty, amount, method(cash/vodafone/instapay/fawry/card/wallet/bank), ref, shiftId, voidOf, note, by | teacherId (wallet = none) |
@@ -155,7 +155,7 @@ New (center) — GET `/api/c/<action>`:
 |---|---|---|---|
 | `today` | date? | door.use, groups.view, attendance.mark | `{date, sessions:[{id, groupId, start, end, roomId, status, virtual?, present, enrolled}]}` |
 | `find` | q | door.use, students.view | students (contacts hidden without contacts.view) |
-| `card` | id | door.use, students.view | `{student, enrollments[{…, money}], wallet, candidates[{session, own, makeup, now, done, status}], suggested, risk, today, shift}` |
+| `card` | id | door.use, students.view | `{student, enrollments[{…, money, left?}] (active + groups left with money still open), wallet, candidates[{session, own, makeup, now, done, status}], suggested, risk, today, shift}` |
 | `roster` | session | door.use, groups.view, attendance.mark | `{session, group, rows[{student, status, at, money, enrollmentId, guest?}]}` |
 | `student` | id | students.view | student file (enrollments+money+held, attendance, payments, marks+rank, followups, wallet, risk, family) |
 | `risk` | – | followup.view | list `{studentId, student, groupId, teacherId, score, why[], followed, balance, last[], level}` |
@@ -167,12 +167,12 @@ New (center) — GET `/api/c/<action>`:
 | `dashboard` | – | overview.view | KPIs (money hidden without money.view/reports.view) |
 | `exam` | id | exams.view, marks.enter | `{exam, rows[{student, mark, rank, groupId}], stats}` |
 | `clashes` | – | groups.view | timetable clashes |
-| `balances` | – | money.view, money.collect, followup.view | `{students:{id: balance}, lastPaid:{id: date}, enrollments:{id:{balance, feeType, unit, due, sessionsLeft?}}}` (computed) |
+| `balances` | – | money.view, money.collect, followup.view | `{students:{id: balance}, lastPaid:{id: date}, left:[studentId], enrollments:{id:{balance, feeType, unit, due, sessionsLeft?, left?}}}` (computed; includes groups left with money still open) |
 | `absent` | – | followup.view, attendance.mark, messages.send | today's absentees in held sessions `{date, rows[{studentId, name, code, groupId, sessionId, start, told}]}` – absence is never stored |
 | `advice` | – | overview.view | ranked advisor items `[{id, level bad/warn/info/ok, page, icon, vars}]`; texts `adv.<id>.t/.b/.go` |
 
 POST `/api/c/<action>` (JSON body): `checkin {studentId, sessionId, status?, via?}`, `roll {sessionId, marks:{studentId:status}}`,
-`session {sessionId, status, topic?}`, `enroll {studentId, groupId, from?, fee?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
+`session {sessionId, status, topic?}`, `dayoff {date, reason}` (cancels every session of a day without attendance), `enroll {studentId, groupId, from?, fee?, billFrom?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
 `leave {enrollmentId, to?, reason?}`, `shift/open {opening}`, `shift/close {shiftId, counted, reason?}`,
 `pay {studentId?, groupId?, kind, amount, method, ref?, period?, sessions?, materialId?, qty?, note?}`, `void {id, reason}`,
 `expense {category, amount, method, teacherId?, groupId?, note?, date?}`, `expense/void {id, reason}`,
@@ -580,6 +580,12 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 - Arabic digits in any input: normalise on the server (`domain.digits`, `norm_mobile_eg`).
 - Egypt week starts Saturday: `domain.weekday()` (0 = Saturday). JS `Date.getDay()` is 0 = Sunday → convert `(d + 1) % 7`.
 - Money: never `float` sums for display without rounding to 2 decimals; never a stored running balance.
+- Money is **one account per student + group** (`domain.account`): several enrolments of the same pair (left and came back)
+  share visits, months and receipts; the balance sits on the latest enrolment, earlier ones say `carried`. Never compute a
+  balance from one enrolment alone, and never drop ended enrolments with money still open from debt lists (`center.open_accounts`).
+- Prices are dated: a group's fee change keeps the old price in `feeHistory` from the day before `feeFrom` (sent on the
+  generic-commit op, default today). Only the server writes `feeHistory`. Each visit/month is priced on its own day.
+- Inside RTL, `inset-inline-start: 50%` + `translateX(-50%)` pushes the element off screen — centre with `inset-inline` + grid.
 - A scoped teacher user must never receive other teachers' rows — filter on the server (`store._filter`), not in the page.
 - Parent numbers: never in the parent card, never in logs, only with `contacts.view`.
 - The state is windowed (75 days) — pages that need older data must use the `/api/c/*` reads.
@@ -599,6 +605,10 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |
+| open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |
+| open | Forgive the debt of a student who left for good | default: no — the debt stays visible, marked “left” |
+| open | Monthly groups during the mid-year break (23 Jan – 4 Feb 2027) | default: full months are charged |
+| open | Joining a month group late: from which day is “next month” the default | default: day 21 |
 
 ### P2 implementation evidence (2026-10-04)
 Domain/API regression modules now exist. Centre operations are covered through real local HTTP; offline journal merging has a separate test_center_multinode module. Real process/proxy partition checks and sample response benchmarks remain pending. Money and attendance must use dedicated /api/c operations, never generic commits.

@@ -274,13 +274,31 @@ def is_late(sess, at_min, late_minutes):
 
 
 # ---------------------------------------------------------------- fees and balances
-def unit_fee(group, enrollment=None, student=None):
-    """The fee of one unit (one session, one month or one package) for this student, after the discount."""
+def fee_on(group, d=None):
+    """The group's fee in force on day d. A price change keeps the old price for the days before it (entries
+    {to, fee, type} in feeHistory, written by the server), so raising the price for the second term never rewrites
+    what students owed for the first. Entries of another fee type are ignored (a type change applies to everything)."""
+    fee = group.get('fee') or 0
+    if d is None:
+        return fee
+    day = d.isoformat() if isinstance(d, date) else str(d)[:10]
+    ft = group.get('feeType') or 'session'
+    best = None
+    for h in group.get('feeHistory') or []:
+        if isinstance(h, dict) and h.get('to') and (h.get('type') or ft) == ft and day <= str(h['to']):
+            if best is None or str(h['to']) < str(best['to']):
+                best = h
+    return (best.get('fee') or 0) if best else fee
+
+
+def unit_fee(group, enrollment=None, student=None, on=None):
+    """The fee of one unit (one session, one month or one package) for this student on a day, after the discount.
+    A special fee written on the enrolment wins over the group's price list."""
     if student and student.get('exempt'):
         return 0.0
     fee = (enrollment or {}).get('fee')
     if fee in (None, ''):
-        fee = group.get('fee') or 0
+        fee = fee_on(group, on)
     pct = float((student or {}).get('discountPct') or 0)
     return round(float(fee) * max(0.0, 100 - min(pct, 100)) / 100, 2)
 
@@ -292,43 +310,96 @@ def months_between(a, b):
     return (b.year - a.year) * 12 + b.month - a.month + 1
 
 
+def billed_months(group, enrollment, today):
+    """[(YYYY-MM, first billed day)] of a month-fee enrolment. Billing starts at `billFrom` when it is later than
+    `from` (a student who moved in mid-month already paid that month in the old group, or joined late in the month)."""
+    start = as_date(enrollment.get('from')) or as_date(group.get('startDate')) or today
+    bill = as_date(enrollment.get('billFrom'))
+    if bill and bill > start:
+        start = bill
+    end = min(today, as_date(enrollment.get('to')) or today)
+    out, m = [], start.replace(day=1)
+    while m <= end:
+        out.append((m.strftime('%Y-%m'), max(start, m)))
+        m = (m + timedelta(days=32)).replace(day=1)
+    return out
+
+
+def _charge(group, enrollment, student, visits, today, seen=None):
+    """(amount, units) owed by one enrolment. visits: a count (priced today) or the visit dates (each priced on its
+    day). seen: months already charged by an earlier enrolment of the same student in the same group."""
+    ft = group.get('feeType') or 'session'
+    if ft == 'month':
+        months = [(ym, d) for ym, d in billed_months(group, enrollment, today) if seen is None or ym not in seen]
+        if seen is not None:
+            seen.update(ym for ym, _ in months)
+        return round(sum(unit_fee(group, enrollment, student, d) for _, d in months), 2), len(months)
+    per = (int(group.get('packageSessions') or 0) or 1) if ft == 'package' else 1
+    if isinstance(visits, int):
+        return round(unit_fee(group, enrollment, student, today) / per * visits, 2), visits
+    return round(sum(unit_fee(group, enrollment, student, d) / per for d in visits), 2), len(visits)
+
+
 def charges(group, enrollment, student, visits, today):
     """What the student owes the group so far: (amount, units).
     session: one fee per attended session; month: one fee per month enrolled; package: the package price spread over
     its sessions, charged per attended session (so a paid package is simply money in advance)."""
-    unit = unit_fee(group, enrollment, student)
-    ft = group.get('feeType') or 'session'
-    if ft == 'month':
-        start = as_date(enrollment.get('from')) or as_date(group.get('startDate')) or today
-        end = min(today, as_date(enrollment.get('to')) or today)
-        n = months_between(start, end)
-        return round(unit * n, 2), n
-    if ft == 'package':
-        per = int(group.get('packageSessions') or 0) or 1
-        return round(unit / per * visits, 2), visits
-    return round(unit * visits, 2), visits
+    return _charge(group, enrollment, student, visits, today)
 
 
-def balance_info(group, enrollment, student, visits, paid, today):
-    """Everything the door and the student file show about one enrolment's money."""
-    owed, units = charges(group, enrollment, student, visits, today)
+def _info(group, enrollment, student, owed, units, paid, today):
     bal = round(paid - owed, 2)
-    unit = unit_fee(group, enrollment, student)
+    unit = unit_fee(group, enrollment, student, today)
     ft = group.get('feeType') or 'session'
     info = {'feeType': ft, 'unit': unit, 'owed': owed, 'paid': round(paid, 2), 'balance': bal, 'units': units}
     if ft == 'package':
         per = int(group.get('packageSessions') or 0) or 1
         info['sessionPrice'] = round(unit / per, 2) if unit else 0
-        # Count bought visits before rounding the displayed per-session price.
-        info['sessionsLeft'] = max(0, math.floor(paid * per / unit - visits + 1e-9)) if unit else 0
+        # sessions the money already paid still covers; owed is rounded to piastres, so allow that much
+        info['sessionsLeft'] = max(0, math.floor((bal + 0.006) * per / unit)) if unit else 0
     # the suggestion at the door: what to pay now so the student is clear
-    if bal < 0:
-        info['due'] = -bal
-    elif ft == 'session' and unit:
-        info['due'] = 0.0
-    else:
-        info['due'] = 0.0
+    info['due'] = -bal if bal < 0 else 0.0
     return info
+
+
+def balance_info(group, enrollment, student, visits, paid, today):
+    """Everything the door and the student file show about one enrolment's money."""
+    owed, units = charges(group, enrollment, student, visits, today)
+    return _info(group, enrollment, student, owed, units, paid, today)
+
+
+def account(group, enrollments, student, visit_dates, paid, today):
+    """The money of one student in one group, which may span several enrolments (left in November, came back in
+    February). Receipts are kept per group, so the balance is one account: each visit is charged to the enrolment it
+    belongs to, a month is charged once even when two enrolments touch it, and the whole balance is shown on the
+    latest enrolment. Earlier ones show balance 0 with `carried` (their charges are inside the latest balance).
+    Returns {enrollment id: info}."""
+    ens = sorted(enrollments, key=lambda e: (e.get('from') or '', 0 if (e.get('status') or 'active') == 'active' else -1))
+    if not ens:
+        return {}
+    starts = [e.get('from') or '' for e in ens]
+    per_e = [[] for _ in ens]
+    for v in sorted(visit_dates):
+        i = 0
+        for j, s in enumerate(starts):
+            if s <= v:
+                i = j
+        per_e[i].append(v)
+    seen, total, out = set(), 0.0, {}
+    for e, vs in zip(ens, per_e):
+        owed, units = _charge(group, e, student, vs, today, seen)
+        total += owed
+        out[e['id']] = (owed, units)
+    latest = max(ens, key=lambda e: ((e.get('status') or 'active') == 'active', e.get('from') or ''))
+    res = {}
+    for e in ens:
+        owed, units = out[e['id']]
+        if e is latest:
+            res[e['id']] = _info(group, e, student, round(total, 2), units, paid, today)
+        else:
+            res[e['id']] = {'feeType': group.get('feeType') or 'session', 'unit': unit_fee(group, e, student, today), 'owed': owed,
+                            'paid': 0.0, 'balance': 0.0, 'units': units, 'due': 0.0, 'carried': True}
+    return res
 
 
 def wallet_balance(payments):

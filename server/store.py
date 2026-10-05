@@ -58,12 +58,13 @@ ENTITIES = {
         ('gradeCode', 'grade_code', T, 'Grade'), ('system', 'system', T, 'System'), ('track', 'track', T, 'Track'),
         ('roomId', 'room_id', T, 'Room'), ('slots', 'slots', J, 'Weekly Times'), ('capacity', 'capacity', I, 'Capacity'),
         ('feeType', 'fee_type', T, 'Fee Type'), ('fee', 'fee', R, 'Fee'), ('packageSessions', 'package_sessions', I, 'Sessions per Package'),
+        ('feeHistory', 'fee_history', J, 'Earlier Prices'),
         ('startDate', 'start_date', T, 'Start'), ('endDate', 'end_date', T, 'End'), ('kind', 'kind', T, 'Kind'),
         ('color', 'color', T, 'Colour'), ('active', 'active', B, 'Active'), ('notes', 'notes', T, 'Notes')]),
     'enrollments': ('enrollments', 'Enrollments', [
         ('studentId', 'student_id', T, 'Student'), ('groupId', 'group_id', T, 'Group'), ('teacherId', 'teacher_id', T, 'Teacher'),
         ('from', 'from_date', T, 'From'), ('to', 'to_date', T, 'To'), ('status', 'status', T, 'Status'), ('fee', 'fee', R, 'Special Fee'),
-        ('note', 'note', T, 'Note')]),
+        ('note', 'note', T, 'Note'), ('billFrom', 'bill_from', T, 'Billing From')]),
     'sessions': ('sessions', 'Sessions', [
         ('groupId', 'group_id', T, 'Group'), ('teacherId', 'teacher_id', T, 'Teacher'), ('date', 'date', T, 'Date'),
         ('start', 'start_time', T, 'Start'), ('end', 'end_time', T, 'End'), ('roomId', 'room_id', T, 'Room'),

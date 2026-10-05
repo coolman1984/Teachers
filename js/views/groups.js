@@ -24,6 +24,11 @@
     var p = cap ? Math.min(100, Math.round(n * 100 / cap)) : 0, tone = !cap ? '' : n >= cap ? 'bad' : p >= 85 ? 'warn' : p < 40 ? 'info' : 'ok';
     return '<div class="fill ' + tone + '"><div class="meter"><i style="width:' + p + '%"></i></div><span class="num">' + HS.fmt.num(n) + (cap ? '/' + HS.fmt.num(cap) : '') + '</span></div>';
   }
+  // earlier prices are kept by the server so a price rise never changes what students owed before it
+  function priceHistory(g) {
+    var h = (g.feeHistory || []).filter(function (x) { return (x.type || 'session') === (g.feeType || 'session'); });
+    return h.length ? '<small class="faint" style="display:block">' + h.map(function (x) { return HS.esc(HS.t('grp.priceUntil', { a: HS.fmt.num(x.fee), d: U.day(x.to).replace(/<[^>]+>/g, '') })); }).join(' · ') + '</small>' : '';
+  }
   function feeText(g) {
     return g.fee ? U.money(g.fee) + ' <span class="faint">' + HS.esc(HS.t('fee.' + (g.feeType || 'session'))) + (g.feeType === 'package' && g.packageSessions ? ' · ' + HS.esc(HS.t('grp.perPkg', { n: g.packageSessions })) : '') + '</span>' : '<span class="faint">–</span>';
   }
@@ -133,6 +138,8 @@
       f('capacity', 'f.capacity', inp('capacity', 'number', ' min="1" dir="ltr"')) +
       f('feeType', 'grp.feeType', sel('feeType', ['session', 'month', 'package'].map(function (x) { return [x, HS.t('fee.' + x)]; }), g.feeType || 'session')) +
       f('fee', 'grp.fee', inp('fee', 'number', ' min="0" step="any" dir="ltr"')) +
+      (g.id ? '<div class="field" data-feefrom hidden><label for="gf-feeFrom">' + HS.esc(HS.t('grp.feeFrom')) + '</label><input class="input" id="gf-feeFrom" type="date">' +
+        '<small class="faint">' + HS.esc(HS.t('grp.feeFrom.b')) + '</small></div>' : '') +
       '<div class="field" data-pkg' + (g.feeType === 'package' ? '' : ' hidden') + '><label for="gf-packageSessions">' + HS.esc(HS.t('grp.pkgSessions')) + '</label>' + inp('packageSessions', 'number', ' min="1" dir="ltr"') + '</div>' +
       f('startDate', 'grp.start', inp('startDate', 'date')) + f('endDate', 'grp.end', inp('endDate', 'date')) +
       '<div class="field wide"><span class="lbl">' + HS.esc(HS.t('grp.times')) + '</span><div class="slots" data-slots>' + ((g.slots || []).length ? g.slots.map(slotRow).join('') : slotRow()) + '</div>' +
@@ -152,6 +159,7 @@
     delete row.id; delete row.ver;
     return row;
   }
+  function nextMonth(day) { var d = new Date(day.slice(0, 7) + '-01T12:00:00'); d.setMonth(d.getMonth() + 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-01'; }
   function editGroup(id) {
     if (!HS.can('groups.manage')) return;
     var cur = id ? D.get('groups', id) : null;
@@ -160,7 +168,7 @@
       var b = HS.$('#overlay [data-go]'); if (b) b.addEventListener('click', function () { F.tab = 'teachers'; HS.go('groups?tab=teachers'); });
       return;
     }
-    HS.panel.open({ title: HS.t(cur ? 'grp.edit' : 'grp.new'), body: formHTML(cur || { gradeCode: 'S1', feeType: 'session', kind: 'center', capacity: 30, active: true, startDate: U.today() }),
+    HS.panel.open({ title: HS.t(cur ? 'grp.edit' : 'grp.new'), body: formHTML(cur ? Object.assign({ id: id }, cur) : { gradeCode: 'S1', feeType: 'session', kind: 'center', capacity: 30, active: true, startDate: U.today() }),
       footer: '<span class="grow faint">' + HS.esc(HS.t('grp.check.b')) + '</span><button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('common.save')) + '</button>',
       mount: function (p) {
         var form = p.querySelector('[data-gform]'), err = p.querySelector('[data-err]');
@@ -175,10 +183,17 @@
           tr.disabled = !(TRACKS[sy.value] || []).length || (sy.value === 'bac' && g.value === 'S1');
           if (tr.disabled) tr.value = '';
           p.querySelector('[data-pkg]').hidden = form.feeType.value !== 'package';
+          // a new price for a group that already has students starts on a day; what they owed before stays at the old price
+          var ff = p.querySelector('[data-feefrom]');
+          if (ff) {
+            var changed = form.fee.value !== '' && Number(form.fee.value) !== Number(cur.fee || 0) && form.feeType.value === (cur.feeType || 'session');
+            if (changed && ff.hidden) { var t = U.today(); p.querySelector('#gf-feeFrom').value = form.feeType.value === 'month' && t.slice(8) !== '01' ? nextMonth(t) : t; }
+            ff.hidden = !changed;
+          }
           p.querySelector('[data-school]').hidden = form.kind.value !== 'school';
           if (e && e.target === form.roomId && form.roomId.value && !cur) { var r = D.get('rooms', form.roomId.value); if (r && r.capacity) form.capacity.value = r.capacity; }
         }
-        form.addEventListener('change', sync); sync();
+        form.addEventListener('change', sync); form.fee.addEventListener('input', sync); sync();
         p.addEventListener('click', function (e) {
           if (e.target.closest('[data-addslot]')) { var last = form.querySelectorAll('.slot-row'), prev = last.length ? readForm(p).slots.pop() : null;
             p.querySelector('[data-slots]').insertAdjacentHTML('beforeend', slotRow(prev ? { day: (prev.day + 2) % 7, start: prev.start, end: prev.end, roomId: prev.roomId } : null)); return; }
@@ -195,6 +210,8 @@
           if (!row.slots.length) missing.push(HS.t('grp.times'));
           if (missing.length) { err.hidden = false; err.textContent = HS.t('form.missing', { f: missing.join(', ') }); return; }
           var gid = id || D.newId('gr'), op = { e: 'groups', id: gid, op: 'put', ver: cur ? cur.ver : null, row: row };
+          var ffv = p.querySelector('[data-feefrom]:not([hidden]) input');
+          if (ffv && ffv.value) op.feeFrom = ffv.value;
           btn.disabled = true;
           // the server says which clashes this save would create: room and teacher block, a small room only warns
           HS.post('/api/c/timetable/check', { ops: [op] }).then(function (list) {
@@ -228,7 +245,7 @@
       var st = ens.map(function (e) { return { e: e, s: D.get('students', e.studentId) }; }).filter(function (x) { return x.s; })
         .sort(function (a, b) { return String(a.s.name).localeCompare(String(b.s.name), HS.lang); });
       var owe = bal ? ens.reduce(function (a, e) { var b = (bal.enrollments[e.id] || {}).balance || 0; return a + (b < 0 ? -b : 0); }, 0) : null;
-      return '<div class="mini-kpis"><div><small>' + HS.esc(HS.t('grp.fill')) + '</small>' + fill(st.length, Number(g.capacity) || 0) + '</div><div><small>' + HS.esc(HS.t('grp.fee')) + '</small><b>' + feeText(g) + '</b></div>' +
+      return '<div class="mini-kpis"><div><small>' + HS.esc(HS.t('grp.fill')) + '</small>' + fill(st.length, Number(g.capacity) || 0) + '</div><div><small>' + HS.esc(HS.t('grp.fee')) + '</small><b>' + feeText(g) + '</b>' + priceHistory(g) + '</div>' +
           (owe !== null ? '<div><small>' + HS.esc(HS.t('grp.owed')) + '</small><b>' + U.money(owe) + '</b></div>' : '') + '</div>' +
         '<dl class="kv">' + '<dt>' + HS.esc(HS.t('f.teacherId')) + '</dt><dd>' + HS.esc(D.teacherName(g.teacherId)) + '</dd><dt>' + HS.esc(HS.t('grp.subject')) + '</dt><dd>' + HS.esc(D.subjectName(g.subjectId)) + '</dd>' +
           '<dt>' + HS.esc(HS.t('f.gradeCode')) + '</dt><dd>' + U.grade(g.gradeCode, g.system, g.track) + '</dd><dt>' + HS.esc(HS.t('grp.times')) + '</dt><dd>' + HS.esc(slotsText(g)) + '</dd>' +
@@ -304,7 +321,7 @@
           if (!clashes && HS.can('groups.view')) HS.get('/api/c/clashes').then(function (c) { clashes = c; if (F.tab === 'timetable' && root.isConnected !== false) pane.innerHTML = timetableHTML(); }, function () { clashes = []; });
         } else if (F.tab === 'today') {
           pane.innerHTML = '<div class="skeleton" style="height:10rem"></div>';
-          HS.get('/api/c/today').then(function (r) { if (F.tab === 'today') pane.innerHTML = '<section class="card">' + todayHTML(r.sessions) + '</section>'; }, function (e) { pane.innerHTML = U.empty('alert', U.errorText(e)); });
+          HS.get('/api/c/today').then(function (r) { if (F.tab === 'today') pane.innerHTML = (HS.can('attendance.mark') && HS.dayOff ? '<div class="row" style="justify-content:flex-end;margin-bottom:.6rem"><button class="btn sm ghost" data-dayoff>' + HS.icon('x', 'sm') + HS.esc(HS.t('off.btn')) + '</button></div>' : '') + '<section class="card">' + todayHTML(r.sessions) + '</section>'; }, function (e) { pane.innerHTML = U.empty('alert', U.errorText(e)); });
         } else { pane.innerHTML = '<section class="card">' + HS.lists.render(F.tab) + '</section>'; }
       }
       paint();
@@ -316,6 +333,7 @@
         if (e.target.closest('[data-new]')) { editGroup(null); return; }
         var pd = e.target.closest('[data-pday]'); if (pd) { F.day = Number(pd.dataset.pday); paint(); return; }
         var r = e.target.closest('[data-roster]'); if (r) { HS.openRoster(r.dataset.roster); return; }
+        if (e.target.closest('[data-dayoff]')) { HS.dayOff(function () { if (F.tab === 'today') paint(); }); return; }
         var c = e.target.closest('[data-cancel]');
         if (c) { U.confirm({ title: HS.t('grp.cancel'), body: HS.t('grp.cancel.b'), danger: true, ok: HS.t('grp.cancel') }).then(function (ok) {
           if (ok) U.run(HS.post('/api/c/session', { sessionId: c.dataset.cancel, status: 'cancelled' }), 'common.saved', c).then(paint); }); return; }

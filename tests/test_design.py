@@ -168,6 +168,12 @@ class CssHygieneTest(unittest.TestCase):
         hits = [ln.strip() for ln in css.splitlines() if re.search(r'(?<![a-z-])(left|right)(?![a-z-])', ln) and 'text-align' not in ln]
         self.assertEqual(hits, [])
 
+    def test_no_logical_offset_centred_with_a_physical_transform(self):
+        """inset-inline-start: 50% flips side in Arabic but translateX(-50%) does not: every toast sat half off the phone screen."""
+        css = re.sub(r'/\*.*?\*/', '', read('css', 'base.css'), flags=re.S)
+        hits = [r.strip()[:80] for r in css.split('}') if re.search(r'inset-inline-(start|end):\s*50%', r) and 'translateX(' in r]
+        self.assertEqual(hits, [])
+
     def test_no_hard_coded_colours_outside_tokens(self):
         css = re.sub(r'/\*.*?\*/', '', read('css', 'base.css'), flags=re.S)
         allowed = {'#fff', '#000'}

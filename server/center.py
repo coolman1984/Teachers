@@ -161,7 +161,13 @@ def normalize_ops(store, ops, pc_index=0):
                 other = store.conn.execute('SELECT id FROM teachers WHERE name_key=? AND deleted=0 AND id<>?', (row['nameKey'], op.get('id'))).fetchone()
             if other:
                 raise Problem('err.teacherTaken', 'There is already a teacher with this name.')
+        if e == 'enrollments' and 'billFrom' in row:
+            if row['billFrom'] in (None, ''):
+                row.pop('billFrom')
+            elif not D.as_date(row['billFrom']) or row['billFrom'] < (row.get('from') or ''):
+                raise Problem('err.billFrom', 'The first billed month cannot be before the student joins.')
         if e == 'groups':
+            _price_history(store, op, row)
             row['slots'] = D.clean_slots(row.get('slots'))
             if row.get('gradeCode') and not D.valid_grade(row['gradeCode']):
                 raise Problem('err.grade', 'Choose the grade.')
@@ -175,6 +181,37 @@ def normalize_ops(store, ops, pc_index=0):
                     raise Problem('err.schoolSize', 'School support groups may not have more students than the maximum.', max=cfg['schoolMaxStudents'])
                 row['feeType'] = 'session'
     return ops
+
+
+def _price_history(store, op, row):
+    """A new price applies from a day (op['feeFrom'], default today); the old price is kept for the days before it, so
+    what students owed earlier never changes. Only the server writes the history: a page cannot rewrite old prices."""
+    fee_from = op.pop('feeFrom', None)
+    with store.lock:
+        old = store.row('groups', op.get('id'))
+    if not old:
+        row['feeHistory'] = []
+        return
+    hist = [h for h in (old.get('feeHistory') or []) if isinstance(h, dict)]
+    row['feeHistory'] = hist
+    try:
+        new_fee, old_fee = float(row.get('fee') or 0), float(old.get('fee') or 0)
+    except (TypeError, ValueError):
+        raise Problem('err.amount', 'Write a valid amount.')
+    if not math.isfinite(new_fee) or new_fee < 0:
+        raise Problem('err.amount', 'Write a valid amount.')
+    old_type = old.get('feeType') or 'session'
+    if abs(new_fee - old_fee) < 0.005 or (row.get('feeType') or old_type) != old_type:
+        return
+    day = D.as_date(fee_from) if fee_from else date.today()
+    if not day:
+        raise Problem('err.feeFrom', 'Choose the day the new price starts.')
+    to = (day - timedelta(days=1)).isoformat()
+    # the price that applied the day before the cut stays for every earlier day; later cuts are replaced by this one
+    before = D.fee_on(old, to)
+    hist = [h for h in hist if str(h.get('to')) < to or (h.get('type') or old_type) != old_type]
+    hist.append({'to': to, 'fee': float(before), 'type': old_type})
+    row['feeHistory'] = sorted(hist, key=lambda h: str(h.get('to')))
 
 
 def timetable_problems(store, ops):
@@ -248,7 +285,8 @@ def active_enrollments(store, student_id, d):
 
 # ---------------------------------------------------------------- money facts per enrolment (bulk, SQL)
 def _visits(store, student_id=None, group_id=None):
-    sql = "SELECT student_id, group_id, COUNT(*) FROM attendance WHERE deleted=0 AND status IN ('present','late')"
+    """{(student, home group): [visit dates]} - each visit is priced on its own day (a price change is not retroactive)."""
+    sql = "SELECT student_id, group_id, date FROM attendance WHERE deleted=0 AND status IN ('present','late')"
     args = []
     if student_id:
         sql += ' AND student_id=?'
@@ -256,8 +294,11 @@ def _visits(store, student_id=None, group_id=None):
     if group_id:
         sql += ' AND group_id=?'
         args.append(group_id)
+    out = {}
     with store.lock:
-        return {(r[0], r[1]): r[2] for r in store.conn.execute(sql + ' GROUP BY student_id, group_id', args)}
+        for sid, gid, day in store.conn.execute(sql, args):
+            out.setdefault((sid, gid), []).append(day or '')
+    return out
 
 
 def _paid(store, student_id=None, group_id=None):
@@ -274,23 +315,37 @@ def _paid(store, student_id=None, group_id=None):
 
 
 def balances(store, enrollments, today=None, groups=None, students=None):
-    """{enrollment id: balance info} for the given enrolments."""
+    """{enrollment id: balance info} for the given enrolments. Money is one account per student and group: earlier
+    enrolments of the same pair (left and came back) are loaded too, so their visits and months are not lost or
+    counted twice, and the pair's balance is shown on its latest enrolment (see domain.account)."""
     today = today or _today()
     groups = groups if groups is not None else {g['id']: g for g in store.rows('groups')}
     sids = {e['studentId'] for e in enrollments}
+    if not sids:
+        return {}
     if students is None:
         students = {s['id']: s for s in store.rows('students')} if len(sids) > 30 else {i: store.row('students', i) for i in sids}
     one = len(sids) == 1
-    visits = _visits(store, next(iter(sids)) if one else None)
-    paid = _paid(store, next(iter(sids)) if one else None)
+    sid1 = next(iter(sids)) if one else None
+    visits = _visits(store, sid1)
+    paid = _paid(store, sid1)
+    pairs = {(e['studentId'], e['groupId']) for e in enrollments}
+    every = store.rows('enrollments', 'student_id=?', (sid1,)) if one else store.rows('enrollments')
+    by_pair = {}
+    for e in every:
+        k = (e['studentId'], e['groupId'])
+        if k in pairs:
+            by_pair.setdefault(k, {})[e['id']] = e
+    for e in enrollments:   # rows passed in win (they may be newer than the database, e.g. inside a save)
+        by_pair.setdefault((e['studentId'], e['groupId']), {})[e['id']] = e
     out = {}
-    for e in enrollments:
-        g = groups.get(e.get('groupId'))
+    for k, ens in by_pair.items():
+        g = groups.get(k[1])
         if not g:
             continue
-        k = (e['studentId'], e['groupId'])
-        out[e['id']] = D.balance_info(g, e, students.get(e['studentId']) or {}, visits.get(k, 0), paid.get(k, 0.0), today)
-    return out
+        out.update(D.account(g, list(ens.values()), students.get(k[0]) or {}, visits.get(k, []), paid.get(k, 0.0), today))
+    wanted = {e['id'] for e in enrollments}
+    return {i: v for i, v in out.items() if i in wanted}
 
 
 def wallet(store, student_id):
@@ -358,7 +413,14 @@ def door_card(store, student_id, now=None, scopes=None):
     if best is None:
         best = next((c for c in candidates if c['own'] and c['now']), None)
     r = risk_for_student(store, student_id, d, scopes)
-    return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens], 'wallet': wallet(store, student_id) if scopes is None else 0,
+    # a group the student left with money still open (a debt, or a credit to refund) stays visible at the door
+    latest = {}
+    for e in store.rows('enrollments', 'student_id=?', (student_id,), scopes):
+        if e['groupId'] not in mine and (e['groupId'] not in latest or (e.get('from') or '') > (latest[e['groupId']].get('from') or '')):
+            latest[e['groupId']] = e
+    old = balances(store, list(latest.values()), d, groups, {student_id: st})
+    left = [{**e, 'money': old[e['id']], 'left': True} for e in latest.values() if e['id'] in old and abs(old[e['id']]['balance']) >= 0.01]
+    return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens] + left, 'wallet': wallet(store, student_id) if scopes is None else 0,
             'candidates': candidates[:8], 'suggested': best['session']['id'] if best else None, 'risk': r,
             'today': [a for a in att.values()]}
 
@@ -514,6 +576,35 @@ def roster(store, session_id, scopes=None):
     return {'session': sess, 'group': group, 'rows': rows}
 
 
+@atomic_operation
+def day_off(ctx, day, reason=''):
+    """Cancels every session of a day in one save: an official holiday (6 October), a power cut, an exam day.
+    Planned sessions of the timetable get a cancelled record with the same deterministic id on every PC. A session
+    where students were already checked in is left as it is - what they attended stays attended (and charged)."""
+    ctx.need('attendance.mark')
+    d = D.as_date(day) if day else _today()
+    if not d:
+        raise Problem('err.date', 'Choose the day.')
+    if d < _today() and not ctx.can('attendance.edit'):
+        raise Problem('err.pastDay', 'Changing attendance of another day needs the permission to edit attendance.')
+    reason = D.norm_text(reason)[:200]
+    if len(reason) < 3:
+        raise Problem('err.reason', 'Write the reason.')
+    ops, kept = [], 0
+    for sess in sessions_on(ctx.store, d, ctx.scopes):
+        if sess.get('status') == 'cancelled' or not ctx.teacher_ok(sess.get('teacherId')):
+            continue
+        if sess.get('present'):
+            kept += 1
+            continue
+        cur = ctx.store.row('sessions', sess['id'])
+        row = {**_strip(sess), 'status': 'cancelled', 'note': reason}
+        ops.append({'e': 'sessions', 'id': sess['id'], 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
+    if ops:
+        ctx.commit(f'Day off {d.isoformat()}: {len(ops)} sessions cancelled ({reason})', ops)
+    return {'cancelled': len(ops), 'kept': kept}
+
+
 def set_session_status(ctx, session_id, status, topic=None):
     ctx.need('attendance.mark')
     if status not in ('held', 'cancelled', 'planned'):
@@ -532,7 +623,7 @@ def set_session_status(ctx, session_id, status, topic=None):
 
 # ---------------------------------------------------------------- enrolment, transfer
 @atomic_operation
-def enroll(ctx, student_id, group_id, start=None, fee=None):
+def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
     ctx.need('students.manage', 'students.transfer')
     st, g = ctx.store.row('students', student_id), ctx.store.row('groups', group_id)
     if not st or not g:
@@ -543,12 +634,21 @@ def enroll(ctx, student_id, group_id, start=None, fee=None):
         raise Problem('err.alreadyEnrolled', 'The student is already in this group.')
     _check_capacity(ctx, g, day)
     row = {'studentId': student_id, 'groupId': group_id, 'teacherId': g.get('teacherId'), 'from': day, 'status': 'active'}
+    if bill_from:   # a month group joined late in the month: the first month charged is the next one
+        if not D.as_date(bill_from) or bill_from < day:
+            raise Problem('err.billFrom', 'The first billed month cannot be before the student joins.')
+        row['billFrom'] = D.as_date(bill_from).isoformat()
     if fee not in (None, ''):
         ctx.need('students.discount')
         row['fee'] = float(fee)
     eid = new_id('en')
     ctx.commit(f'Enrol {st["name"]} in {g["name"]}', [{'e': 'enrollments', 'id': eid, 'op': 'put', 'row': row}])
     return {'id': eid}
+
+
+def _next_month(day):
+    d = date.fromisoformat(day)
+    return (d.replace(day=28) + timedelta(days=4)).replace(day=1).isoformat()
 
 
 def _check_capacity(ctx, g, day):
@@ -578,11 +678,15 @@ def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     st = ctx.store.row('students', e['studentId']) or {}
     old = ctx.store.row('groups', e['groupId']) or {}
+    new = {'studentId': e['studentId'], 'groupId': g['id'], 'teacherId': g.get('teacherId'), 'from': day, 'status': 'active',
+           **({'fee': e['fee']} if e.get('fee') is not None and old.get('teacherId') == g.get('teacherId') else {})}
+    # the old month group already charges the month of the move: the new month group starts billing next month
+    if (old.get('feeType') == 'month' and (g.get('feeType') or 'session') == 'month' and not day.endswith('-01')
+            and prev >= (e.get('from') or '')):
+        new['billFrom'] = _next_month(day)
     ops = [{'e': 'enrollments', 'id': e['id'], 'op': 'put', 'ver': e['ver'],
             'row': {**_strip(e), 'to': prev, 'status': 'moved', 'note': D.norm_text(reason)[:200] or e.get('note')}},
-           {'e': 'enrollments', 'id': new_id('en'), 'op': 'put',
-            'row': {'studentId': e['studentId'], 'groupId': g['id'], 'teacherId': g.get('teacherId'), 'from': day, 'status': 'active',
-                    **({'fee': e['fee']} if e.get('fee') is not None and old.get('teacherId') == g.get('teacherId') else {})}}]
+           {'e': 'enrollments', 'id': new_id('en'), 'op': 'put', 'row': new}]
     ctx.commit(f'Move {st.get("name")} from {old.get("name")} to {g["name"]}', ops)
     return {'ok': True}
 
@@ -1223,8 +1327,7 @@ def dashboard(store, scopes=None, d=None):
         n_students = len(store.rows('students', 'active=1 OR active IS NULL'))
     else:
         n_students = len(visible)
-    ens = store.rows('enrollments', "(status IS NULL OR status='active') AND (to_date IS NULL OR to_date='' OR to_date>=?)", (day,), scopes)
-    bals = balances(store, ens, d)
+    ens, bals = open_accounts(store, scopes, d)
     owed = round(sum(-b['balance'] for b in bals.values() if b['balance'] < 0), 2)
     debtors = len({e['studentId'] for e in ens if (bals.get(e['id']) or {}).get('balance', 0) < 0})
     return {'date': day, 'sessions': sess, 'checkedIn': checked, 'todayMoney': today_money, 'todayTotal': round(sum(today_money.values()), 2),
@@ -1250,26 +1353,49 @@ WA_DEFAULTS = {
 }
 
 
-@cached_read
-def student_balances(store, scopes=None, d=None):
-    """The money position of every active enrolment the caller may see, summed per student, for the students list and
-    the debts list. Computed from attendance and receipts on every data version (never a stored running balance)."""
+def _active(e, day):
+    return (e.get('status') or 'active') == 'active' and (not e.get('to') or e['to'] >= day)
+
+
+def open_accounts(store, scopes=None, d=None):
+    """The student-group accounts that matter for debts: every active enrolment, plus the last enrolment of a student
+    who left a group still owing money (or owed a refund) - leaving a group never wipes a debt off the lists.
+    Returns (enrolments, {enrollment id: balance info})."""
     d = d or _today()
     day = d.isoformat()
-    ens = store.rows('enrollments', "(status IS NULL OR status='active') AND (to_date IS NULL OR to_date='' OR to_date>=?)", (day,), scopes)
+    latest = {}
+    for e in store.rows('enrollments', scopes=scopes):
+        k = (e['studentId'], e['groupId'])
+        cur = latest.get(k)
+        if cur is None or (_active(e, day), e.get('from') or '') > (_active(cur, day), cur.get('from') or ''):
+            latest[k] = e
+    ens = list(latest.values())
     bals = balances(store, ens, d)
-    per, oldest = {}, {}
+    keep = [e for e in ens if e['id'] in bals and (_active(e, day) or abs(bals[e['id']]['balance']) >= 0.01)]
+    return keep, bals
+
+
+@cached_read
+def student_balances(store, scopes=None, d=None):
+    """The money position of every student the caller may see, summed per student, for the students list and the
+    debts list. Computed from attendance and receipts on every data version (never a stored running balance).
+    `left` lists the students whose position includes a group they already left."""
+    d = d or _today()
+    day = d.isoformat()
+    ens, bals = open_accounts(store, scopes, d)
+    per, oldest, left = {}, {}, set()
     for e in ens:
-        b = bals.get(e['id'])
-        if not b:
-            continue
+        b = bals[e['id']]
         per[e['studentId']] = round(per.get(e['studentId'], 0) + b['balance'], 2)
+        if not _active(e, day):
+            left.add(e['studentId'])
     with store.lock:   # the last payment date tells how long a debt has been waiting
         for sid, last in store.conn.execute("SELECT student_id, MAX(date) FROM payments WHERE deleted=0 AND kind='fee' GROUP BY student_id"):
             oldest[sid] = last
-    return {'students': per, 'lastPaid': {k: v for k, v in oldest.items() if k in per},
-            'enrollments': {k: {f: v[f] for f in ('balance', 'feeType', 'unit', 'due') if f in v} | ({'sessionsLeft': v['sessionsLeft']} if 'sessionsLeft' in v else {})
-                            for k, v in bals.items()}}
+    return {'students': per, 'lastPaid': {k: v for k, v in oldest.items() if k in per}, 'left': sorted(left),
+            'enrollments': {e['id']: {f: bals[e['id']][f] for f in ('balance', 'feeType', 'unit', 'due') if f in bals[e['id']]}
+                            | ({'sessionsLeft': bals[e['id']]['sessionsLeft']} if 'sessionsLeft' in bals[e['id']] else {})
+                            | ({} if _active(e, day) else {'left': True}) for e in ens}}
 
 
 ADVICE_ORDER = {'bad': 0, 'warn': 1, 'info': 2, 'ok': 3}
@@ -1340,8 +1466,7 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
             add('riskCall', 'warn', 'followup', 'bell', n=len({r['studentId'] for r in risky if not r['followed']}))
     # 6. money owed by students (computed from attendance and receipts, never stored)
     if can({'money.view', 'reports.view'}):
-        ens = store.rows('enrollments', "(status IS NULL OR status='active') AND (to_date IS NULL OR to_date='' OR to_date>=?)", (day,), scopes)
-        bals = balances(store, ens, d)
+        ens, bals = open_accounts(store, scopes, d)
         debt = {}
         for e in ens:
             b = (bals.get(e['id']) or {}).get('balance', 0)
@@ -1349,6 +1474,22 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
                 debt[e['studentId']] = debt.get(e['studentId'], 0) - b
         if debt:
             add('debts', 'warn', 'followup?tab=debts', 'sheet', n=len(debt), amount=round(sum(debt.values()), 2))
+    # 6b. a monthly student who silently stopped coming is still charged every month: call, or end the enrolment
+    if can({'students.transfer', 'followup.view'}):
+        month_groups = {g['id'] for g in groups if g.get('feeType') == 'month'}
+        if month_groups:
+            cut = (d - timedelta(days=30)).isoformat()
+            with store.lock:
+                last = {(a, b): c for a, b, c in store.conn.execute(
+                    "SELECT student_id, group_id, MAX(date) FROM attendance WHERE deleted=0 AND status IN ('present','late') GROUP BY student_id, group_id")}
+                held = {r[0] for r in store.conn.execute(
+                    "SELECT group_id FROM sessions WHERE deleted=0 AND status='held' AND date>=? GROUP BY group_id HAVING COUNT(*)>=2", (cut,))}
+            ens = store.rows('enrollments', "(status IS NULL OR status='active') AND from_date<=? AND (to_date IS NULL OR to_date='' OR to_date>=?)",
+                             (cut, day), scopes)
+            watch = month_groups & held
+            ghosts = {e['studentId'] for e in ens if e['groupId'] in watch and (last.get((e['studentId'], e['groupId'])) or '') < cut}
+            if ghosts:
+                add('ghosts', 'warn', 'followup', 'bell', n=len(ghosts))
     # 7. groups: full ones should open a twin, nearly empty ones should merge (only a few weeks after they started)
     if can({'groups.view'}) and groups:
         counts = _enrolled_counts(store, day)

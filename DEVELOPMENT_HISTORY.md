@@ -2,6 +2,40 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Field edge cases: money that survives a real school year (2026-10-05)
+
+**Why:** the owner asked to re-check the Egyptian market and prepare the app for the deep edge cases of a real centre.
+The market re-check (school calendar 2026/2027, the mid-year break, InstaPay fees, holidays) and a read of the fee code
+found that the money rules broke on things every centre does in its first term. Catalogue: `docs/01-research-report.md` §6.
+**Bugs found (each now has a regression test that failed before the fix):**
+- A teacher raising a group's price rewrote every old debt at the new price. Prices are now dated: the server keeps
+  `feeHistory` (a page cannot forge it), the group form asks "the new price applies from" (1st of next month for
+  monthly groups), and each visit or month is priced on its own day.
+- A student who left a group with a debt vanished from the debts list, the dashboard total and the door.
+- A student who left and came back to the same group had visits and receipts counted twice (a false credit for
+  monthly groups). Money is now one account per student + group (`domain.account`); old enrolments say `carried`.
+- A mid-month move between two monthly groups charged that month twice; the new enrolment now bills from next month.
+- In Arabic (the default language) every toast sat half off a phone screen: `inset-inline-start: 50%` flips side in
+  RTL while `translateX(-50%)` does not.
+**Added for the door and the desk:** enrol a walk-in from the student's card; first month "this / next" when joining a
+monthly group late (default next from day 21); cash received → change to give back; a typo guard for amounts over
+three times the fee (receipts can only be reversed); "Day off…" cancels a whole day's sessions (holiday, power cut,
+exams) while keeping attended ones; the advisor flags monthly students who stopped coming but are still charged; four
+new help questions.
+**Mistakes:** an `@cached_read` decorator slid onto a new helper during an edit (500 on `/api/c/balances`, caught by
+the test); one test expectation had wrong arithmetic (fixed the test, not the code); a new test class first inherited
+every parent test (split into a fixture class).
+**Lessons:** derive money per student + group, never per enrolment; any value a balance depends on (price, discount)
+must be dated or it rewrites history; check every centred fixed element in RTL on a phone.
+**Open (owner decisions, defaults in EXECUTION_PLAN Part I):** discount/exemption changes are still retroactive;
+no debt forgiveness yet; monthly groups during the mid-year break are charged full months.
+**Evidence:** Python gate (CI module list incl. sample, two-PC and network) 164 tests OK in 195 s (3 existing skips);
+sample performance card 71 ms, dashboard 169 ms, state 338 ms / 4.24 MB; the five new API regressions (test_25–29) and
+the RTL toast check each fail on the previous code; frontend 18 OK; pyflakes clean; browser `test_e2e_center` 12 OK
+with Chromium, including the new walk-in → enrol → check-in → typo guard → change → day off → dated price scenario;
+screenshots checked in Arabic/night at 390 px and English/daylight at 1360 px, no console errors. `test_e2e_browser`:
+the 7 shell tests pass; its 6 trip-era tests error identically on the code before this change (not in CI, P8).
+
 ## Every core screen built and the daily journey tested end to end (2026-10-05)
 
 **Why:** the owner asked for the whole app, easy for non-technical staff, impressive through simplicity and smart

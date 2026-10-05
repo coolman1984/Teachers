@@ -71,6 +71,18 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Phones: bottom tab bar, connection-lost pill, home-screen manifest + icons, "Open on phone" QR dialog
   - [ ] System status card (backup age, sync, parent links) – needs a cheap `/api/c/status`
 
+## Field edge cases (Egypt market re-check 2026-10-05, catalogue in `docs/01-research-report.md` §6)
+- [x] E1 Price rise mid-year is not retroactive (server-written `feeHistory`, "applies from" in the group form, earlier prices shown)
+- [x] E2 One money account per student + group: leaving keeps the debt visible (debts list, student file, door card); coming back continues it
+- [x] E3 Mid-month move between monthly groups charges the month once (`billFrom`); late joiners choose this month / next month
+- [x] E4 Door: enrol a walk-in from the card; cash change helper; typo guard before a receipt that can only be reversed
+- [x] E5 Day off: cancel every session of a day in one step (holiday, power cut, exams); attended sessions kept
+- [x] E6 Advisor: monthly students who stopped coming but are still charged
+- [x] E7 RTL toasts were half off the phone screen (regression test in test_design)
+- [ ] E8 Owner decisions: discount changes from today?, debt forgiveness, mid-year break for monthly groups (defaults in EXECUTION_PLAN Part I)
+- [ ] E9 Move a credit to the new group on transfer; one receipt for siblings; repeated e-wallet reference warning
+- [ ] E10 Temporary (Ramadan) timetable; extra make-up session; free trial session; school name in door search results
+
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)
 - [x] P6.2 Sequential WhatsApp/SMS sender (HS.waQueue, never bulk, every send logged, not twice the same day) + per-kind default texts
@@ -89,6 +101,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)
   - [x] 11 browser scenarios incl. the core journey as the Front desk profile (advisor -> shift -> scan -> pay -> absentee message -> close)
   - [ ] Teacher-scoped login scenario and two-PC UI scenario
+  - [ ] Migrate legacy `tests/test_e2e_browser.py` trip/import/reports/slides scenarios (6 errors since the fork, same before and after 2026-10-05; shell tests pass)
   - [ ] Migrate legacy `tests/test_multinode.py` (still writes trip entities; 24 errors + 1 failure since the fork, excluded from CI) to centre entities
 
 ## Phase P9 – Differentiators 2
@@ -99,6 +112,6 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 
 ## Phase P10 – Docs and delivery
 - [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version 0.1.0
-  - [x] Help centre: 11 topics, 42 questions in both languages, Arabic-tolerant search, "?" opens the current page's topic
+  - [x] Help centre: 11 topics, 46 questions in both languages, Arabic-tolerant search, "?" opens the current page's topic
   - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
   - [ ] Final centre browser acceptance and installer/release verification remain pending

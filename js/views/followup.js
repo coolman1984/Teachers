@@ -95,7 +95,8 @@
       U.table([
         { h: 'f.code', cell: function (r) { return '<b class="num">' + U.bdi(r.s.code || '') + '</b>'; } },
         { h: 'f.name', cell: function (r) { return '<b>' + HS.esc(r.s.name) + '</b>'; } },
-        { h: 'f.group', cell: function (r) { return '<span class="chip-row">' + D.list('enrollments').filter(function (e) { return e.studentId === r.s.id && (e.status || 'active') === 'active' && (bal.enrollments[e.id] || {}).balance < 0; }).map(function (e) { return '<span class="chip">' + HS.esc(D.groupName(e.groupId)) + '</span>'; }).join('') + '</span>'; } },
+        { h: 'f.group', cell: function (r) { return '<span class="chip-row">' + D.list('enrollments').filter(function (e) { return e.studentId === r.s.id && (bal.enrollments[e.id] || {}).balance < 0; }).map(function (e) {
+          return '<span class="chip">' + HS.esc(D.groupName(e.groupId)) + (bal.enrollments[e.id].left ? ' <small class="badge warn">' + HS.esc(HS.t('fu.leftGroup')) + '</small>' : '') + '</span>'; }).join('') + '</span>'; } },
         { h: 'fu.lastPaid', cell: function (r) { return r.last ? U.day(r.last) : '<span class="badge warn">' + HS.esc(HS.t('fu.never')) + '</span>'; } },
         { h: 'grp.owed', cls: 'end', cell: function (r) { return '<b class="neg">' + U.money(r.owed) + '</b>'; } },
         { h: 'f.action', cell: function (r) { return '<span class="row" style="gap:.3rem;justify-content:flex-end">' + (canMessage() ? '<button class="btn sm" data-remind="' + HS.esc(r.s.id) + '" data-amount="' + r.owed + '">' + HS.esc(HS.t('fu.remind')) + '</button>' : '') + '<button class="btn sm ghost" data-stu="' + HS.esc(r.s.id) + '">' + HS.esc(HS.t('door.file')) + '</button></span>'; } }

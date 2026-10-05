@@ -8,10 +8,10 @@
   // n = how many questions the topic has (keys hq.<id>.<k>.q / .a)
   var TOPICS = [
     { id: 'start', icon: 'flag', page: 'overview', n: 4 },
-    { id: 'door', icon: 'board', page: 'door', perm: 'door.use', n: 5 },
+    { id: 'door', icon: 'board', page: 'door', perm: 'door.use', n: 6 },
     { id: 'students', icon: 'users', page: 'students', perm: 'students.view', n: 5 },
-    { id: 'groups', icon: 'layers', page: 'groups', perm: 'groups.view', n: 4 },
-    { id: 'money', icon: 'sheet', page: 'money', perm: ['money.view', 'money.collect'], n: 5 },
+    { id: 'groups', icon: 'layers', page: 'groups', perm: 'groups.view', n: 6 },
+    { id: 'money', icon: 'sheet', page: 'money', perm: ['money.view', 'money.collect'], n: 6 },
     { id: 'exams', icon: 'star', page: 'exams', perm: ['exams.view', 'marks.enter'], n: 3 },
     { id: 'followup', icon: 'bell', page: 'followup', perm: 'followup.view', n: 4 },
     { id: 'settlements', icon: 'chart', page: 'settlements', perm: 'settlements.view', n: 3 },
