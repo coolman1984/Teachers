@@ -96,34 +96,9 @@
     }).join('') + '</ul>';
   }
 
-  /* ---------- 28-day charts (inline SVG, no library) ---------- */
-  function series(rows, field, d) {
-    var map = {}, out = [];
-    (rows || []).forEach(function (r) { map[r.date] = Number(r[field]) || 0; });
-    var end = new Date(d + 'T00:00:00');
-    for (var i = 27; i >= 0; i--) {
-      var x = new Date(end); x.setDate(end.getDate() - i);
-      var iso = x.getFullYear() + '-' + HS.fmt.pad(x.getMonth() + 1) + '-' + HS.fmt.pad(x.getDate());
-      out.push({ date: iso, v: map[iso] || 0 });
-    }
-    return out;
-  }
-  function chart(points, kind, label) {
-    var w = 560, h = 140, pad = 6, max = Math.max.apply(null, points.map(function (p) { return p.v; }).concat([1]));
-    var step = (w - pad * 2) / (points.length - 1), y = function (v) { return h - pad - (v / max) * (h - pad * 2 - 14); };
-    var body;
-    if (kind === 'bars') {
-      var bw = Math.max(4, step * 0.62);
-      body = points.map(function (p, i) { return '<rect x="' + (pad + i * step - bw / 2).toFixed(1) + '" y="' + y(p.v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (h - pad - y(p.v)).toFixed(1) + '" rx="2"><title>' + HS.esc(U.day(p.date).replace(/<[^>]+>/g, '') + ' · ' + HS.fmt.num(p.v)) + '</title></rect>'; }).join('');
-    } else {
-      var line = points.map(function (p, i) { return (i ? 'L' : 'M') + (pad + i * step).toFixed(1) + ' ' + y(p.v).toFixed(1); }).join(' ');
-      body = '<path class="area" d="' + line + ' L' + (w - pad) + ' ' + (h - pad) + ' L' + pad + ' ' + (h - pad) + ' Z"/><path class="line" d="' + line + '"/>' +
-        points.map(function (p, i) { return '<circle cx="' + (pad + i * step).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="3"><title>' + HS.esc(U.day(p.date).replace(/<[^>]+>/g, '') + ' · ' + HS.fmt.num(p.v)) + '</title></circle>'; }).join('');
-    }
-    var total = points.reduce(function (s, p) { return s + p.v; }, 0);
-    return '<figure class="chart ' + kind + '"><svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" role="img" aria-label="' + HS.esc(label) + '">' + body + '</svg>' +
-      '<figcaption class="row between"><span class="faint">' + HS.esc(HS.t('ov.chart.from')) + '</span><span class="muted">' + HS.esc(HS.t('ov.chart.total')) + ' <b class="num">' + HS.fmt.num(Math.round(total)) + '</b></span><span class="faint">' + HS.esc(HS.t('ov.chart.today')) + '</span></figcaption></figure>';
-  }
+  /* ---------- 28-day charts: the shared inline-SVG chart in ui.js ---------- */
+  function series(rows, field, d) { return U.series(rows, field, d, 28); }
+  function chart(points, kind, label) { return U.chart(points, kind, label, [HS.t('ov.chart.from'), HS.t('ov.chart.today')]); }
 
   /* ---------- getting started (the guide for an empty centre) ---------- */
   var STEPS = [

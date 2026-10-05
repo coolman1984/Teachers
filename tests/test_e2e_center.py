@@ -221,6 +221,37 @@ class DoorTest(BrowserBase):
         self.assertEqual(sum(1 for r in res['rows'] if r['mark'] and r['mark'].get('absent')), 1)
         self.assertEqual(self.errors, [])
 
+    def test_zz_settlement_approve_payout_and_reports(self):
+        # runs last (zz): a fee of the fixture group is collected, then the teacher is settled and paid
+        mine = self.c.get('/api/c/shift')
+        if not (mine.get('shift') and mine['shift'].get('status') == 'open'):
+            self.c.post('/api/c/shift/open', {'opening': 0})
+        self.c.post('/api/c/pay', {'studentId': 'e2e-s1', 'groupId': 'e2e-g', 'kind': 'fee', 'amount': 100, 'method': 'cash'})
+        ym = date.today().strftime('%Y-%m')
+        before = next(s for s in self.c.get('/api/c/settlements?ym=' + ym) if s['teacherId'] == 'e2e-t')
+        self.assertGreater(before['remaining'], 0)
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/settlements')
+        pg.wait_for_selector('[data-approve="e2e-t"]')
+        self.assertIn('20% of', pg.inner_text('.set-card:has([data-approve="e2e-t"])'))   # the formula in words
+        pg.click('[data-approve="e2e-t"]')
+        pg.wait_for_selector('.set-card:has([data-approve="e2e-t"]) .badge.ok')
+        pg.click('[data-payout="e2e-t"]')
+        pg.wait_for_selector('#ex-a')
+        self.assertEqual(float(pg.input_value('#ex-a')), before['remaining'])
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.set-card:has([data-print="e2e-t"]) .set-line.ok')
+        after = next(s for s in self.c.get('/api/c/settlements?ym=' + ym) if s['teacherId'] == 'e2e-t')
+        self.assertEqual((after['remaining'], after['saved']['status']), (0, 'approved'))
+        pg.goto(self.S.base + '/#/reports')
+        pg.wait_for_selector('.rep-kpis')
+        self.assertIn('Synthetic Group', pg.inner_text('[data-rep]'))
+        pg.click('[data-present]')
+        pg.wait_for_selector('.present')
+        pg.keyboard.press('Escape')
+        pg.wait_for_selector('.present', state='detached')
+        self.assertEqual(self.errors, [])
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')

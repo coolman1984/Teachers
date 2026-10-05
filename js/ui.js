@@ -66,6 +66,44 @@
   // a group is drawn in its teacher's colour (one teacher = one colour across the timetable), else its own
   U.groupTone = function (g) { var t = g && HS.data.get('teachers', g.teacherId); return U.tone((t && t.color) || (g && g.color)); };
 
+  /* daily values for the last `days` days ending on `end` (ISO date); missing days count as 0 */
+  U.series = function (rows, field, end, days) {
+    var map = {}, out = [], last = new Date(end + 'T00:00:00');
+    (rows || []).forEach(function (r) { map[r.date] = Number(r[field]) || 0; });
+    for (var i = days - 1; i >= 0; i--) {
+      var x = new Date(last); x.setDate(last.getDate() - i);
+      var iso = x.getFullYear() + '-' + HS.fmt.pad(x.getMonth() + 1) + '-' + HS.fmt.pad(x.getDate());
+      out.push({ date: iso, v: map[iso] || 0 });
+    }
+    return out;
+  };
+  /* an area or bar chart in inline SVG (no library, prints and works offline); caption = [left text, right text] */
+  U.chart = function (points, kind, label, caption) {
+    var w = 560, h = 140, pad = 6, max = Math.max.apply(null, points.map(function (p) { return p.v; }).concat([1]));
+    var step = (w - pad * 2) / Math.max(1, points.length - 1), y = function (v) { return h - pad - (v / max) * (h - pad * 2 - 14); };
+    var tip = function (p) { return '<title>' + HS.esc(U.day(p.date).replace(/<[^>]+>/g, '') + ' · ' + HS.fmt.num(Math.round(p.v * 100) / 100)) + '</title>'; };
+    var body;
+    if (kind === 'bars') {
+      var bw = Math.max(4, step * 0.62);
+      body = points.map(function (p, i) { return '<rect x="' + (pad + i * step - bw / 2).toFixed(1) + '" y="' + y(p.v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (h - pad - y(p.v)).toFixed(1) + '" rx="2">' + tip(p) + '</rect>'; }).join('');
+    } else {
+      var line = points.map(function (p, i) { return (i ? 'L' : 'M') + (pad + i * step).toFixed(1) + ' ' + y(p.v).toFixed(1); }).join(' ');
+      body = '<path class="area" d="' + line + ' L' + (w - pad) + ' ' + (h - pad) + ' L' + pad + ' ' + (h - pad) + ' Z"/><path class="line" d="' + line + '"/>' +
+        points.map(function (p, i) { return '<circle cx="' + (pad + i * step).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="3">' + tip(p) + '</circle>'; }).join('');
+    }
+    var total = points.reduce(function (s, p) { return s + p.v; }, 0);
+    return '<figure class="chart ' + kind + '"><svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" role="img" aria-label="' + HS.esc(label) + '">' + body + '</svg>' +
+      '<figcaption class="row between"><span class="faint">' + HS.esc((caption || [])[0] || '') + '</span><span class="muted">' + HS.esc(HS.t('ov.chart.total')) + ' <b class="num">' + HS.fmt.num(Math.round(total)) + '</b></span><span class="faint">' + HS.esc((caption || [])[1] || '') + '</span></figcaption></figure>';
+  };
+  /* horizontal bars for a {label: value} breakdown, largest first */
+  U.bars = function (pairs, money) {
+    var list = pairs.filter(function (p) { return p[1]; }).sort(function (a, b) { return b[1] - a[1]; }), max = Math.max.apply(null, list.map(function (p) { return Math.abs(p[1]); }).concat([1]));
+    if (!list.length) return '<p class="faint">' + HS.esc(HS.t('money.none')) + '</p>';
+    return '<div class="bars">' + list.map(function (p) {
+      return '<div class="bar-row"><span class="bar-l" title="' + HS.esc(p[0]) + '">' + HS.esc(p[0]) + '</span><span class="bar-t"><i style="width:' + Math.round(Math.abs(p[1]) * 100 / max) + '%"></i></span>' + (money ? U.money(p[1]) : U.num(p[1])) + '</div>';
+    }).join('') + '</div>';
+  };
+
   /* a tiny line of values (0-100) for marks and trends; no library */
   U.spark = function (values, w, h) {
     w = w || 160; h = h || 36;

@@ -70,6 +70,7 @@
   };
   HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
   HS.printReceipt = function (p) { printSheet(receipt(p)); };
+  HS.printHTML = function (html) { printSheet(html); };   // any page's own A4 sheet (settlement statements, reports)
   function printSheet(html) {
     var el = document.createElement('div');
     el.id = 'print-sheet';

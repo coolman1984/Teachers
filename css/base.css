@@ -518,6 +518,19 @@ button.chip { cursor: pointer; }
 .histo b { color: var(--ink); }
 .check-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .4rem; max-height: 16rem; overflow: auto; }
 .check-list .choice { padding: .5rem .7rem; }
+.month-pick { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.month-pick b { min-width: 9rem; text-align: center; }
+.set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: var(--gap); align-items: start; }
+.set-card { display: grid; gap: .55rem; animation: rise var(--t-med) var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.set-card > header { margin-bottom: .2rem; }
+.set-line { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding-block: .3rem; border-bottom: 1px dashed var(--line-2); }
+.set-line span small { display: block; color: var(--ink-3); font-size: .78rem; }
+.set-line.total { border-bottom: 2px solid var(--line); font-size: 1.05rem; }
+.set-line.due b { color: var(--bad); } .set-line.ok b { color: var(--ok); }
+.split-bar { height: .5rem; border-radius: 999px; background: var(--ok); overflow: hidden; }
+.split-bar i { display: block; height: 100%; background: var(--signal); }
+.rep-kpis { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
+.slide-list { font-size: 1.3rem; display: grid; gap: .8rem; padding-inline-start: 1.2rem; }
 .fill { display: flex; align-items: center; gap: .5rem; min-width: 7rem; }
 .fill .meter { flex: 1; margin: 0; }
 .fill.warn .meter i { background: var(--warn); } .fill.bad .meter i { background: var(--bad); } .fill.info .meter i { background: var(--info); }

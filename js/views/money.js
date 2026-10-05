@@ -94,14 +94,16 @@
   HS.incomeDialog = incomeDialog;
 
   /* ---------- expenses ---------- */
-  function expenseDialog(done) {
-    var cats = CATS.filter(function (c) { return c !== 'teacher_payout' || HS.can('settlements.manage'); });
+  // preset: {category, teacherId, amount, note} - a teacher payout or a cash handover opens already filled in
+  function expenseDialog(done, preset) {
+    preset = preset || {};
+    var cats = CATS.filter(function (c) { return c !== 'teacher_payout' || HS.can('settlements.manage'); }), cat0 = preset.category || 'other';
     var el = HS.dialog({ title: HS.t('money.expense'), body:
-      '<div class="field"><label for="ex-c">' + HS.esc(HS.t('money.category')) + '</label><select class="input" id="ex-c">' + cats.map(function (c) { return opt(c, HS.t('exp.cat.' + c), 'other'); }).join('') + '</select></div>' +
-      '<div class="field" data-teacher hidden><label for="ex-t">' + HS.esc(HS.t('f.teacherId')) + '</label><select class="input" id="ex-t">' + opt('', '–', '') + D.list('teachers').map(function (t) { return opt(t.id, t.name, ''); }).join('') + '</select></div>' +
-      '<div class="field"><label for="ex-a">' + HS.esc(HS.t('pay.amount')) + '</label><input class="input big-num" id="ex-a" type="number" min="0" step="any" dir="ltr"></div>' +
+      '<div class="field"><label for="ex-c">' + HS.esc(HS.t('money.category')) + '</label><select class="input" id="ex-c">' + cats.map(function (c) { return opt(c, HS.t('exp.cat.' + c), cat0); }).join('') + '</select></div>' +
+      '<div class="field" data-teacher' + (cat0 === 'teacher_payout' ? '' : ' hidden') + '><label for="ex-t">' + HS.esc(HS.t('f.teacherId')) + '</label><select class="input" id="ex-t">' + opt('', '–', '') + D.list('teachers').map(function (t) { return opt(t.id, t.name, preset.teacherId); }).join('') + '</select></div>' +
+      '<div class="field"><label for="ex-a">' + HS.esc(HS.t('pay.amount')) + '</label><input class="input big-num" id="ex-a" type="number" min="0" step="any" dir="ltr" value="' + HS.esc(preset.amount || '') + '"></div>' +
       '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span>' + seg('method', ['cash', 'vodafone', 'instapay', 'bank'], 'cash', 'pay.method.') + '</div>' +
-      '<div class="field"><label for="ex-n">' + HS.esc(HS.t('f.notes')) + '</label><input class="input" id="ex-n"></div>' +
+      '<div class="field"><label for="ex-n">' + HS.esc(HS.t('f.notes')) + '</label><input class="input" id="ex-n" value="' + HS.esc(preset.note || '') + '"></div>' +
       '<div class="tip">' + HS.icon('lock') + '<span>' + HS.esc(HS.t('money.expense.b')) + '</span></div><div class="tip bad" data-err hidden></div>',
       footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.icon('check', 'sm') + HS.esc(HS.t('common.save')) + '</button>' });
     wireSegs(el);
@@ -272,7 +274,7 @@
         if (e.target.closest('[data-openshift]')) { HS.ensureShift().then(paint, function () {}); return; }
         var inc = e.target.closest('[data-income]'); if (inc) { incomeDialog(paint, inc.dataset.income || ''); return; }
         if (e.target.closest('[data-expense]')) { expenseDialog(paint); return; }
-        if (e.target.closest('[data-handover]')) { expenseDialog(paint); setTimeout(function () { var c = HS.$('#ex-c'); if (c) { c.value = 'handover'; c.dispatchEvent(new Event('change')); } }, 30); return; }
+        if (e.target.closest('[data-handover]')) { expenseDialog(paint, { category: 'handover' }); return; }
         if (e.target.closest('[data-close-shift]') && pane._summary) { closeDialog(pane._summary, paint); return; }
         var co = e.target.closest('[data-close-other]'); if (co) { HS.get('/api/c/shift?id=' + encodeURIComponent(co.dataset.closeOther)).then(function (s) { closeDialog(s, paint); }); return; }
         var v = e.target.closest('[data-void]'); if (v) { voidReceipt(v.dataset.void, paint); return; }
