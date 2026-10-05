@@ -5,6 +5,7 @@ Steps: pack the web pages into server/_assets.py, draw the icon, compile the pro
 (Python translated to C, no readable source files), then wrap it in the Inno Setup installer.
 
     python tools/build_windows.py            needs: pip install nuitka ordered-set zstandard, and Inno Setup 6
+    python tools/build_windows.py --check    only checks that every shipped file is there (any OS, seconds)
 """
 import glob
 import os
@@ -38,7 +39,25 @@ def compile_program(v4):
          '--nofollow-import-to=tkinter,unittest,pydoc,test', os.path.join('server', 'hs_main.py')])
 
 
+# every file the installer or the release page ships; checked before the long compile so a missing one fails in a second
+SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'gateway/schema.sql', 'gateway/build.js', 'gateway/src/worker.js',
+           'installer/hessa.iss', 'server/hs_main.py', 'tools/make_assets.py', 'tools/make_icon.py')
+
+
+def preflight():
+    missing = [f for f in SHIPPED if not os.path.isfile(os.path.join(ROOT, f))]
+    if missing:
+        sys.exit('These files are needed for the installer and are missing: ' + ', '.join(missing))
+    notes = open(os.path.join(ROOT, 'docs', 'RELEASE_NOTES.md'), encoding='utf-8').read()
+    if VERSION not in notes:
+        sys.exit(f'docs/RELEASE_NOTES.md does not describe version {VERSION} (server/version.py). Write what changed first.')
+
+
 def main():
+    preflight()
+    if '--check' in sys.argv:
+        print('Everything the installer needs is here, version', VERSION)
+        return
     os.makedirs(BUILD, exist_ok=True)
     assets = os.path.join(ROOT, 'server', '_assets.py')
     run([sys.executable, 'tools/make_assets.py', assets])

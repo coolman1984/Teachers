@@ -2,6 +2,31 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The desk sees what the centre PC really saved (review A04-A07, B01, B02 - 2026-10-05)
+
+**Why:** the completion review found four places where the screen and the truth could differ: the door read its sound and
+auto-check-in switches from the browser while Settings saved them for the centre (so switching them off did nothing); opening a
+WhatsApp chat was logged as "sent" even when the person cancelled; a lost connection left every save button looking usable; and the
+Windows build stopped at the very end on two missing documents.
+**What:** (1) the door reads `doorSounds`/`autoCheckin` from the centre settings - one switch for every PC, missing = on. (2) The
+message sender asks "Did it go?" after the chat opens; only "Yes, sent" logs the follow-up and counts; a failed save says so and
+can be repeated; the door and the student file use the same sender. (3) The browser refuses writes while `/api/version` fails
+(`err.offline`), shows a bar on every page and dims the save buttons; a request that got no answer says so (`err.noAnswer`) and
+triggers an immediate poll. Every payment dialog sends one random key; the server stores the receipt under `pk<key>`, so a Save
+pressed again after a lost answer returns the first receipt (single and family payments). (4) `GATEWAY_SETUP.md` and
+`RELEASE_NOTES.md` exist; `tools/build_windows.py --check` checks every shipped file and that the notes describe the version, and
+CI runs it on each push. (5) The door card sells a handout (the student's teachers' handouts first; the server refuses more than
+the stock) and takes money in advance, reusing the Money dialog with the student fixed. Version 1.1.0 (it continues after the
+engine's 1.0.2; never lowered).
+**Mistakes:** the earlier browser test clicked "Open WhatsApp" and asserted a follow-up - it tested the bug as the feature. The first
+offline code used `toggleAttribute`, missing in older Android WebViews and in the Node test DOM - `setAttribute`/`removeAttribute` now.
+**Lessons:** a log row must record what the person confirmed, never what the program merely started. A retry-safe write needs an id
+chosen before the first try.
+**Evidence:** `tests/test_center_review.py` (7 tests: same key = one receipt, bad key ignored, family batch once, stock refused, the
+door obeys both switches incl. the beep count, offline bar + refused write + nothing saved after reconnect, handout + top-up from the
+card); updated `test_e2e_center` message scenarios assert nothing is logged before "Yes, sent".
+**Limits:** a phone that keeps a page open while the centre PC is off sees the bar only after its next 2-second poll.
+
 ## Personal link of a staff member works again (2026-10-05)
 
 **Why:** review item A03 - the personal-link page asked for `js/quick.js`, which did not exist, so the link never signed in by itself; the

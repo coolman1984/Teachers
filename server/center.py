@@ -4,6 +4,7 @@ not at all, one line in the history), checked against the user's permissions and
 Reads (door card, balances, early warning, settlements, profitability, reports) are computed from the rows with SQL
 aggregates, so they stay fast with years of attendance and are identical on every PC."""
 import json
+import re
 import copy
 import math
 import time
@@ -918,7 +919,12 @@ def _build_payment(ctx, d):
             raise Problem('err.notFound', 'Handout not found.')
         if m.get('teacherId'):
             ctx.need_teacher(m['teacherId'])
-        qty = max(1, int(d.get('qty') or 1))
+        try:
+            qty = max(1, int(d.get('qty') or 1))
+        except (TypeError, ValueError):
+            raise Problem('err.amount', 'Write the amount.')
+        if m.get('stock') is not None and (m.get('stock') or 0) < qty:   # never sell paper that is not on the shelf
+            raise Problem('err.noStock', 'Only {n} left in stock.', n=max(0, m.get('stock') or 0))
         row.update({'materialId': m['id'], 'qty': qty, 'teacherId': m.get('teacherId') or ''})
         ops.append({'e': 'materials', 'id': m['id'], 'op': 'put', 'ver': m['ver'], 'row': {**_strip(m), 'stock': (m.get('stock') or 0) - qty}})
         label = f'Handout {m["name"]} x{qty}' + (f' to {st["name"]}' if st else '')
@@ -951,12 +957,34 @@ def ref_used(store, method, ref):
     return {'no': r[0], 'name': (st or {}).get('name') or ''}
 
 
+def _request_key(d):
+    """The page sends one random key per payment dialog. When the answer of a saved payment is lost (the network to the
+    centre PC dropped after the save), pressing Save again returns the first receipt instead of taking the money twice."""
+    key = str(d.get('key') or '')
+    return key if re.fullmatch(r'[0-9a-f]{12,32}', key) else ''
+
+
+def _already_paid(ctx, pid):
+    old = ctx.store.row('payments', pid) if pid else None
+    if old:
+        ctx.need('money.collect')
+        if old.get('teacherId'):
+            ctx.need_teacher(old['teacherId'])
+        return {**old, 'again': True}
+    return None
+
+
 @atomic_operation
 def pay(ctx, d):
+    key = _request_key(d)
+    pid = ('pk' + key) if key else ''
+    again = _already_paid(ctx, pid)   # checked under the operation lock, so two quick retries cannot both save
+    if again:
+        return again
     row, ops, label = _build_payment(ctx, d)
     with ctx.store.lock:  # numbering and saving under one lock: two clicks never get the same number
         row['no'] = _next_no(ctx.store, 'payments', 'R', ctx.letter(), date.today().year)
-        pid = new_id('pa')
+        pid = pid or new_id('pa')
         ops.insert(0, {'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
         ctx.commit(f'{label} ({row["no"]})', ops)
     return {'id': pid, **row}
@@ -974,6 +1002,11 @@ def pay_many(ctx, d):
         raise Problem('err.chooseGroup', 'Choose the student and the group.')
     if (d.get('method') or 'cash') == 'wallet':
         raise BadRequest('Pay each child from his own money in advance')
+    key = _request_key(d)
+    if key and ctx.store.row('payments', 'pk' + key + 'n0'):   # the answer was lost: give back the first save
+        receipts = [_already_paid(ctx, 'pk' + key + 'n' + str(n)) for n in range(len(items))]
+        receipts = [r for r in receipts if r]
+        return {'batch': receipts[0].get('batch'), 'total': round(sum(r['amount'] for r in receipts), 2), 'receipts': receipts, 'again': True}
     built = []
     for it in items:
         if not isinstance(it, dict):
@@ -988,7 +1021,7 @@ def pay_many(ctx, d):
         for n, (row, o, _label) in enumerate(built):
             row['no'] = D.doc_no(first[0], 2000 + first[1], first[2], first[3] + n)
             row['batch'] = batch
-            pid = new_id('pa')
+            pid = ('pk' + key + 'n' + str(n)) if key else new_id('pa')
             ops.append({'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
             ops.extend(o)
             receipts.append({'id': pid, **row})

@@ -231,7 +231,7 @@
             var o = e.target.closest('[data-open]'); if (o) { openStudent(o.dataset.open); return; }
             if (e.target.closest('[data-edit]')) { editStudent(id); return; }
             if (e.target.closest('[data-card]')) { HS.printCards([f.student]); return; }
-            if (e.target.closest('[data-wa]')) { HS.get('/api/c/wa?studentId=' + encodeURIComponent(id) + '&kind=monthly&lang=' + HS.lang).then(function (r) { if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener'); }, function (er) { HS.toast(U.errorText(er), 'bad'); }); return; }
+            if (e.target.closest('[data-wa]')) { HS.waQueue([{ id: id, name: f.student.name }], 'monthly', function () { reload('follow'); }); return; }
             if (e.target.closest('[data-enrol]')) { pickGroup(f.student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: id, groupId: gid }, extra || {})); }, function () { reload('groups'); }); return; }
             var tr = e.target.closest('[data-transfer]');
             if (tr) {

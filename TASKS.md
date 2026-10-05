@@ -51,7 +51,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Fees per enrolment, pay dialog (opens the cash shift first), e-wallet reference, 80 mm receipt print
   - [x] Today's sessions strip + roll-call panel (P5.4 basics); live refresh without redrawing the door
   - [x] Browser tests `tests/test_e2e_center.py` (door flow, roll call, phone tab bar) – 3 OK with local Chrome
-  - [ ] Handout sale, wallet top-up and sounds setting on the card; camera scan verified on HTTPS
+  - [x] Handout sale (teacher's handouts first, never beyond stock - `err.noStock`) and money in advance from the card; sounds setting obeyed (A04)
+  - [ ] Camera scan verified on HTTPS (B03 - needs a phone and the remote-access address)
 - [ ] P5.2 Students + student panel + cards/receipt printing
   - [x] List filters (grade, group, teacher, debt, risk, no parent number) with computed balances (`/api/c/balances`)
   - [x] Student file tabs; grade-system-track form; enrol/move/end with seats; follow-up log; ID cards with QR (10 per A4)
@@ -89,9 +90,10 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A01 The parent link the program hands out is the page the gateway serves (`/t/<token>`, was `/app/#<token>` whose fragment never reaches the server); the message text carries the same link
 - [x] A02 A replaced link or a removed student is revoked on the gateway; the list of hashes the gateway may hold is kept on this PC (`gateway-cards.json`, hashes only) so the revoke survives an internet outage and a restart
 - [x] A03 Staff personal-link page: `js/quick.js` now exists (a real browser signs in by itself; a preview or scanner never does; another signed-in person is asked first), Arabic-first page, broken characters fixed
-- [ ] A04 Door sound / automatic check-in settings not read by the door
-- [ ] A05 Opening WhatsApp counted as "sent"; follow-up save failures hidden
-- [ ] A06 Windows build needs `docs/GATEWAY_SETUP.md` and `docs/RELEASE_NOTES.md`
+- [x] A04 Door sound / automatic check-in are centre settings (Settings → Rules) and the door obeys them on every PC
+- [x] A05 Opening WhatsApp/SMS is not "sent": the person confirms, only then a follow-up is logged and counted; a failed save shows and can be retried (door and student file use the same sender)
+- [x] A06 `docs/GATEWAY_SETUP.md` (Egyptian Arabic) and `docs/RELEASE_NOTES.md` written; `build_windows.py --check` fails in seconds on any missing shipped file and runs on every push
+- [x] A07 Lost connection to the centre PC: a bar on every page, save buttons dimmed, writes refused in the browser (no hidden queue); a payment saved again after a lost answer returns the same receipt (one key per dialog, `pk<key>` ids)
 
 ## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)
 - [x] A1 Devices & Sync page and the light in the top bar (PCs, to decide, warnings, record check, administrator key, backup administrator PC)

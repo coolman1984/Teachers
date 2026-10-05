@@ -458,6 +458,12 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 .log-diff .now { font-weight: 600; }
 .log-ver { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 @media (max-width: 560px) { .sync-pill { padding: .3rem .5rem; } }
+/* the centre PC cannot be reached: one plain sentence above every page, and the save buttons look unavailable (a click
+   still explains why - js/core.js refuses the write instead of keeping it in the browser) */
+.offline-bar { display: none; align-items: center; gap: .6rem; padding: .7rem 1rem; background: var(--bad-soft); color: var(--bad); border-bottom: 1px solid var(--bad); }
+.offline-bar .ic { flex: none; }
+html[data-offline] .offline-bar { display: flex; }
+html[data-offline] .content .btn.primary, html[data-offline] #overlay .btn.primary, html[data-offline] #panels .btn.primary { opacity: .45; cursor: not-allowed; }
 .conn-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .75rem; border-radius: 999px; background: var(--bad-soft); color: var(--bad); font-weight: 650; font-size: .85rem; animation: pop var(--t-med) var(--ease) both; }
 
 /* ---------- front desk (door) ---------- */
