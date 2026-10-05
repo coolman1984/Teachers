@@ -2,6 +2,18 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The inherited tests now test the centre (review E07-E09 - 2026-10-05)
+
+**Why:** since the fork, 6 browser scenarios and 25 multi-PC scenarios still wrote trips, vehicles and drivers, failed, and were left
+out of CI - so the most valuable engine checks (outages, conflicts, crashes, tampering, restore, four PCs, people and profiles,
+joining) were not running for Hessa at all.
+**What:** the browser trip scenarios became `CentreAdminTest` (teacher-scoped account end to end, Recycle Bin, student import, slides,
+report presentation). The multi-PC file kept every scenario and only changed its neutral record: a teacher (scope = its own id) and
+settings rows for attachments; three assertions now compare sorted permissions. CI got `test_multinode` and a `browser` job.
+**Found:** `store.py` refused `/files/../x` only in a top-level `src`; a setting value (the centre logo) could carry one - fixed.
+**Lessons:** a red test left aside is a hole in the net, not noise: migrating it found a real gap in an afternoon.
+**Evidence:** `test_multinode` 35/35 (about 3 minutes), `test_e2e_browser` 12/12, `test_ci` checks both CI selections.
+
 ## Work from outside the centre, safely (owner's request, review D01-D08 - 2026-10-05)
 
 **Why:** the owner wants to run Hessa on the centre PC and work on it from a phone or another computer over the internet, without

@@ -14,9 +14,17 @@ class WorkflowTest(unittest.TestCase):
         for module in modules:
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         for module in ('test_center_api', 'test_center_network', 'test_sample', 'test_ci',
-                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway', 'test_center_links', 'test_center_review', 'test_center_remote', 'test_gateway_parent'):
+                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway', 'test_center_links', 'test_center_review', 'test_center_remote', 'test_gateway_parent', 'test_multinode'):
             self.assertIn(module, modules)
         self.assertIn('node --test tests/test_frontend.js', workflow)
+
+    def test_the_browser_job_runs_the_screens(self):
+        workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
+        job = workflow.split('  browser:', 1)[1].split('  windows-installer:', 1)[0]
+        for module in ('test_e2e_browser', 'test_e2e_center', 'test_center_review', 'test_gateway_parent'):
+            self.assertIn(module, job)
+            self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
+        self.assertIn('HS_CHROMIUM', job)
 
     def test_installer_publication_requires_an_explicit_version_tag(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')

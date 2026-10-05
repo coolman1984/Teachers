@@ -143,9 +143,11 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 ## Phase P8 – Daily scenario tests (browser)
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)
   - [x] 11 browser scenarios incl. the core journey as the Front desk profile (advisor -> shift -> scan -> pay -> absentee message -> close)
-  - [ ] Teacher-scoped login scenario and two-PC UI scenario
-  - [ ] Migrate legacy `tests/test_e2e_browser.py` trip/import/reports/slides scenarios (6 errors since the fork, same before and after 2026-10-05; shell tests pass)
-  - [ ] Migrate legacy `tests/test_multinode.py` (still writes trip entities; 24 errors + 1 failure since the fork, excluded from CI) to centre entities
+  - [x] Teacher-scoped login scenario (`CentreAdminTest.test_a`)
+  - [ ] Two-PC scenario through two browsers (the engine side is covered by test_multinode/test_center_network)
+  - [x] Legacy `tests/test_e2e_browser.py` trip scenarios replaced by `CentreAdminTest` (teacher account limited to one teacher incl. password change and API refusal, Recycle Bin restore of a room, student import with Arabic digits and re-import matching, slides both directions, month report + presentation) - 12/12 pass (review E07)
+  - [x] `tests/test_multinode.py` migrated: the neutral record is a teacher (scoped by its own id like a trip was by category), attachments ride on settings rows; all 35 multi-PC scenarios pass and run in CI (review E08). Found on the way: a bad `/files/..` path inside a setting value was not refused (fixed in `store.py`)
+  - [x] CI: a `browser` job runs the screen tests with the runner's Chrome (review E09)
 
 ## Phase P9 – Differentiators 2
 - [ ] P9.1 Bubble sheets print + phone reading

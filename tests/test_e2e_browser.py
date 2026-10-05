@@ -126,217 +126,158 @@ class ShellTest(BrowserBase):
 
 
 @SKIP
-class TripFlowTest(BrowserBase):
-    """The office flow in the browser: lists, a new trip, the trip panel, an amendment, the board and the review queue."""
+class CentreAdminTest(BrowserBase):
+    """The administrator's flows in a real browser (replaces the inherited trip scenarios, review E07): a teacher account limited to
+    one teacher, a deleted list record brought back from the Recycle Bin, a student import with its preview, the welcome slides in
+    both directions and the month report with its presentation."""
 
-    def add(self, pg, addbtn, values):
-        pg.click(addbtn)
-        pg.wait_for_selector('.drawer.on #rec-form')
-        for name, val in values.items():
-            pg.fill(f'.drawer.on [name="{name}"]', val)
-        pg.click('.drawer.on [data-save]')
-        pg.wait_for_selector('.drawer', state='detached')
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.c = cls.S.client()
+        cls.c.login(ADMIN[0], ADMIN[1])
+        from datetime import date
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server'))
+        import domain as D
+        wd = D.weekday(date.today())
+        ops = [('subjects', 'ca-sub', {'name': 'Synthetic Subject'}),
+               ('teachers', 'ca-t1', {'name': 'Synthetic Teacher One'}), ('teachers', 'ca-t2', {'name': 'Synthetic Teacher Two'})]
+        for t in ('1', '2'):
+            ops.append(('groups', 'ca-g' + t, {'name': 'Synthetic Group ' + t, 'teacherId': 'ca-t' + t, 'subjectId': 'ca-sub', 'gradeCode': 'S2', 'feeType': 'session',
+                                              'fee': 50, 'capacity': 30, 'active': True, 'slots': [{'day': wd, 'start': '00:00', 'end': '23:59'}]}))
+            ops.append(('students', 'ca-s' + t, {'code': '4500' + t, 'name': 'Synthetic Pupil ' + t, 'gradeCode': 'S2', 'system': 'thanaweya', 'consent': True, 'active': True}))
+        cls.c.post('/api/commit', {'label': 'Admin fixture', 'ops': [{'e': e, 'id': i, 'op': 'put', 'row': r} for e, i, r in ops]})
+        for t in ('1', '2'):
+            cls.c.post('/api/c/enroll', {'studentId': 'ca-s' + t, 'groupId': 'ca-g' + t})
 
-    def test_full_office_flow(self):
+    def test_a_teacher_account_sees_only_its_teacher(self):
         pg = self.open({'lang': 'en'})
-        pg.goto(self.S.base + '/#/settings?tab=rules')
-        pg.wait_for_selector('[data-add]')
-        self.add(pg, '[data-add]', {'name': 'Manager car'})
-        pg.goto(self.S.base + '/#/vehicles')
-        pg.wait_for_selector('[data-add]')
-        self.add(pg, '[data-add]', {'plate': 'ط و ي  ٦٨٢٩'})
-        self.assertIn('6829', pg.inner_text('.tbl'))
-        pg.goto(self.S.base + '/#/drivers')
-        pg.wait_for_selector('[data-add]')
-        self.add(pg, '[data-add]', {'name': 'Ahmed  Ali', 'mobile': '01012345678'})
-        self.assertIn('+201012345678', pg.inner_text('.tbl'))
-        # the same driver typed with other spacing is refused, nothing is lost
-        pg.click('[data-add]')
-        pg.wait_for_selector('.drawer.on #rec-form')
-        pg.fill('.drawer.on [name="name"]', 'ahmed ali')
-        pg.click('.drawer.on [data-save]')
-        pg.wait_for_selector('.toast.bad')
-        pg.keyboard.press('Escape')
-        # new trip with the keyboard shortcut, a requester that does not exist yet is created on the fly
-        pg.goto(self.S.base + '/#/trips')
-        pg.wait_for_selector('[data-new]')
-        pg.keyboard.press('KeyN')
-        pg.wait_for_selector('#nt-form')
-        pg.fill('#nt-form [name="categoryId"]', 'Manager car')
-        pg.fill('#nt-form [name="vehicleId"]', 'ط و ي 6829')
-        pg.fill('#nt-form [name="driverId"]', 'Ahmed Ali')
-        pg.fill('#nt-form [name="requesterId"]', 'Sara Adel')
-        pg.fill('#nt-form [name="departmentId"]', 'HR')
-        pg.fill('#nt-form [name="passengersText"]', 'Sara Adel - Visitor')
-        pg.fill('#nt-form [name="destination"]', 'Factory-Capital-Factory')
-        pg.click('#overlay [data-save]')
-        pg.wait_for_selector('.drawer.on [data-trip]')
-        self.assertRegex(pg.inner_text('.drawer.on header h2'), r'^\d\d-A-\d{5}$')
-        self.assertIn('Visitor', pg.inner_text('.drawer.on'))
-        # amend needs a reason
-        pg.click('.drawer.on [data-a="amend"]')
-        pg.wait_for_selector('#am-f')
-        pg.select_option('#am-f', 'destination')
-        pg.fill('#am-v [name="v"]', 'Airport')
-        pg.click('#overlay [data-ok]')
-        self.assertTrue(pg.is_visible('#overlay .err'))
-        pg.fill('#am-r', 'Passenger changed the plan')
-        pg.click('#overlay [data-ok]')
-        pg.wait_for_selector('#overlay.on', state='detached')
-        pg.wait_for_selector('.drawer.on :text("Passenger changed the plan")')
-        pg.keyboard.press('Escape')
-        pg.wait_for_selector('.drawer', state='detached')
-        self.assertIn('Airport', pg.inner_text('.tbl'))
-        # board and review pages render
-        pg.goto(self.S.base + '/#/board')
-        pg.wait_for_selector('.board-card')
-        pg.goto(self.S.base + '/#/review')
-        pg.wait_for_selector('#view')
-        self.assertEqual([e for e in self.errors if '400' not in e], [], 'only the refused duplicate driver (HTTP 400) is expected')
-
-
-    def test_people_and_access(self):
-        pg = self.open({'lang': 'en'})
-        pg.goto(self.S.base + '/#/settings?tab=rules')
-        pg.wait_for_selector('[data-add]')
-        pg.click('[data-add]')
-        pg.wait_for_selector('.drawer.on #rec-form')
-        pg.fill('.drawer.on [name="name"]', 'Extra')
-        pg.click('.drawer.on [data-save]')
-        pg.wait_for_selector('.drawer', state='detached')
         pg.goto(self.S.base + '/#/settings?tab=access')
         pg.wait_for_selector('[data-adduser]')
         pg.click('[data-adduser]')
         pg.wait_for_selector('.drawer.on #u-form')
-        pg.fill('.drawer.on [name="full_name"]', 'Dina Dispatcher')
-        pg.fill('.drawer.on [name="username"]', 'dina.d')
-        pg.fill('.drawer.on [name="password"]', 'Dispatch-77x')
-        pg.select_option('.drawer.on [name="role"]', 'Dispatcher')
-        self.assertTrue(pg.is_checked('.drawer.on [data-perm="trips.create"]'))
+        pg.fill('.drawer.on [name="full_name"]', 'Synthetic Teacher Account')
+        pg.fill('.drawer.on [name="username"]', 'teacher.one')
+        pg.fill('.drawer.on [name="password"]', 'Lantern-oak-8812')
+        pg.select_option('.drawer.on [name="role"]', 'Teacher')
+        self.assertTrue(pg.is_checked('.drawer.on [data-perm="marks.enter"]'))
         self.assertFalse(pg.is_checked('.drawer.on [data-perm="users.manage"]'))
         pg.click('.drawer.on [data-scope="some"]')
-        pg.check('.drawer.on [data-cat]')
+        pg.check('.drawer.on [data-teacher="ca-t1"]')
         pg.click('.drawer.on [data-save]')
         pg.wait_for_selector('.drawer', state='detached')
-        self.assertIn('Dina Dispatcher', pg.inner_text('.tbl'))
-        # she can sign in and does not see the administrator pages
+        self.assertIn('Synthetic Teacher Account', pg.inner_text('#view'))
+        # the teacher signs in, sets a password, and sees only the first teacher's group and student - also through the API
         ctx = self.browser.new_context()
+        ctx.add_init_script("localStorage.setItem('hs.prefs', JSON.stringify({welcomed: true, lang: 'en'}))")
         p2 = ctx.new_page()
         p2.goto(self.S.base)
         p2.wait_for_selector('#auth-form')
-        p2.fill('#username', 'dina.d')
-        p2.fill('#password', 'Dispatch-77x')
+        p2.fill('#username', 'teacher.one')
+        p2.fill('#password', 'Lantern-oak-8812')
         p2.click('button[type=submit]')
-        p2.wait_for_selector('#form-must, #auth-form input[name="old"]')
+        p2.wait_for_selector('[name="old"]')
+        p2.fill('[name="old"]', 'Lantern-oak-8812')
+        p2.fill('[name="new"]', 'Willow-stone-4471')
+        if p2.query_selector('[name="new2"]'):
+            p2.fill('[name="new2"]', 'Willow-stone-4471')
+        p2.click('form button[type=submit]')
+        p2.wait_for_selector('#app-shell')
+        p2.goto(self.S.base + '/#/students')
+        p2.wait_for_selector('tr[data-id]')
+        text = p2.inner_text('#view')
+        self.assertIn('Synthetic Pupil 1', text)
+        self.assertNotIn('Synthetic Pupil 2', text)
+        api = self.S.client()
+        api.login('teacher.one', 'Willow-stone-4471')
+        state = api.get('/api/state')
+        self.assertEqual({g['id'] for g in state['groups'] if g['id'].startswith('ca-')}, {'ca-g1'})
+        self.assertEqual({s['id'] for s in state['students'] if s['id'].startswith('ca-')}, {'ca-s1'})
+        with self.assertRaises(Exception):
+            api.get('/api/c/student?id=ca-s2')                                       # the other teacher's student is refused
+        ctx.close()
 
-
-    def test_delete_goes_to_the_bin_and_comes_back(self):
+    def test_b_a_deleted_room_comes_back_from_the_recycle_bin(self):
         pg = self.open({'lang': 'en'})
-        pg.goto(self.S.base + '/#/vehicles')
-        pg.wait_for_selector('[data-add]')
-        self.add(pg, '[data-add]', {'plate': 'ص ص ص 1111'})
-        pg.click('tbody tr')
-        pg.wait_for_selector('.drawer.on [data-del]')
-        pg.click('.drawer.on [data-del]')
+        pg.goto(self.S.base + '/#/settings?tab=lists')
+        pg.wait_for_selector('[data-list-new="rooms"]')
+        pg.click('[data-list-new="rooms"]')
+        pg.wait_for_selector('.drawer.on [name="name"]')
+        pg.fill('.drawer.on [name="name"]', 'Synthetic Room Z')
+        pg.click('.drawer.on [data-save]')
+        pg.wait_for_selector('.drawer', state='detached')
+        pg.wait_for_selector('text=Synthetic Room Z')
+        pg.click('text=Synthetic Room Z')
+        pg.wait_for_selector('.drawer.on [data-delete]')
+        pg.click('.drawer.on [data-delete]')
         pg.click('#overlay [data-ok]')
         pg.wait_for_selector('.drawer', state='detached')
-        self.assertNotIn('1111', pg.inner_text('#view'))
+        self.assertNotIn('Synthetic Room Z', pg.inner_text('#view'))
+        self.assertFalse(any(r['name'] == 'Synthetic Room Z' for r in self.c.get('/api/state')['rooms']))
         pg.goto(self.S.base + '/#/settings?tab=data')
         pg.wait_for_selector('[data-restore]')
         pg.click('[data-restore]')
         pg.wait_for_selector('.toast')
-        pg.goto(self.S.base + '/#/vehicles')
-        pg.wait_for_selector('tbody tr')
-        self.assertIn('1111', pg.inner_text('#view'))
+        self.assertTrue(any(r['name'] == 'Synthetic Room Z' for r in self.c.get('/api/state')['rooms']))
 
-
-@SKIP
-class ExcelPageTest(BrowserBase):
-    def test_import_review_confirm_and_guide(self):
-        here = os.path.dirname(os.path.abspath(__file__))
+    def test_c_student_import_preview_save_and_the_same_file_again(self):
+        import tempfile
+        path = os.path.join(tempfile.mkdtemp(prefix='hs-imp-'), 'synthetic.csv')
+        with open(path, 'w', encoding='utf-8-sig') as f:
+            f.write('الاسم,الصف,رقم ولي الأمر,المجموعة\n')
+            f.write('Synthetic Import One,ثانية ثانوي,٠١٠١٢٣٤٥٦٧٠,Synthetic Group 1\n')
+            f.write('Synthetic Import Two,ثانية ثانوي,01112345670,Synthetic Group 1\n')
         pg = self.open({'lang': 'en'})
-        pg.goto(self.S.base + '/#/excel')
-        pg.wait_for_selector('#dz')
-        pg.set_input_files('#imp-file', os.path.join(here, 'fixtures', 'sample_sep26_synthetic.xlsx'))
-        pg.wait_for_selector('[data-commit]')
-        self.assertIn('247', pg.inner_text('#xl-body'))
-        self.assertIn('Things to check', pg.inner_text('#xl-body'))
-        pg.click('[data-f="problem"]')
-        self.assertEqual(pg.locator('#xl-body tbody tr').count(), 7)
-        pg.click('[data-f="all"]')
-        pg.check('#imp-problems')
-        pg.click('[data-commit]')
-        pg.wait_for_selector('[data-again]')
-        self.assertIn('247', pg.inner_text('#xl-body'))
-        # the same file again is all duplicates and cannot be confirmed
-        pg.click('[data-again]')
-        pg.set_input_files('#imp-file', os.path.join(here, 'fixtures', 'sample_sep26_synthetic.xlsx'))
-        pg.wait_for_selector('[data-commit]')
-        self.assertTrue(pg.locator('[data-commit]').is_disabled())
-        # wrong file type gives a plain message
-        pg.click('[data-cancel]')
-        pg.set_input_files('#imp-file', files=[{'name': 'trips.xlsx', 'mimeType': 'application/octet-stream', 'buffer': b'<## NASCA DRM FILE - VER1.00 ##>' + bytes(range(256)) * 8}])
-        pg.wait_for_selector('#xl-body .tip.bad')
-        self.assertIn('document-security', pg.inner_text('#xl-body'))
-        # a csv with Arabic text is read too (and shows the review)
-        csv = ('Date,Driver Name,Car Plate,Strat KM,End KM\n2026-10-01,علي حسن,س ع د 555,100,180\n').encode('utf-8-sig')
-        pg.set_input_files('#imp-file', files=[{'name': 'x.csv', 'mimeType': 'text/csv', 'buffer': csv}])
-        pg.wait_for_selector('[data-commit]')
-        pg.click('[data-cancel]')
-        # export tab, Arabic, guide
-        pg.click('[data-tab="export"]')
-        pg.wait_for_selector('#ex-ym')
-        pg.click('[data-tab="guide"]')
-        self.assertEqual(pg.locator('#xl-body details').count(), 12)
-        pg.keyboard.press('KeyL')
-        pg.wait_for_function("document.documentElement.dir === 'rtl'")
-        pg.click('[data-tab="import"]')
-        pg.wait_for_selector('#dz')
-        self.assertIn('اختار', pg.inner_text('#xl-body'))
-        self.assertEqual([e for e in self.errors if 'Failed to load resource' not in e], [])   # the refused file is an expected 400
+        pg.goto(self.S.base + '/#/students/import')
+        pg.wait_for_selector('[data-import-form]')
+        pg.set_input_files('[data-import-form] input[type=file]', path)
+        pg.click('[data-import-form] [type=submit]')
+        pg.wait_for_selector('[data-import-save]')
+        self.assertEqual(pg.locator('[data-row]').count(), 2)
+        pg.check('[data-import-preview] [name="consent"]')
+        pg.click('[data-import-save]')
+        pg.click('#overlay [data-ok]')
+        pg.wait_for_selector('.toast')
+        st = [s for s in self.c.get('/api/state')['students'] if s['name'].startswith('Synthetic Import')]
+        self.assertEqual(len(st), 2)
+        self.assertIn('01012345670', {s.get('parentMobile') for s in st})          # Arabic digits normalised
+        en = [e for e in self.c.get('/api/state')['enrollments'] if e['studentId'] in {s['id'] for s in st}]
+        self.assertEqual({e['groupId'] for e in en}, {'ca-g1'})
+        # the same file again finds both students: nothing new is made
+        pg.set_input_files('[data-import-form] input[type=file]', path)
+        pg.click('[data-import-form] [type=submit]')
+        pg.wait_for_selector('[data-import-save]')
+        with open(path, 'rb') as f:
+            rows = self.c.call('POST', '/api/import/preview?name=synthetic.csv', raw=f.read(), headers={'Content-Type': 'application/octet-stream'})['rows']
+        self.assertTrue(all(r.get('match') for r in rows), rows)
+        self.assertEqual(self.errors, [])
 
-
-@SKIP
-class SlidesTest(BrowserBase):
-    def test_every_welcome_slide_shows_in_both_directions(self):
+    def test_d_every_welcome_slide_shows_in_both_directions(self):
         for lang in ('ar', 'en'):
             pg = self.open({'lang': lang}, width=1800)
-            pg.evaluate("() => TO.slides.open()")
+            pg.evaluate("() => HS.slides.open()")
             for k in range(6):
-                pg.evaluate("(k) => TO.slides._go(k)", k)
+                pg.evaluate("(k) => HS.slides._go(k)", k)
                 pg.wait_for_timeout(650)
                 box = pg.evaluate("(k) => { const r = document.querySelectorAll('#slides section')[k].getBoundingClientRect(); return [r.left, r.right]; }", k)
                 self.assertTrue(abs(box[0]) < 2 and abs(box[1] - 1800) < 2, (lang, k, box))
 
-
-@SKIP
-class ReportsPageTest(BrowserBase):
-    def test_reports_and_presentation(self):
-        here = os.path.dirname(os.path.abspath(__file__))
-        from harness import ADMIN
-        c = self.S.client()
-        c.login(ADMIN[0], ADMIN[1])
-        with open(os.path.join(here, 'fixtures', 'sample_sep26_synthetic.xlsx'), 'rb') as f:
-            pv = c.call('POST', '/api/excel/preview?name=s.xlsx', raw=f.read(), headers={'Content-Type': 'application/octet-stream'})
-        c.post('/api/excel/commit', {'id': pv['id'], 'includeProblems': True})
-        api = c.get('/api/reports?ym=2026-09')
-        self.assertEqual(api['summary']['total']['trips'], 247)
-        self.assertTrue(api['reconciliation'] and api['anomalies'])
+    def test_e_month_report_and_presentation(self):
+        self.c.post('/api/c/shift/open', {'opening': 0})
+        self.c.post('/api/c/pay', {'studentId': 'ca-s1', 'groupId': 'ca-g1', 'kind': 'fee', 'amount': 120, 'method': 'cash'})
         pg = self.open({'lang': 'en'})
         pg.goto(self.S.base + '/#/reports')
-        pg.fill('#rp-ym', '2026-09')
-        pg.wait_for_selector('.bar-row')
-        self.assertIn('247', pg.inner_text('#rp-body'))
-        pg.click('[data-g="byDriver"]')
-        self.assertGreater(pg.locator('#rp-body table tbody tr').count(), 5)
+        pg.wait_for_selector('.rep-kpis')
+        self.assertIn('120', pg.inner_text('.rep-kpis'))
+        self.assertIn('Synthetic Group 1', pg.inner_text('#view'))                  # profitability lists the group
         pg.click('[data-present]')
         pg.wait_for_selector('.present .ps')
         pg.keyboard.press('ArrowRight')
-        self.assertIn('1 / 6'.replace('1', '2', 1), pg.inner_text('.present .pn'))
+        self.assertIn('2 / ', pg.inner_text('.present .pn'))
         pg.keyboard.press('Escape')
         self.assertEqual(pg.locator('.present').count(), 0)
         self.assertEqual(self.errors, [])
-
 
 if __name__ == '__main__':
     unittest.main()

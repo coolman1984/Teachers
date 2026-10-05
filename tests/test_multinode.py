@@ -13,46 +13,53 @@ import unittest
 from harness import ADMIN, ApiError, Server, TcpProxy, make_authority, pair, wait_until
 
 
-FIELD = {'name': 'no', 'description': 'notes', 'responsible': 'purpose', 'capacity': 'seq'}  # neutral names used by the tests below
+FIELD = {'name': 'name', 'description': 'bio', 'responsible': 'notes', 'capacity': 'rentMonth'}  # neutral names used by the tests below
+# T31 edits five fields at once on four PCs; these are the teacher fields it uses
+RAW = {'destination': 'slug', 'purpose': 'notes', 'notes': 'color', 'seq': 'rentMonth', 'routeText': 'settleModel'}
 
 
 def area_op(aid, name, **kw):
-    """A trip used as a neutral test record: name = trip no, description = notes, responsible = purpose, capacity = seq."""
-    row = {'no': name, 'date': '2026-09-26', 'categoryId': kw.pop('category', 'cat1')}
+    """A teacher used as a neutral test record (it was a trip in the inherited engine, review E08): name, description = bio,
+    responsible = notes, capacity = rentMonth. A teacher is scoped by its own id, like a trip was by its category."""
+    kw.pop('category', None)
+    row = {'name': name}
     for k in list(kw):
-        if k in FIELD:
-            row[FIELD[k]] = kw.pop(k)
-    row.update(kw)
-    return {'e': 'trips', 'id': aid, 'op': 'put', 'row': row}
+        row[FIELD.get(k, RAW.get(k, k))] = kw.pop(k)
+    return {'e': 'teachers', 'id': aid, 'op': 'put', 'row': row}
 
 
 def raw_trip(c, aid):
-    return next((t for t in c.get('/api/state')['trips'] if t['id'] == aid), None)
+    return next((t for t in c.get('/api/state')['teachers'] if t['id'] == aid), None)
 
 
 def get_area(c, aid):
-    """The trip with the neutral names added, and its photos."""
+    """The record with the neutral names added, and its attachments."""
     st = c.get('/api/state')
-    t = next((t for t in st['trips'] if t['id'] == aid), None)
+    t = next((t for t in st['teachers'] if t['id'] == aid), None)
     if t is None:
         return None
     out = dict(t)
     for legacy, f in FIELD.items():
         if f in t:
             out[legacy] = t[f]
-    out['photos'] = [p for p in st['tripPhotos'] if p['tripId'] == aid]
+    for legacy, f in RAW.items():
+        if f in t and legacy not in ('notes',):
+            out[legacy] = t[f]
+    out['notes'] = t.get('color')
+    out['photos'] = [v for k, v in sorted((st.get('settings') or {}).items()) if k.startswith('att-') and isinstance(v, dict) and v.get('owner') == aid]
     return out
 
 
 def edit(c, aid, **fields):
     t = raw_trip(c, aid)
-    row = {k: v for k, v in t.items() if k != 'ver'}
-    row.update({FIELD.get(k, k): v for k, v in fields.items()})
-    return c.post('/api/commit', {'label': 'edit', 'ops': [{'e': 'trips', 'id': aid, 'op': 'put', 'ver': t['ver'], 'row': row}]})
+    row = {k: v for k, v in t.items() if k not in ('ver', 'id', 'nameKey')}
+    row.update({FIELD.get(k, RAW.get(k, k)): v for k, v in fields.items()})
+    return c.post('/api/commit', {'label': 'edit', 'ops': [{'e': 'teachers', 'id': aid, 'op': 'put', 'ver': t['ver'], 'row': row}]})
 
 
 def photo_op(pid, tripid, src, **kw):
-    return {'e': 'tripPhotos', 'id': pid, 'op': 'put', 'row': {'tripId': tripid, 'src': src, 'kind': 'paper', **kw}}
+    """An uploaded file tied to a record: a settings row (the engine's attachment rows carry the file itself)."""
+    return {'e': 'settings', 'id': 'att-' + pid, 'op': 'put', 'row': {'value': {'owner': tripid, 'src': src, 'kind': 'paper', **kw}}}
 
 
 def fingerprint(c):
@@ -132,7 +139,7 @@ class T00_DefinitionOfSuccess(Base):
         # users with limited rights, created on the administrator PC
         for name, pw in (('ali', 'Tree-green42'), ('mona', 'Sky-blue7700')):
             ac.post('/api/users/save', {'username': name, 'full_name': name.title(), 'password': pw, 'must_change': False, 'role': 'Data Entry',
-                                        'perms': ['overview.view', 'trips.view', 'trips.create', 'trips.edit', 'files.download'], 'scopes': None})
+                                        'perms': ['overview.view', 'groups.view', 'teachers.manage', 'settings.edit', 'files.download'], 'scopes': None})
         ac.post('/api/commit', {'label': 'start', 'ops': [area_op('S1', 'Main canteen', capacity=40)]})
         self.converged()
         # 1. administrator PC switched off
@@ -213,13 +220,13 @@ class T03_Cluster(Base):
     def test_a_users_and_initial_sync(self):
         ac = self.ac
         ac.post('/api/users/save', {'username': 'sara', 'full_name': 'Sara M', 'password': 'Temp-pass99', 'must_change': False,
-                                    'perms': ['overview.view', 'trips.view', 'trips.edit', 'trips.send'], 'scopes': None, 'role': 'Custom'})
+                                    'perms': ['overview.view', 'groups.view', 'teachers.manage', 'messages.send'], 'scopes': None, 'role': 'Custom'})
         ac.post('/api/commit', {'label': 'data', 'ops': [area_op('A1', 'Area One'), area_op('A2', 'Area Two')]})
         self.converged()
         for i in (1, 2):
             c = self.servers[i].client()
             c.login('sara', 'Temp-pass99')  # the account works on every PC
-            self.assertEqual({a['id'] for a in c.get('/api/state')['trips']}, {'A1', 'A2'})
+            self.assertEqual({a['id'] for a in c.get('/api/state')['teachers']}, {'A1', 'A2'})
 
     def test_b_realtime(self):
         """6. A change on one PC appears on the others within seconds."""
@@ -247,7 +254,7 @@ class T03_Cluster(Base):
         c2 = self.servers[2].client()
         c2.login('sara', 'Temp-pass99')
         self.unplug(2)
-        body = {**u, 'perms': ['overview.view', 'trips.view'], 'active': False}
+        body = {**u, 'perms': ['overview.view', 'groups.view'], 'active': False}
         ac.post('/api/users/save', body)
         # pc2 does not know yet: sara is still logged in there (documented offline window)
         self.assertTrue(c2.get('/api/me'))
@@ -257,7 +264,7 @@ class T03_Cluster(Base):
             self.servers[2].client().login('sara', 'Temp-pass99')
         self.converged()
         pc1_users = {x['username']: x for x in self.clients[1].get('/api/users')['users']}
-        self.assertEqual(pc1_users['sara']['perms'], ['overview.view', 'trips.view'])
+        self.assertEqual(sorted(pc1_users['sara']['perms']), ['groups.view', 'overview.view'])
         self.assertFalse(pc1_users['sara']['active'])
 
     @staticmethod
@@ -414,7 +421,7 @@ class T11_Conflicts(Base):
         edit(c0, 'C1', destination='pc0 destination')
         # 15 delete while another PC edits
         a = get_area(c0, 'C2')
-        c0.post('/api/commit', {'label': 'del', 'ops': [{'e': 'trips', 'id': 'C2', 'op': 'del', 'ver': a['ver']}]})
+        c0.post('/api/commit', {'label': 'del', 'ops': [{'e': 'teachers', 'id': 'C2', 'op': 'del', 'ver': a['ver']}]})
         edit(c1, 'C2', description='edited while deleted elsewhere')
         self.heal()
         for c in self.clients:
@@ -435,13 +442,13 @@ class T11_Conflicts(Base):
         self.assertEqual(lists[0], lists[1])
         self.assertEqual(lists[0], lists[2])
         # the administrator resolves the text conflict; it disappears everywhere
-        self.ac.post('/api/conflicts/resolve', {'entity': 'trips', 'id': 'C1', 'action': 'value', 'field': 'notes', 'value': 'agreed text'})
+        self.ac.post('/api/conflicts/resolve', {'entity': 'teachers', 'id': 'C1', 'action': 'value', 'field': 'bio', 'value': 'agreed text'})
         self.converged()
         for c in self.clients:
             self.assertEqual(get_area(c, 'C1')['description'], 'agreed text')
             self.assertNotIn(('C1', 'conflict'), {(x['id'], x['kind']) for x in c.get('/api/conflicts')})
         # the Recycle Bin still has the deleted area with the edit made on pc1
-        self.ac.post('/api/conflicts/resolve', {'entity': 'trips', 'id': 'C2', 'action': 'restore'})
+        self.ac.post('/api/conflicts/resolve', {'entity': 'teachers', 'id': 'C2', 'action': 'restore'})
         self.converged()
         self.assertEqual(get_area(self.clients[2], 'C2')['description'], 'edited while deleted elsewhere')
 
@@ -469,7 +476,7 @@ class T11_Conflicts(Base):
         notes = {get_area(c, 'RC')['description'] for c in self.clients}
         self.assertEqual(len(notes), 1, 'every PC ends with the same value')
         self.assertIn(notes.pop(), written)
-        rows = [r for r in self.ac.get('/api/audit?scope=cat1&limit=1000')['rows'] if r['entity_id'] == 'RC']
+        rows = [r for r in self.ac.get('/api/audit?scope=RC&limit=1000')['rows'] if r['entity_id'] == 'RC']
         self.assertGreaterEqual(len(rows), len(written), 'every change made on any PC is in the history')
 
 
@@ -489,12 +496,12 @@ class T19_Crashes(Base):
         self.plug(1)
         for _ in range(10):
             time.sleep(0.5)
-            n = len([a for a in self.clients[1].get('/api/state')['trips'] if a['id'].startswith('B')])
+            n = len([a for a in self.clients[1].get('/api/state')['teachers'] if a['id'].startswith('B')])
             self.assertEqual(n, 0, 'the 800 kB change cannot arrive through connections cut after 60 kB, and nothing half-applied')
         for p in self.proxies:
             p.cut_after = None
         self.converged()
-        self.assertEqual(len([a for a in self.clients[1].get('/api/state')['trips'] if a['id'].startswith('B')]), 400)
+        self.assertEqual(len([a for a in self.clients[1].get('/api/state')['teachers'] if a['id'].startswith('B')]), 400)
 
     def test_b_crash_during_sync_and_restart(self):
         """20-21. Hard kill of a PC while it receives changes; after restart everything is consistent and complete."""
@@ -509,7 +516,7 @@ class T19_Crashes(Base):
         rep = self.clients[1].post('/api/devices/verify', {'all': True})
         self.assertTrue(rep['ok'], rep)
         self.converged()
-        self.assertEqual(len([a for a in self.clients[1].get('/api/state')['trips'] if a['id'].startswith('K')]), 20)
+        self.assertEqual(len([a for a in self.clients[1].get('/api/state')['teachers'] if a['id'].startswith('K')]), 20)
 
     def test_c_attachments(self):
         """22-23. Upload on one PC; the other shows a placeholder while the file is missing, continues an interrupted
@@ -604,7 +611,7 @@ class T30_Restore(Base):
         name = ac.post('/api/backups')['name']
         edit(ac, 'R1', description='bad change')
         a = get_area(ac, 'R2')
-        ac.post('/api/commit', {'label': 'oops', 'ops': [{'e': 'trips', 'id': 'R2', 'op': 'del', 'ver': a['ver']}]})
+        ac.post('/api/commit', {'label': 'oops', 'ops': [{'e': 'teachers', 'id': 'R2', 'op': 'del', 'ver': a['ver']}]})
         self.converged()
         self.unplug(1)
         edit(c1, 'R2', capacity=77) if get_area(c1, 'R2') else None
@@ -676,7 +683,7 @@ class T32_PersonalLinks(Base):
     def test_links(self):
         ac, pc1 = self.ac, self.servers[1]
         ac.post('/api/users/save', {'username': 'omar', 'full_name': 'Omar Tarek', 'password': 'Temp-pass55', 'must_change': True,
-                                    'perms': ['overview.view', 'trips.view', 'trips.create', 'trips.edit'], 'scopes': None, 'role': 'Custom'})
+                                    'perms': ['overview.view', 'groups.view', 'teachers.manage', 'settings.edit'], 'scopes': None, 'role': 'Custom'})
         omar = self._user('omar')
         self.assertFalse(omar['on'])
         self.assertTrue(omar['allowed'])
@@ -812,11 +819,11 @@ class T33_PeopleAndProfiles(Base):
         with self.assertRaises(ApiError) as e:
             ac.post('/api/profiles/save', {'name': 'guest', 'perms': []})  # the same name twice
         self.assertEqual(e.exception.code, 400)
-        res = ac.post('/api/profiles/save', {'id': g['id'], 'name': 'Guests', 'perms': ['overview.view', 'trips.view'], 'apply': True})
+        res = ac.post('/api/profiles/save', {'id': g['id'], 'name': 'Guests', 'perms': ['overview.view', 'groups.view'], 'apply': True})
         self.assertEqual(res['updated'], 1)
         self.converged()
         on_pc1 = {u['id']: u for u in self.clients[1].get('/api/users')['users']}
-        self.assertEqual((on_pc1[gus['id']]['role'], on_pc1[gus['id']]['perms']), ('Guests', ['overview.view', 'trips.view']))
+        self.assertEqual((on_pc1[gus['id']]['role'], sorted(on_pc1[gus['id']]['perms'])), ('Guests', ['groups.view', 'overview.view']))
         self.assertIn('Guests', [p['name'] for p in self.clients[1].get('/api/users')['profiles']])
         # a ready-made profile can be changed too, the Administrator profile never
         ac.post('/api/profiles/save', {'id': 'viewer', 'name': 'Viewer', 'perms': ['overview.view', 'reports.view'], 'apply': True})
@@ -835,7 +842,7 @@ class T33_PeopleAndProfiles(Base):
         ac.post('/api/profiles/delete', {'id': g['id']})
         self.converged()
         u = next(x for x in self.clients[1].get('/api/users')['users'] if x['id'] == gus['id'])
-        self.assertEqual((u['role'], u['perms']), ('Custom', ['overview.view', 'trips.view']))
+        self.assertEqual((u['role'], sorted(u['perms'])), ('Custom', ['groups.view', 'overview.view']))
         self.assertNotIn('Guests', [p['name'] for p in self.clients[1].get('/api/users')['profiles']])
 
         # from link to password: the link stops, the password works
@@ -883,7 +890,7 @@ class T33_PeopleAndProfiles(Base):
         # renaming a profile without "apply": its people follow the new name
         h = ac.post('/api/profiles/save', {'name': 'Helpers', 'perms': ['overview.view']})
         hp = ac.post('/api/users/save', {'full_name': 'Hana Help', 'login': 'link', 'role': 'Helpers', 'perms': ['overview.view'], 'scopes': None})
-        ac.post('/api/profiles/save', {'id': h['id'], 'name': 'Helpers Team', 'perms': ['overview.view', 'trips.view'], 'apply': False})
+        ac.post('/api/profiles/save', {'id': h['id'], 'name': 'Helpers Team', 'perms': ['overview.view', 'groups.view'], 'apply': False})
         u3 = next(x for x in ac.get('/api/users')['users'] if x['id'] == hp['id'])
         self.assertEqual((u3['role'], u3['perms']), ('Helpers Team', ['overview.view']))
         # a link opened in a browser where somebody else is logged in asks first, and never switches by itself
@@ -1004,24 +1011,24 @@ class T35_SecondReview(unittest.TestCase):
     def test_b_category_limited_user_cannot_touch_other_categories(self):
         ac = self.ac
         ac.post('/api/users/save', {'username': 'zoe.z', 'full_name': 'Zoe Zone', 'password': 'Area-limit47', 'must_change': False,
-                                    'perms': ['overview.view', 'trips.view', 'trips.edit'], 'scopes': ['catA']})
+                                    'perms': ['overview.view', 'groups.view', 'teachers.manage'], 'scopes': ['Z1']})
         c = self.S.client()
         c.login('zoe.z', 'Area-limit47')
         z2 = raw_trip(ac, 'Z2')
-        hostile = {'e': 'trips', 'id': 'Z2', 'op': 'put', 'ver': z2['ver'],
-                   'row': {**{k: v for k, v in z2.items() if k != 'ver'}, 'categoryId': 'catA', 'notes': 'stolen'}}
+        hostile = {'e': 'teachers', 'id': 'Z2', 'op': 'put', 'ver': z2['ver'],
+                   'row': {**{k: v for k, v in z2.items() if k not in ('ver', 'id')}, 'bio': 'stolen'}}
         with self.assertRaises(ApiError) as e:
             c.post('/api/commit', {'label': 'steal', 'ops': [hostile]})
         self.assertEqual(e.exception.code, 403)
         self.assertEqual(get_area(ac, 'Z2')['description'], 'keep me')
-        self.assertEqual({t['id'] for t in c.get('/api/state')['trips']}, {'Z1'}, 'the person only sees the trips of their categories')
+        self.assertEqual({t['id'] for t in c.get('/api/state')['teachers']}, {'Z1'}, 'the person only sees the teachers they work with')
         # conflicts are decided by an administrator only, never through a normal save
         with self.assertRaises(ApiError) as e:
-            c.post('/api/commit', {'label': 'x', 'ops': [{'e': 'trips', 'id': 'Z2', 'op': 'del', 'resolve': True}]})
+            c.post('/api/commit', {'label': 'x', 'ops': [{'e': 'teachers', 'id': 'Z2', 'op': 'del', 'resolve': True}]})
         self.assertEqual(e.exception.code, 403)
         # the recycle bin shows all categories: not for category-limited users even with the permission
         ac.post('/api/users/save', {**next(u for u in ac.get('/api/users')['users'] if u['username'] == 'zoe.z'),
-                                    'perms': ['overview.view', 'trips.view', 'trash.restore']})
+                                    'perms': ['overview.view', 'groups.view', 'trash.restore']})
         c2 = self.S.client()
         c2.login('zoe.z', 'Area-limit47')
         with self.assertRaises(ApiError) as e:
@@ -1076,7 +1083,7 @@ class T36_BackupAdminPC(Base):
         # the administrator PC is switched off: people are still managed on the backup PC
         self.servers[0].stop()
         pc1.post('/api/users/save', {'username': 'deputy.made', 'full_name': 'Made On Backup', 'password': 'Spare-key52x', 'must_change': False,
-                                     'perms': ['overview.view', 'trips.view'], 'scopes': None})
+                                     'perms': ['overview.view', 'groups.view'], 'scopes': None})
         wait_until(lambda: any(u['username'] == 'deputy.made' for u in pc2.get('/api/users')['users']), 30, what='user from backup PC on pc2')
         self.servers[2].client().login('deputy.made', 'Spare-key52x')
         self.servers[0].start()
@@ -1175,7 +1182,7 @@ class T37_AdminSafety(unittest.TestCase):
             return z.read('xl/workbook.xml').decode()
         self.assertIn('User Activity Log', sheets(ac))
         ac.post('/api/users/save', {'username': 'report.reader', 'full_name': 'Report Reader', 'password': 'Quarter-77x', 'must_change': False,
-                                    'perms': ['overview.view', 'trips.view', 'report.full', 'logs.activity'], 'scopes': None})
+                                    'perms': ['overview.view', 'groups.view', 'report.full', 'logs.activity'], 'scopes': None})
         rc = self.S.client()
         rc.login('report.reader', 'Quarter-77x')
         self.assertNotIn('User Activity Log', sheets(rc))
@@ -1213,9 +1220,9 @@ class T38_OpenJoin(unittest.TestCase):
         wait_until(lambda: self.B.status()['hasUsers'], 60, what='accounts on the new PC')
         bc = self.B.client()
         bc.login(*ADMIN)
-        wait_until(lambda: any(a['id'] == 'J1' for a in bc.get('/api/state')['trips']), 60, what='data on the new PC')
+        wait_until(lambda: any(a['id'] == 'J1' for a in bc.get('/api/state')['teachers']), 60, what='data on the new PC')
         bc.post('/api/commit', {'label': 'from new pc', 'ops': [area_op('J2', 'Made On New PC')]})
-        wait_until(lambda: any(a['id'] == 'J2' for a in self.ac.get('/api/state')['trips']), 60, what='change back on the main PC')
+        wait_until(lambda: any(a['id'] == 'J2' for a in self.ac.get('/api/state')['teachers']), 60, what='change back on the main PC')
         names = [n['name'] for n in self.ac.get('/api/devices')['nodes']]
         self.assertIn('Store PC', names)
         with self.assertRaises(ApiError):  # a set-up PC cannot join again
