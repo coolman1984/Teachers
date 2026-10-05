@@ -15,7 +15,7 @@
   }
   function enrolmentsOf(id) { return D.list('enrollments').filter(function (e) { return e.studentId === id && (e.status || 'active') === 'active'; }); }
   function chips(id) {
-    return enrolmentsOf(id).map(function (e) { var g = D.get('groups', e.groupId); return g ? '<span class="chip" style="--c:' + HS.esc(g.color || 'var(--brand)') + '">' + HS.esc(g.name) + '</span>' : ''; }).join('');
+    return enrolmentsOf(id).map(function (e) { var g = D.get('groups', e.groupId); return g ? '<span class="chip" style="--c:' + U.groupTone(g) + '">' + HS.esc(g.name) + '</span>' : ''; }).join('');
   }
   HS.studentText = function (s) { return [s.code, s.name, HS.can('contacts.view') ? s.parentMobile : '', s.school].join(' '); };
 
@@ -263,7 +263,7 @@
       '<ul class="pick-list" data-gl>' + list.map(function (g) {
         var n = counts[g.id] || 0, cap = Number(g.capacity) || 0, full = cap && n >= cap;
         return '<li><button class="pick' + (g.gradeCode === student.gradeCode ? ' match' : '') + '" data-g="' + HS.esc(g.id) + '"' + (full ? ' disabled' : '') + ' data-k="' + HS.esc(U.key(g.name + ' ' + D.teacherName(g.teacherId))) + '">' +
-          '<span class="now-bar" style="--c:' + HS.esc(g.color || 'var(--brand)') + '"></span><div class="grow"><b>' + HS.esc(g.name) + '</b><span class="muted">' + HS.esc([D.teacherName(g.teacherId), D.subjectName(g.subjectId), HS.t('grade.' + g.gradeCode)].filter(Boolean).join(' · ')) + '</span>' +
+          '<span class="now-bar" style="--c:' + U.groupTone(g) + '"></span><div class="grow"><b>' + HS.esc(g.name) + '</b><span class="muted">' + HS.esc([D.teacherName(g.teacherId), D.subjectName(g.subjectId), HS.t('grade.' + g.gradeCode)].filter(Boolean).join(' · ')) + '</span>' +
           '<span class="faint">' + HS.esc(slotsText(g)) + '</span></div><span class="seat' + (full ? ' bad' : cap && n / cap > .85 ? ' warn' : '') + '"><b class="num">' + HS.fmt.num(n) + '</b><span class="num">/' + HS.fmt.num(cap || 0) + '</span><small>' + HS.esc(HS.t(full ? 'grp.full' : 'grp.seats')) + '</small></span></button></li>';
       }).join('') + '</ul>' + (list.length ? '' : U.empty('layers', HS.t('grp.none'), '')) });
     el.querySelector('[data-gq]').addEventListener('input', function (e) { var n = U.key(e.target.value); el.querySelectorAll('[data-k]').forEach(function (b) { b.parentNode.hidden = n && b.dataset.k.indexOf(n) < 0; }); });

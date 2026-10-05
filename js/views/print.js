@@ -33,6 +33,18 @@
         '<span>' + U.grade(s.gradeCode, s.system, s.track) + '</span><span class="c-code" dir="ltr">' + HS.esc(s.code || '') + '</span></div></div></div>';
     }).join('') + '</div>';
   }
+  /* the paper backup of a group: names with empty boxes for the next 8 sessions (power cuts happen) */
+  HS.printGroupList = function (g) {
+    var st = HS.data.list('enrollments').filter(function (e) { return e.groupId === g.id && (e.status || 'active') === 'active'; })
+      .map(function (e) { return HS.data.get('students', e.studentId); }).filter(Boolean)
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), HS.lang); });
+    var boxes = [1, 2, 3, 4, 5, 6, 7, 8];
+    printSheet('<div class="ps-head"><div><div class="ps-org">' + HS.esc(setting('systemName') || HS.t('app.name')) + '</div><h1>' + HS.esc(g.name) + '</h1>' +
+      '<div>' + HS.esc([HS.data.teacherName(g.teacherId), HS.data.subjectName(g.subjectId), HS.t('grade.' + g.gradeCode)].filter(Boolean).join(' · ')) + '</div></div></div>' +
+      '<table class="ps-list"><thead><tr><th>#</th><th>' + HS.esc(HS.t('f.code')) + '</th><th>' + HS.esc(HS.t('f.name')) + '</th>' + boxes.map(function () { return '<th class="box"></th>'; }).join('') + '</tr></thead><tbody>' +
+      st.map(function (s, i) { return '<tr><td>' + (i + 1) + '</td><td dir="ltr">' + HS.esc(s.code || '') + '</td><td>' + HS.esc(s.name) + '</td>' + boxes.map(function () { return '<td class="box"></td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody></table>');
+  };
   HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
   HS.printReceipt = function (p) { printSheet(receipt(p)); };
   function printSheet(html) {

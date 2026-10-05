@@ -60,6 +60,12 @@
   U.dt = function (s) { if (!s) return '–'; var d = new Date(s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d) + ' ' + HS.fmt.time(d); };
   U.day = function (s) { if (!s) return '–'; var d = new Date(String(s).length <= 10 ? s + 'T00:00:00' : s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d); };
   U.today = function () { var d = new Date(); return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); };
+  /* record colours are theme token names (signal, ok, info, warn), so they follow light and dark themes */
+  var TONES = { signal: 1, ok: 1, info: 1, warn: 1, bad: 1, brand: 1 };
+  U.tone = function (name) { return 'var(--' + (TONES[name] ? name : 'brand') + ')'; };
+  // a group is drawn in its teacher's colour (one teacher = one colour across the timetable), else its own
+  U.groupTone = function (g) { var t = g && HS.data.get('teachers', g.teacherId); return U.tone((t && t.color) || (g && g.color)); };
+
   /* a tiny line of values (0-100) for marks and trends; no library */
   U.spark = function (values, w, h) {
     w = w || 160; h = h || 36;

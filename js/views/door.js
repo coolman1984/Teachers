@@ -170,7 +170,7 @@
     var t = new Date(), m = t.getHours() * 60 + t.getMinutes();
     return '<div class="today-strip">' + list.map(function (s, i) {
       var live = hm(s.start) <= m && m <= hm(s.end), g = HS.data.get('groups', s.groupId) || {};
-      return '<button class="today-s' + (live ? ' live' : '') + (s.status === 'cancelled' ? ' off' : '') + '" data-roster="' + HS.esc(s.id) + '" style="--i:' + Math.min(i, 12) + ';--c:' + HS.esc(g.color || 'var(--brand)') + '">' +
+      return '<button class="today-s' + (live ? ' live' : '') + (s.status === 'cancelled' ? ' off' : '') + '" data-roster="' + HS.esc(s.id) + '" style="--i:' + Math.min(i, 12) + ';--c:' + U.groupTone(g) + '">' +
         '<span class="num">' + U.bdi(s.start) + '</span><b class="ellipsis">' + HS.esc(g.name || s.groupId) + '</b>' +
         '<span class="muted ellipsis">' + HS.esc(HS.data.name('rooms', s.roomId) || '') + '</span>' +
         '<span class="cnt">' + (live ? '<span class="pulse-dot"></span>' : '') + '<b class="num">' + HS.fmt.num(s.present) + '</b><span class="faint num">/' + HS.fmt.num(s.enrolled) + '</span></span></button>';

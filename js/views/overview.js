@@ -88,7 +88,7 @@
     return '<ul class="now-list">' + rows.map(function (r, i) {
       var s = r[0], g = HS.data.get('groups', s.groupId) || {}, pct = s.enrolled ? Math.min(100, Math.round(s.present * 100 / s.enrolled)) : 0;
       return '<li style="--i:' + i + '" data-session="' + HS.esc(s.id) + '" tabindex="0" role="button"><span class="now-time">' + U.bdi(s.start) + '<small>' + U.bdi(s.end) + '</small></span>' +
-        '<span class="now-bar" style="--c:' + HS.esc(g.color || 'var(--brand)') + '"></span>' +
+        '<span class="now-bar" style="--c:' + U.groupTone(g) + '"></span>' +
         '<div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(g.name || HS.data.groupName(s.groupId)) + '</b><span class="muted">' +
           HS.esc([HS.data.teacherName(s.teacherId), HS.data.name('rooms', s.roomId)].filter(Boolean).join(' · ')) + '</span>' +
           '<div class="meter" aria-hidden="true"><i style="width:' + pct + '%"></i></div></div>' +
