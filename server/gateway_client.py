@@ -26,7 +26,11 @@ log = logging.getLogger('hs.gateway')
 
 
 class GatewayError(Exception):
-    """A problem with a message for the person at the office."""
+    """A problem with a message for the person at the office; key is the dictionary text the page shows (gw.err.*)."""
+
+    def __init__(self, message, key='gw.err.other', **vars_):
+        super().__init__(message)
+        self.key, self.vars = key, vars_
 
 
 def b64url(b):
@@ -86,7 +90,7 @@ class Secrets:
     def set_url(self, url):
         url = str(url or '').strip().rstrip('/')
         if url and not re.fullmatch(r'https://[A-Za-z0-9.-]+(:\d+)?', url) and not re.fullmatch(r'http://(127\.0\.0\.1|localhost)(:\d+)?', url):
-            raise GatewayError('The address must start with https:// (for example https://hessa.yourname.workers.dev).')
+            raise GatewayError('The address must start with https:// (for example https://hessa.yourname.workers.dev).', 'gw.err.address')
         self.data['url'] = url
         self.save()
 
@@ -97,7 +101,7 @@ class Secrets:
 
     def setup_code(self):
         if not self.configured:
-            raise GatewayError('The mailbox is not set up yet.')
+            raise GatewayError('The mailbox is not set up yet.', 'gw.err.notSetUp')
         return b64url(json.dumps({'v': 1, 'u': self.url, 'o': self.data['officeSecret'], 'l': self.data['linkSecret']}).encode())
 
     def from_code(self, code):
@@ -106,7 +110,7 @@ class Secrets:
             d = json.loads(base64.urlsafe_b64decode(raw + '=' * (-len(raw) % 4)))
             assert d['v'] == 1 and d['o'] and d['l']
         except Exception:
-            raise GatewayError('This setup code is not valid. Copy it again from the first office PC.')
+            raise GatewayError('This setup code is not valid. Copy it again from the first office PC.', 'gw.err.code')
         self.set_url(d['u'])
         self.data['officeSecret'], self.data['linkSecret'] = d['o'], d['l']
         self.save()
@@ -128,30 +132,21 @@ class Client:
                 return data if raw else json.loads(data or b'{}')
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                raise GatewayError('The mailbox refused this PC. The secret does not match the one set on the gateway.')
+                raise GatewayError('The mailbox refused this PC. The secret does not match the one set on the gateway.', 'gw.err.refused')
             if e.code == 503:
-                raise GatewayError('The mailbox is running but has no secret yet. Set OFFICE_SECRET on it (see the setup guide).')
-            raise GatewayError(f'The mailbox answered with an error ({e.code}).')
+                raise GatewayError('The mailbox is running but has no secret yet. Set OFFICE_SECRET on it (see the setup guide).', 'gw.err.noSecret')
+            raise GatewayError(f'The mailbox answered with an error ({e.code}).', 'gw.err.status', code=e.code)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            raise GatewayError('Cannot reach the mailbox. Check the internet on this PC and the address.') from e
+            raise GatewayError('Cannot reach the mailbox. Check the internet on this PC and the address.', 'gw.err.unreachable') from e
 
     def status(self):
         return self.call('GET', '/office/status')
 
-    def put_cards(self, cards, remove=()):
-        return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove)})
-
-    def inbox(self, limit=100):
-        return self.call('GET', f'/office/inbox?limit={int(limit)}')
-
-    def photo(self, uid):
-        return self.call('GET', f'/office/photo/{uid}', raw=True)
-
-    def ack(self, events, photos):
-        return self.call('POST', '/office/ack', {'events': list(events), 'photos': list(photos)})
+    def put_cards(self, cards, remove=(), revoke_students=()):
+        return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove), 'revokeStudents': list(revoke_students)})
 
 
-# --------------------------------------------------------------------------- cards and events
+# --------------------------------------------------------------------------- the card a parent reads
 def _epoch(iso):
     try:
         d = datetime.fromisoformat(str(iso))
@@ -161,37 +156,50 @@ def _epoch(iso):
 
 
 def card_for(store, student_id, center_name=''):
-    """What the parent's page shows - nothing else leaves the office (no phone numbers, no other children)."""
+    """What the parent's page shows - nothing else leaves the office: one child, no phone numbers, no other children, no staff,
+    only exams the teacher published. Small on purpose (the gateway refuses more than 16 KB)."""
     import center
+    import domain as D
+    from datetime import date, timedelta
     f = center.student_file(store, student_id)
     st = f['student']
     groups = {g['id']: g for g in store.rows('groups')}
     teachers = {t['id']: t.get('name') for t in store.rows('teachers')}
     subjects = {s['id']: s for s in store.rows('subjects')}
-    ens = []
+    ens, mine = [], []
     for e in f['enrollments']:
         if e.get('status') not in (None, '', 'active'):
             continue
         g = groups.get(e['groupId']) or {}
+        mine.append(g)
         m = e.get('money') or {}
         sub = subjects.get(g.get('subjectId')) or {}
         ens.append({'group': g.get('name', ''), 'teacher': teachers.get(g.get('teacherId'), ''), 'subject': sub.get('name', ''), 'subjectEn': sub.get('nameEn', ''),
-                    'slots': g.get('slots') or [], 'feeType': m.get('feeType'), 'balance': m.get('balance'), 'unit': m.get('unit'),
+                    'feeType': m.get('feeType'), 'balance': m.get('balance'), 'unit': m.get('unit'), 'due': m.get('due'),
                     'sessionsLeft': m.get('sessionsLeft'), 'held': e.get('held', 0)})
+    today = date.today()
+    week = []                                    # the next seven days as the timetable really is (temporary times included)
+    for i in range(7):
+        d = today + timedelta(days=i)
+        for g in mine:
+            for sl in D.slots_on(g, d):
+                week.append({'date': d.isoformat(), 'start': sl['start'], 'end': sl['end'], 'group': g.get('name', '')})
+    week.sort(key=lambda x: (x['date'], x['start']))
     gname = lambda gid: (groups.get(gid) or {}).get('name', '')  # noqa: E731
-    att = [{'date': a.get('date'), 'group': gname(a.get('groupId')), 'status': a.get('status'), 'at': a.get('at')} for a in f['attendance'][:30]]
+    att = [{'date': a.get('date'), 'group': gname(a.get('groupId')), 'status': a.get('status')} for a in f['attendance'][:30]]
     marks = [{'title': m['title'], 'date': m['date'], 'kind': m['kind'], 'score': m['score'], 'max': m['maxScore'], 'absent': bool(m['absent']),
               'rank': m.get('rank'), 'of': m.get('of')} for m in f['marks'] if _published(store, m['examId'])][-20:]
     pays = [{'date': p.get('date'), 'no': p.get('no'), 'amount': p.get('amount'), 'kind': p.get('kind'), 'group': gname(p.get('groupId'))}
             for p in f['payments'][:15]]
-    return {'studentId': st['id'], 'name': st.get('name'), 'code': st.get('code'), 'grade': st.get('gradeCode'), 'system': st.get('system'),
-            'track': st.get('track'), 'center': center_name, 'groups': ens, 'attendance': att, 'marks': marks, 'payments': pays,
+    return {'name': st.get('name'), 'code': st.get('code'), 'grade': st.get('gradeCode'), 'system': st.get('system'),
+            'track': st.get('track'), 'center': center_name, 'groups': ens, 'week': week[:20], 'attendance': att, 'marks': marks, 'payments': pays,
             'wallet': f['wallet'], 'updatedAt': _now()}
 
 
 def _published(store, exam_id):
+    """A mark reaches the parent only when the teacher pressed "Show to parents" on that exam."""
     ex = store.row('exams', exam_id)
-    return bool(ex and ex.get('published') is not False)
+    return bool(ex and ex.get('published') is True)
 
 
 # --------------------------------------------------------------------------- the background service
@@ -207,7 +215,7 @@ class GatewaySync:
         self.known_path = os.path.join(os.path.dirname(secrets.path), 'gateway-cards.json')
         self.known = self._load_known()
         self._pushed_version, self._pushed_at = None, 0
-        self.stat = {'lastOk': None, 'lastError': None, 'lastTry': None, 'waiting': 0, 'oldestSeconds': 0, 'applied': 0}
+        self.stat = {'lastOk': None, 'lastError': None, 'lastTry': None, 'cards': None, 'gatewayTime': None}
         self._stop = False
         self._thread = None
 
@@ -227,7 +235,7 @@ class GatewaySync:
 
     def client(self):
         if not self.secrets.configured:
-            raise GatewayError('The mailbox is not set up yet.')
+            raise GatewayError('The mailbox is not set up yet.', 'gw.err.notSetUp')
         return Client(self.secrets.url, self.secrets.data['officeSecret'])
 
     def _loop(self):
@@ -244,11 +252,11 @@ class GatewaySync:
                 self.cycle()
                 delay = int(self.secrets.data.get('pollSeconds') or 60)
             except GatewayError as e:
-                self.stat['lastError'] = str(e)
+                self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = str(e), e.key, e.vars
                 delay = min(max(delay * 2, 10), 600)
             except Exception as e:      # never let the thread die; the next round tries again
                 log.exception('gateway cycle failed')
-                self.stat['lastError'] = 'Unexpected problem: ' + str(e)[:120]
+                self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = 'Unexpected problem: ' + str(e)[:120], 'gw.err.other', {}
                 delay = min(max(delay * 2, 10), 600)
 
     def status(self):
@@ -259,9 +267,9 @@ class GatewaySync:
         with self.lock:
             self.stat['lastTry'] = _now()
             self.push_cards()
-            self.pull()
+            self.check()
             self.stat['lastOk'] = _now()
-            self.stat['lastError'] = None
+            self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = None, None, {}
 
     def _load_known(self):
         try:
@@ -294,10 +302,13 @@ class GatewaySync:
             if self.pushed.get(h) == sig:
                 continue
             sigs[h] = sig
-            cards.append({'tokenHash': h, 'tripId': st['id'], 'body': body, 'cancelled': cancelled, 'expiresAt': exp})
+            cards.append({'tokenHash': h, 'studentId': st['id'], 'body': body, 'cancelled': cancelled, 'expiresAt': exp})
         current = {r['portalHash'] for r in self.store.rows('students', "portal_hash IS NOT NULL AND portal_hash<>''")}
         stale = sorted(self.known - current)          # an old link (replaced, or the student was removed): the gateway must forget it
-        if cards or stale:
+        # Signed soft deletions are shared by every office PC; revocation cannot depend on this PC's cache.
+        with self.store.lock:
+            removed = [r[0] for r in self.store.conn.execute("SELECT id FROM students WHERE deleted=1 AND portal_hash IS NOT NULL AND portal_hash<>''")]
+        if cards or stale or removed:
             cl = self.client()
             for i in range(0, len(cards), 100):
                 cl.put_cards(cards[i:i + 100])
@@ -308,22 +319,21 @@ class GatewaySync:
                 for h in stale[i:i + 100]:
                     self.known.discard(h)
                     self.pushed.pop(h, None)
+            for i in range(0, len(removed), 100):
+                cl.put_cards([], revoke_students=removed[i:i + 100])
             self._save_known()
         self._pushed_version, self._pushed_at = v, time.time()
 
-    def pull(self):
-        """Parents' pages are read-only; whatever arrives in the mailbox is acknowledged and dropped."""
-        cl = self.client()
-        box = cl.inbox(100)
-        events, photos = box.get('events', []), box.get('photos', [])
-        self.stat['waiting'] = 0
-        if events or photos:
-            cl.ack([e['uuid'] for e in events], [p['uuid'] for p in photos])
+    def check(self):
+        """How many cards the gateway holds: the settings page compares it with the links made here."""
+        st = self.client().status()
+        self.stat['cards'] = st.get('cards')
+        self.stat['gatewayTime'] = st.get('serverTime')
 
     # -- links
     def make_link(self, student_id, nonce):
         if not self.secrets.configured:
-            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Parent links.')
+            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Parent links.', 'gw.err.notSetUp')
         tok = link_token(self.secrets.data['linkSecret'], student_id, nonce)
         return tok, f'{self.secrets.url}/t/{tok}'
 

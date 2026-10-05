@@ -94,14 +94,24 @@
   function ApiError(code, msg, data) { this.code = code; this.message = msg; this.data = data; }
   ApiError.prototype = Object.create(Error.prototype);
   HS.ApiError = ApiError;
+  // writes are refused here while the centre PC cannot be reached (js/data.js polls it): the browser never keeps a
+  // hidden queue of saves, so nothing looks saved that is not. Signing in and joining are never blocked.
+  function blocked(method, url) {
+    return method !== 'GET' && HS.data && HS.data.connected === false && HS.data.polling && !/^\/api\/(auth|join)\b/.test(url);
+  }
   HS.api = function (method, url, body, opts) {
     opts = opts || {};
+    if (blocked(method, url)) return Promise.reject(new ApiError(0, 'Connection to the centre PC lost', { key: 'err.offline' }));
     var init = { method: method, credentials: 'same-origin', headers: {} };
     if (body !== undefined && body !== null) {
       if (opts.raw) { init.body = body; init.headers['Content-Type'] = 'application/octet-stream'; }
       else { init.body = JSON.stringify(body); init.headers['Content-Type'] = 'application/json'; }
     }
-    return fetch(url, init).then(function (r) {
+    return fetch(url, init).catch(function () {
+      // no answer at all: the request may or may not have reached the PC; the next poll decides what the screens show
+      if (HS.data && HS.data.polling && HS.data.refresh) HS.data.refresh().catch(function () {});
+      throw new ApiError(0, 'No answer from the centre PC', { key: method === 'GET' ? 'err.offline' : 'err.noAnswer' });
+    }).then(function (r) {
       var ct = r.headers.get('Content-Type') || '';
       var p = opts.blob ? r.blob() : (ct.indexOf('json') >= 0 ? r.json() : r.text());
       return p.then(function (data) {

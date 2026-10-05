@@ -2,6 +2,214 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Integrate all outstanding branches and enforce the actual safety boundaries (2026-10-05)
+
+**User/outcome:** a nontechnical centre team must trust that attendance, receipts and parent links represent what was saved.
+The acceptance criteria and four-branch inventory are in `docs/INTEGRATION.md`. Both Claude heads were already included in
+main; the ten ccr commits are retained as ancestors of the integration branch. There were no open GitHub issues or PRs.
+Earlier uncommitted work in the previous workspace was preserved, with its published fixes checked against this history.
+
+**Found before fixing:** a stale gateway upload could reactivate a replaced parent link; changing the gateway address left
+unchanged cards unpublished; payment retries accepted changed amounts and truncated/reordered family batches; a scoped student
+file exposed siblings outside its teacher scope; attendance rosters carried money and parent token material. New regression
+tests failed on each of these before correction. A final role review also proved the assistant could bypass the screen's
+money restriction through `/api/state`. The phone acceptance sweep found overflow in Arabic Settings and English Devices.
+
+**Changes:** permanent gateway token tombstones, atomic replacement protection and deleted-student revocation independent of
+local publishing caches; invalidate the publishing cache when the gateway URL changes. Ship and test a nondestructive v1 D1
+migration. Match retries to the normalised saved receipt, collector and complete ordered family batch. Scope sibling/follow-up
+queries; hide parent token material on staff responses. Financial permissions now apply to rosters, state, incremental updates,
+scoped assistant student files, sibling door cards and follow-up balances/risk. Money-free risk calculation excludes the debt
+signal, preserving attendance and marks follow-up. Match the browser's balance request/tab rules to the server permissions.
+Wrap Settings feedback and Devices actions so large-font phone users can still reach them. Include integration regressions in
+CI and require both office and browser gates before a Windows release build. Keep money append-only and add no runtime dependency.
+Run joining, device management and backup-safety browser tests in the browser CI job too, where Playwright is installed;
+the office runner must not silently skip those screens as the only coverage.
+
+**Lessons/mistakes:** an idempotency key identifies a saved operation; it must not report success for different input. Permanent
+revocation cannot depend on an expiring card or a single PC's cache. Test incremental state with a real changed receipt rather
+than a full-reload fallback, and test a nonempty risk/family response. A scoped user still needs financial permissions. A local
+test command initially named a nonexistent `AdviceTest`; its loader error was corrected by running the actual review module in
+the complete office gate. No result from that failed invocation is counted as a successful gate.
+
+**Limits:** the private owner workbook is absent; live tunnel/gateway accounts, Windows installation and real printer/phone
+hardware remain deployment acceptance tasks. Synthetic bubble photos and Chromium do not prove real-world camera accuracy.
+The optional AI question bank, teacher public page and hosted videos remain the explicit product backlog.
+
+**Verification:** the complete office command selected 280 cases and completed with exit 0 (the private workbook case is
+skipped). The initial pre-final office run reported 279 cases, OK with one skip; the additional case closes the assistant
+state/delta bypass. The strengthened seven-role checks passed separately, including a real changed-receipt delta, a nonempty
+sibling card, a scoped assistant and a nonempty risk response. Final browser suite: 34/34 in 169.918 s; all 21 routes fit both
+languages on a 360 px phone, and the attendance update reached the other screen within three seconds. Thirty card lookups,
+cards and check-ins took 0.89 s with 420 students/24 groups. Bubble marking: 960/960 on six synthetic degraded photos.
+Frontend: 25/25; gateway: 16/16; CI selectors/installer manifest: 6/6. Pyflakes, installer preflight, gateway bundle build/syntax
+and `git diff --check` passed. Python emitted existing resource warnings in old test fixtures and an SVG byte-string escape
+warning; neither failed a check. Windows installation itself was not run.
+
+## Top students picture and certificates (review G05, plan P9.3 - 2026-10-05)
+
+**What:** the exam panel's "Top students" draws a 1080 x 1350 picture on a canvas (centre name, exam, teacher, the first ten with
+medals and marks) to download and share, and prints certificates for the first three. **Privacy:** only from an exam already
+shown to parents; nothing is posted by itself; first and father's name only by default. **Evidence:**
+`test_center_review.test_g05_*` (refused before publishing, picture drawn and downloaded as PNG, three certificates printed).
+
+## Bubble sheets: print, photograph, check, save (review G01, G02, plan P9.1 - 2026-10-05)
+
+**Why:** marking a weekly MCQ quiz for 40 students by hand takes a teacher an evening; the plan asked for sheets read by a phone.
+**What:** one geometry in millimetres (`js/omr.js`) draws the A4 sheet as SVG (prints at true size, no margins) and reads its photo:
+grey levels, a threshold from the picture itself (Otsu), the four corner squares as the blobs nearest the photo's corners, a
+perspective map (homography, 8x8 solve), and the darkness inside each bubble. A row with no mark or two marks is flagged, an unknown
+code asks the person to choose the student, and nothing is saved before the person presses Save. The server recomputes the score
+from the answers and the key.
+**Decisions:** no library, no upload - the photo never leaves the phone or PC; max 75 questions (three columns of 25 beside the code);
+the code is five columns of 0-9 (all centre codes are 5 digits).
+**Evidence:** `tests/test_omr.py` - sheets drawn with known answers, then turned up to 10°, in perspective, blurred, darker, noisy,
+on dark tables, with full and light pen marks: 960/960 bubbles right (plan target 98%); a blank photo is refused; a page claiming
+20/20 for 3 right answers is stored as 15; the teacher journey (Arabic key, named sheets, photo, check, save) in Chromium.
+**Limits:** not yet tried with real printers and phone cameras at the centre.
+
+## Every role tries what it must not do (review E02 - 2026-10-05)
+
+**What:** `tests/test_center_roles.py` signs in as each built-in profile (front desk, teacher limited to one teacher, assistant,
+accountant, viewer) and sends the requests its screens never offer: reverse a receipt, approve a settlement, read reports, export
+everything, manage people, read the security log, edit a receipt through the generic save, switch remote work on, read the gateway
+secret, check in another teacher's student, take money, enter marks, write anything as a viewer. All are refused by the server.
+**Found:** the Assistant profile has `door.use` (to take attendance at the door), and the server treated `door.use` as permission
+to see money: the student file carried every payment and the door card every balance. The spec says assistants see no money. The
+server now removes balances, money in advance and payments for anyone without `money.view`/`money.collect` (`money_filter`), and the
+door card shows the groups only for them.
+**Lessons:** hiding a screen is not a permission; the test must ask the server directly, as an attacker would.
+
+## Documents for every reader, help inside the program, a tested disaster drill, a safer installer (review E10, F01-F10 - 2026-10-05)
+
+**Why:** the people of a centre are not technical; the owner, the desk, a teacher, an assistant and a parent each need one page in
+their words with the screens they will see, and the next technician needs to know where everything is and how to recover.
+**What:** README, DESIGN, OPERATIONS, the hessa skill, five Egyptian-Arabic guides with pictures taken from the real program
+(`tools/make_screens.py`, fictional sample centre), 15 help topics, `test_recovery` (dead disk, restore from the USB copy on a new
+PC), installer in Arabic first with the firewall limited to private networks.
+**Found:** the OPERATIONS draft said "restore from the second folder" - true only after copying the file into the new PC's backup
+folder, and accounts are not part of a restore; the doc now says exactly that, and the test does exactly that.
+**Lessons:** a recovery step is real only when a test performs it; a guide is right only when its button names are copied from the
+dictionary, not remembered.
+**Evidence:** `test_recovery`, `test_ci.InstallerTest`, `test_design` (every help question translated), the guide pictures.
+
+## Acceptance on a full sample centre: phones, big fonts, two screens, the door peak (review E03-E05, E11 - 2026-10-05)
+
+**Why:** "it works" had only been shown on desktop widths and small fixtures.
+**What:** `tests/test_acceptance.py` builds the 420-student sample centre and (a) opens all 21 routes on a 360 px phone in Arabic and
+English, night theme, extra-large font, failing on any console error or anything wider than the screen; (b) checks in a student
+through the API and times the other door screen: under 3 s, and no `/api/state` request; (c) scans 30 cards (find + card +
+check-in) - 1.2 s; (d) removes the sample without touching a real record.
+**Found and fixed:** (1) six pages pushed sideways on a phone with the big font - fixed minimum column widths (22rem = 385 px at
+XL) on every auto grid, side-by-side layouts that never collapsed, a segmented control that could not wrap, grid cells that grew to
+their content; (2) the door told a student who arrived after the roll call marked him absent "already: absent" and left him absent
+(he sat the session, was not charged, and the parent saw an absence) - he is now checked in with his arrival time.
+**Lessons:** an acceptance sweep with the hardest settings (smallest screen, biggest font, RTL, dark) finds in minutes what a
+desktop check never shows; a check-in rule written for "scanned twice" must not swallow "came late".
+**Evidence:** `test_acceptance` 4/4, `test_center_review.test_a_student_marked_absent_who_arrives_is_checked_in`.
+
+## The inherited tests now test the centre (review E07-E09 - 2026-10-05)
+
+**Why:** since the fork, 6 browser scenarios and 25 multi-PC scenarios still wrote trips, vehicles and drivers, failed, and were left
+out of CI - so the most valuable engine checks (outages, conflicts, crashes, tampering, restore, four PCs, people and profiles,
+joining) were not running for Hessa at all.
+**What:** the browser trip scenarios became `CentreAdminTest` (teacher-scoped account end to end, Recycle Bin, student import, slides,
+report presentation). The multi-PC file kept every scenario and only changed its neutral record: a teacher (scope = its own id) and
+settings rows for attachments; three assertions now compare sorted permissions. CI got `test_multinode` and a `browser` job.
+**Found:** `store.py` refused `/files/../x` only in a top-level `src`; a setting value (the centre logo) could carry one - fixed.
+**Lessons:** a red test left aside is a hole in the net, not noise: migrating it found a real gap in an afternoon.
+**Evidence:** `test_multinode` 35/35 (about 3 minutes), `test_e2e_browser` 12/12, `test_ci` checks both CI selections.
+
+## Work from outside the centre, safely (owner's request, review D01-D08 - 2026-10-05)
+
+**Why:** the owner wants to run Hessa on the centre PC and work on it from a phone or another computer over the internet, without
+ever opening the centre PC to the internet (a project rule).
+**Decision:** no relay of our own. A secure tunnel program on the centre PC calls out (Tailscale - recommended, free, private to the
+owner's devices, also carries laptop sync - or Cloudflare Tunnel for a public address with a domain). Building and hosting our own
+relay would mean a server with the children's data outside the centre, a second login system and a new sync path - all risk, no gain.
+**Found while designing it:** a tunnel hands requests to the program from 127.0.0.1, and the program trusted 127.0.0.1 as "the PC
+itself" - so installing any tunnel would have opened the first-start screen, joining and the backup-folder settings to the whole
+internet. Now a request that carries proxy headers (or comes from a Tailscale address) is "outside": refused until the
+administrator switches remote work on at the centre, and then only for people with `remote.use`.
+**What:** `outside`/`via_proxy`/`https` in app.py, the forwarded address (never a loopback one) in logs and lockouts, Secure cookie +
+HSTS behind HTTPS, Origin checked against the forwarded host, Settings → Remote work (switch, last request, allowed people, the two
+ways), `docs/REMOTE_ACCESS.md` in Egyptian Arabic, copied next to the program by the installer.
+**Lessons:** "local" must mean the TCP peer AND no proxy in between; any feature that trusts 127.0.0.1 must be re-read whenever a
+proxy appears.
+**Evidence:** `tests/test_center_remote.py` (7): off by default with a page in both languages; a tunnel request is never local even
+with a spoofed `X-Forwarded-For: 127.0.0.1`; only `remote.use` signs in, a refused session is ended at once, permission taken away
+mid-session is enforced, logs carry the real address; switching on only at the centre; a foreign Origin is refused; a payment from
+home retried with the same key is one receipt; Tailscale address ranges. `test_center_review.test_d_*` drives the switch in Chromium.
+**Limits:** not tried with the owner's real Tailscale/Cloudflare accounts and a phone on 4G yet.
+
+## The parent's link, from the centre PC to the phone (review C01-C06, P7 - 2026-10-05)
+
+**Why:** the parent page was still the driver page of the trip system (odometer photos, trip events), the gateway still accepted
+phone writes, the setup screen could not show the office secret Cloudflare needs, there was no "Parent link" in the student file,
+and exams had no "show to parents" switch - so every half-entered mark would have reached parents.
+**What:** (1) Worker: parents can only read one card; every write route of the old driver page is gone with its tables; a replaced
+or removed link becomes a "stopped" row for 30 days (410), so the phone shows "this link no longer works" and its service worker
+deletes the saved copy, instead of "not ready yet". (2) A new parent page (Formal Arabic first, English, light/dark, system fonts,
+29 KB): money per group, the next seven days as the timetable really is, published marks with the rank, attendance dots with the
+rate, payments; offline it shows the last copy with its age. (3) The office card adds the week and the amount due, and only marks of
+exams whose teacher pressed "Shown to parents". (4) Settings → Parent links became a guided 4-step setup with a live status line;
+gateway errors carry a dictionary key (`gw.err.*`) so the reason reads in Arabic; showing the office secret or the setup code is
+written in the security log. (5) The student file has a "Parent link" tab: create and copy, create and send by WhatsApp (the same
+"was it sent?" sender), replace.
+**Mistakes found:** the gateway status counted stopped links as cards; the settings test asserted the old form. Playwright's offline
+switch does not reach service-worker requests, so the offline test stops the real gateway instead (closer to a real outage anyway).
+**Lessons:** a link that was revoked must answer differently from a link that never existed, or the phone cannot know to forget.
+**Evidence:** `gateway/test/gateway.test.js` (12: read-only, no token stored, stopped = 410 and cleaned, size < 120 KB, no inline
+styles, bundle); `tests/test_gateway_parent.py` (real Worker code under node + centre server + Chromium at 360 px: one child per
+link, draft marks hidden, no phone numbers, English, an update arrives, the last copy opens when the mailbox is down, a replaced
+link stops and nothing of the child stays on the phone, the centre keeps working when the mailbox is down);
+`test_center_review.test_c05_*` (setup page, student tab, exam switch).
+**Limits:** not yet tried on a real Cloudflare account or an old Android phone (TASKS P7.3 sub-task).
+
+## Daily work: history buttons, readable security log, month in Excel, school statement, receipt paper (review B04-B08 - 2026-10-05)
+
+**Why:** the review listed what the desk and the owner still did by hand or could not read: no history in the group panel or the
+lists, the security log in English inside the Arabic screen, no spreadsheet of the month, no statement for school support groups, and
+receipts only on an 80 mm roll.
+**What:** (1) "History" in the group panel and every list editor opens the existing history-of-one-record dialog (undo included). (2)
+`HS.audit.securityDetail` turns each fixed English sentence the server logs into a dictionary text with its values; a change list
+("Role: a -> b; Permissions added: …") is translated part by part, permission ids become their names. The stored log is evidence and
+stays as written. (3) Reports → Excel: 8 sheets through the existing `/api/xlsx`, built from the same scoped `/api/c/reports` answer
+the screen shows. (4) `GET /api/c/school?groupId&ym` and its dialog/print/Excel. (5) Receipt paper per PC with a test print.
+**Mistakes found:** `@page receipt { size: 80mm auto }` is not valid CSS, so Chromium silently printed every receipt on an A4 page -
+found only because the new test reads the paper width back from a real PDF. The page is now measured and sized in mm at print time.
+**Lessons:** print CSS must be tested by printing (PDF), not by reading the CSS. A translation table for log sentences needs a test
+that scans the server for every sentence, or the next new sentence silently stays English.
+**Evidence:** `tests/test_center_review.py` - `SchoolStatementTest` (split 15%/80% with a reversed receipt), `SecurityWordsTest`
+(every literal log sentence in auth/app/sync/nodectl matches a pattern; every key in both dictionaries), browser tests for history
+buttons + Arabic security log, the Excel workbook's sheet names, the school statement dialog, and the PDF paper width of 80/58/A5.
+**Limits:** real thermal printers at the centre are still to be tried (B04 sub-task).
+
+## The desk sees what the centre PC really saved (review A04-A07, B01, B02 - 2026-10-05)
+
+**Why:** the completion review found four places where the screen and the truth could differ: the door read its sound and
+auto-check-in switches from the browser while Settings saved them for the centre (so switching them off did nothing); opening a
+WhatsApp chat was logged as "sent" even when the person cancelled; a lost connection left every save button looking usable; and the
+Windows build stopped at the very end on two missing documents.
+**What:** (1) the door reads `doorSounds`/`autoCheckin` from the centre settings - one switch for every PC, missing = on. (2) The
+message sender asks "Did it go?" after the chat opens; only "Yes, sent" logs the follow-up and counts; a failed save says so and
+can be repeated; the door and the student file use the same sender. (3) The browser refuses writes while `/api/version` fails
+(`err.offline`), shows a bar on every page and dims the save buttons; a request that got no answer says so (`err.noAnswer`) and
+triggers an immediate poll. Every payment dialog sends one random key; the server stores the receipt under `pk<key>`, so a Save
+pressed again after a lost answer returns the first receipt (single and family payments). (4) `GATEWAY_SETUP.md` and
+`RELEASE_NOTES.md` exist; `tools/build_windows.py --check` checks every shipped file and that the notes describe the version, and
+CI runs it on each push. (5) The door card sells a handout (the student's teachers' handouts first; the server refuses more than
+the stock) and takes money in advance, reusing the Money dialog with the student fixed. Version 1.1.0 (it continues after the
+engine's 1.0.2; never lowered).
+**Mistakes:** the earlier browser test clicked "Open WhatsApp" and asserted a follow-up - it tested the bug as the feature. The first
+offline code used `toggleAttribute`, missing in older Android WebViews and in the Node test DOM - `setAttribute`/`removeAttribute` now.
+**Lessons:** a log row must record what the person confirmed, never what the program merely started. A retry-safe write needs an id
+chosen before the first try.
+**Evidence:** `tests/test_center_review.py` (7 tests: same key = one receipt, bad key ignored, family batch once, stock refused, the
+door obeys both switches incl. the beep count, offline bar + refused write + nothing saved after reconnect, handout + top-up from the
+card); updated `test_e2e_center` message scenarios assert nothing is logged before "Yes, sent".
+**Limits:** a phone that keeps a page open while the centre PC is off sees the bar only after its next 2-second poll.
+
 ## Personal link of a staff member works again (2026-10-05)
 
 **Why:** review item A03 - the personal-link page asked for `js/quick.js`, which did not exist, so the link never signed in by itself; the

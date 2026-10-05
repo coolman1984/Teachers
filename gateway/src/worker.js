@@ -1,21 +1,18 @@
-// Hessa gateway - a Cloudflare Worker + D1 mailbox. No dependencies.
-// Drivers' phones talk to /t/, /api/ (the link token is the key); office PCs talk to /office/ (signed requests).
-// Tokens are never stored or logged: the database keys everything by sha256(token).
+// Hessa gateway - a Cloudflare Worker + D1 mailbox for the parents' links. No dependencies.
+// Parents' phones only READ one card at /api/card/<token> (the link token is the key). Office PCs write cards at /office/ (signed
+// requests). Tokens are never stored or logged: the database keys everything by sha256(token). Nothing here can change the
+// centre's data - the office database is the only source of truth.
 
 const enc = new TextEncoder();
-const MAX_JSON = 16 * 1024;
-const MAX_PHOTO = 600 * 1024;
 const MAX_CARDS_BODY = 1024 * 1024;
+const MAX_CARD = 16 * 1024;
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EVENT_TYPES = new Set(['start', 'end', 'route', 'note']);
-const PHOTO_KINDS = new Set(['start_odo', 'end_odo', 'paper', 'other']);
 const LIMIT_TOKEN = 60, LIMIT_IP = 300, WINDOW = 600;      // requests per 10 minutes
 
 const HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
-  'Permissions-Policy': 'camera=(self), geolocation=(), microphone=()',
+  'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
   'Content-Security-Policy': "default-src 'self'; img-src 'self' blob: data:; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'",
   'Cache-Control': 'no-store',
 };
@@ -59,74 +56,22 @@ async function limited(env, key, max) {
   return r.count > max;
 }
 
-// ---------------------------------------------------------------- driver side
-async function driver(request, env, url, parts) {
+// ---------------------------------------------------------------- parent side: read one card, nothing else
+async function parent(request, env, url, parts) {
+  if (parts[1] !== 'card' || parts.length !== 3) throw new Fail(404, 'Not found');
+  if (request.method !== 'GET') throw new Fail(405, 'Read only', { 'Allow': 'GET' });
   const ip = request.headers.get('CF-Connecting-IP') || 'local';
   const token = parts[2];
   if (!TOKEN_RE.test(token || '')) throw new Fail(404, 'Not found');
   const th = await sha256Hex(token);
   if (await limited(env, 'ip:' + ip, LIMIT_IP) || await limited(env, 'tk:' + th, LIMIT_TOKEN)) throw new Fail(429, 'Too many requests', { 'Retry-After': '60' });
-  const card = await env.DB.prepare('SELECT trip_id, body, cancelled, bound_device, expires_at FROM cards WHERE token_hash = ?').bind(th).first();
+  if (await env.DB.prepare('SELECT token_hash FROM revoked_links WHERE token_hash = ?').bind(th).first())
+    throw new Fail(410, 'This link was stopped by the centre', { revoked: true });
+  const card = await env.DB.prepare('SELECT body, cancelled, expires_at, updated_at FROM cards WHERE token_hash = ?').bind(th).first();
   if (!card) throw new Fail(404, 'Unknown link');
   if (card.expires_at && card.expires_at < now()) throw new Fail(410, 'This link has expired', { expired: true });
-  const kind = parts[1], m = request.method;
-
-  if (kind === 'card' && m === 'GET') {
-    if (card.cancelled) throw new Fail(410, 'This trip was cancelled', { cancelled: true });
-    return reply(200, { card: JSON.parse(card.body), bound: !!card.bound_device, serverTime: iso(now()) });
-  }
-  if (card.cancelled) throw new Fail(410, 'This trip was cancelled', { cancelled: true });
-
-  if (kind === 'bind' && m === 'POST') {
-    const { data } = await readJson(request, 1024);
-    const dev = String(data.deviceId || '');
-    if (dev.length < 8 || dev.length > 64) throw new Fail(400, 'Bad device');
-    if (!card.bound_device) {
-      await env.DB.prepare('UPDATE cards SET bound_device = ? WHERE token_hash = ? AND bound_device IS NULL').bind(dev, th).run();
-      const again = await env.DB.prepare('SELECT bound_device FROM cards WHERE token_hash = ?').bind(th).first();
-      card.bound_device = again.bound_device;
-    }
-    if (card.bound_device === dev) return reply(200, { bound: true });
-    return reply(200, { bound: false, secondDevice: true });
-  }
-
-  if (kind === 'event' && m === 'POST') {
-    const { data, buf } = await readJson(request, MAX_JSON);
-    if (!data || !UUID_RE.test(String(data.uuid || '')) || !EVENT_TYPES.has(data.type) || data.v !== 1) throw new Fail(400, 'Bad event');
-    const dev = String(data.deviceId || '');
-    if (dev.length < 8 || dev.length > 64) throw new Fail(400, 'Bad device');
-    const have = await env.DB.prepare('SELECT recv_at FROM events WHERE uuid = ?').bind(data.uuid).first();
-    if (have) return reply(200, { ok: true, recvAt: iso(have.recv_at), duplicate: true });
-    let bound = card.bound_device;
-    if (!bound) {
-      await env.DB.prepare('UPDATE cards SET bound_device = ? WHERE token_hash = ? AND bound_device IS NULL').bind(dev, th).run();
-      bound = (await env.DB.prepare('SELECT bound_device FROM cards WHERE token_hash = ?').bind(th).first()).bound_device;
-    }
-    const t = now();
-    await env.DB.prepare('INSERT OR IGNORE INTO events(uuid, token_hash, trip_id, type, body, device_id, phone_at, recv_at, second) VALUES(?,?,?,?,?,?,?,?,?)')
-      .bind(data.uuid, th, card.trip_id, data.type, new TextDecoder().decode(buf), dev, String(data.phoneAt || '').slice(0, 40), t, bound === dev ? 0 : 1).run();
-    return reply(200, { ok: true, recvAt: iso(t), secondDevice: bound !== dev });
-  }
-
-  if (kind === 'photo' && m === 'PUT') {
-    const id = parts[3];
-    if (!UUID_RE.test(id || '')) throw new Fail(400, 'Bad photo id');
-    const k = request.headers.get('X-Kind') || '';
-    if (!PHOTO_KINDS.has(k)) throw new Fail(400, 'Bad kind');
-    const buf = await readBody(request, MAX_PHOTO);
-    if (buf.length < 100) throw new Fail(400, 'Empty photo');
-    if (!(buf[0] === 0xff && buf[1] === 0xd8)) throw new Fail(400, 'Not a JPEG photo');
-    const sum = await sha256Hex(buf);
-    if ((request.headers.get('X-Sha256') || '').toLowerCase() !== sum) throw new Fail(400, 'The photo arrived damaged; send it again');
-    const have = await env.DB.prepare('SELECT recv_at FROM photos WHERE uuid = ?').bind(id).first();
-    if (have) return reply(200, { ok: true, recvAt: iso(have.recv_at), duplicate: true });
-    const t = now();
-    const ev = request.headers.get('X-Event') || '';
-    await env.DB.prepare('INSERT OR IGNORE INTO photos(uuid, token_hash, trip_id, kind, fallback, event_uuid, sha256, size, data, recv_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
-      .bind(id, th, card.trip_id, k, request.headers.get('X-Fallback') === '1' ? 1 : 0, UUID_RE.test(ev) ? ev : null, sum, buf.length, buf, t).run();
-    return reply(200, { ok: true, recvAt: iso(t) });
-  }
-  throw new Fail(404, 'Not found');
+  if (card.cancelled) throw new Fail(410, 'This link was stopped by the centre', { revoked: true });
+  return reply(200, { card: JSON.parse(card.body), sentAt: iso(card.updated_at), serverTime: iso(now()) });
 }
 
 // ---------------------------------------------------------------- office side
@@ -149,51 +94,49 @@ async function office(request, env, url, parts) {
   if (what === 'cards' && m === 'PUT') {
     const d = json(), stmts = [];
     for (const c of (d.cards || []).slice(0, 500)) {
-      if (!/^[0-9a-f]{64}$/.test(c.tokenHash || '') || !c.tripId) throw new Fail(400, 'Bad card');
+      const owner = c.studentId;
+      if (!/^[0-9a-f]{64}$/.test(c.tokenHash || '') || typeof owner !== 'string' || !owner || owner.length > 200) throw new Fail(400, 'Bad card');
       const body = JSON.stringify(c.body || {});
-      if (body.length > 8192) throw new Fail(400, 'Card too large');
-      stmts.push(env.DB.prepare('INSERT INTO cards(token_hash, trip_id, body, cancelled, expires_at, updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(token_hash) DO UPDATE SET body = excluded.body, cancelled = excluded.cancelled, expires_at = excluded.expires_at, updated_at = excluded.updated_at')
-        .bind(c.tokenHash, c.tripId, body, c.cancelled ? 1 : 0, c.expiresAt || null, now()));
-      if (c.releaseDevice) stmts.push(env.DB.prepare('UPDATE cards SET bound_device = NULL WHERE token_hash = ?').bind(c.tokenHash));
+      if (body.length > MAX_CARD) throw new Fail(400, 'Card too large');
+      // Run together in one transaction: a revoked uploader cannot revoke the replacement, even after cleanup.
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) SELECT token_hash, ? FROM cards WHERE student_id = ? AND token_hash <> ? AND NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?)')
+        .bind(now(), owner, c.tokenHash, c.tokenHash));
+      stmts.push(env.DB.prepare("UPDATE cards SET body = '{}', cancelled = 1, expires_at = ?, updated_at = ? WHERE student_id = ? AND token_hash <> ? AND NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?)")
+        .bind(now() + 30 * 86400, now(), owner, c.tokenHash, c.tokenHash));
+      stmts.push(env.DB.prepare('INSERT INTO cards(token_hash, student_id, body, cancelled, expires_at, updated_at) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?) ON CONFLICT(token_hash) DO UPDATE SET student_id = excluded.student_id, body = excluded.body, cancelled = excluded.cancelled, expires_at = excluded.expires_at, updated_at = excluded.updated_at')
+        .bind(c.tokenHash, owner, body, c.cancelled ? 1 : 0, c.expiresAt || null, now(), c.tokenHash));
     }
-    for (const h of (d.remove || []).slice(0, 500)) stmts.push(env.DB.prepare('DELETE FROM cards WHERE token_hash = ?').bind(String(h)));
+    // a replaced or removed link keeps an empty "stopped" row for 30 days, so the parent reads "this link no longer works"
+    // (and the phone drops its saved copy) instead of "not ready yet"; the daily cleanup deletes it afterwards
+    for (const h of (d.remove || []).slice(0, 500)) {
+      if (!/^[0-9a-f]{64}$/.test(String(h))) continue;
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) VALUES (?,?)').bind(String(h), now()));
+      stmts.push(env.DB.prepare("INSERT INTO cards(token_hash, student_id, body, cancelled, expires_at, updated_at) VALUES(?, '', '{}', 1, ?, ?) ON CONFLICT(token_hash) DO UPDATE SET body = '{}', cancelled = 1, expires_at = excluded.expires_at, updated_at = excluded.updated_at")
+        .bind(String(h), now() + 30 * 86400, now()));
+    }
+    for (const id of (d.revokeStudents || []).slice(0, 500)) {
+      if (typeof id !== 'string' || !id || id.length > 200) throw new Fail(400, 'Bad student');
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) SELECT token_hash, ? FROM cards WHERE student_id = ?').bind(now(), id));
+      stmts.push(env.DB.prepare("UPDATE cards SET body = '{}', cancelled = 1, expires_at = ?, updated_at = ? WHERE student_id = ?")
+        .bind(now() + 30 * 86400, now(), id));
+    }
     if (stmts.length) await env.DB.batch(stmts);
-    return reply(200, { ok: true, cards: (d.cards || []).length });
+    return reply(200, { ok: true, cards: (d.cards || []).length, removed: (d.remove || []).length });
   }
-  if (what === 'inbox' && m === 'GET') {
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 100));
-    const ev = await env.DB.prepare('SELECT e.id, e.uuid, e.trip_id, e.type, e.body, e.device_id, e.phone_at, e.recv_at, e.second, c.bound_device FROM events e LEFT JOIN cards c ON c.token_hash = e.token_hash ORDER BY e.id LIMIT ?').bind(limit).all();
-    const ph = await env.DB.prepare('SELECT id, uuid, trip_id, kind, fallback, event_uuid, sha256, size, recv_at FROM photos ORDER BY id LIMIT ?').bind(limit).all();
-    return reply(200, {
-      events: (ev.results || []).map((r) => ({ id: r.id, uuid: r.uuid, tripId: r.trip_id, type: r.type, body: JSON.parse(r.body), deviceId: r.device_id, phoneAt: r.phone_at, recvAt: iso(r.recv_at), second: !!r.second, boundDevice: r.bound_device || '' })),
-      photos: (ph.results || []).map((r) => ({ id: r.id, uuid: r.uuid, tripId: r.trip_id, kind: r.kind, fallback: !!r.fallback, eventUuid: r.event_uuid || '', sha256: r.sha256, size: r.size, recvAt: iso(r.recv_at) })),
-    });
-  }
-  if (what === 'photo' && m === 'GET') {
-    if (!UUID_RE.test(parts[2] || '')) throw new Fail(400, 'Bad id');
-    const r = await env.DB.prepare('SELECT data, sha256 FROM photos WHERE uuid = ?').bind(parts[2]).first();
-    if (!r) throw new Fail(404, 'No such photo');
-    return new Response(new Uint8Array(r.data), { status: 200, headers: { ...HEADERS, 'Content-Type': 'image/jpeg', 'X-Sha256': r.sha256 } });
-  }
-  if (what === 'ack' && m === 'POST') {
-    const d = json(), stmts = [];
-    for (const u of (d.events || []).slice(0, 500)) if (UUID_RE.test(u)) stmts.push(env.DB.prepare('DELETE FROM events WHERE uuid = ?').bind(u));
-    for (const u of (d.photos || []).slice(0, 500)) if (UUID_RE.test(u)) stmts.push(env.DB.prepare('DELETE FROM photos WHERE uuid = ?').bind(u));
-    if (stmts.length) await env.DB.batch(stmts);
-    return reply(200, { ok: true });
-  }
+  // older office programs still ask for an inbox; parents' pages never write, so it is always empty
+  if (what === 'inbox' && m === 'GET') return reply(200, { events: [], photos: [] });
+  if (what === 'ack' && m === 'POST') return reply(200, { ok: true });
   if (what === 'status' && m === 'GET') {
-    const one = (sql) => env.DB.prepare(sql).first();
-    const [e, p, c, old] = await Promise.all([one('SELECT COUNT(*) n FROM events'), one('SELECT COUNT(*) n FROM photos'), one('SELECT COUNT(*) n FROM cards'), one('SELECT MIN(recv_at) t FROM events')]);
-    return reply(200, { version: 1, events: e.n, photos: p.n, cards: c.n, oldestUnackedSeconds: old.t ? now() - old.t : 0, serverTime: iso(now()) });
+    const c = await env.DB.prepare('SELECT COUNT(*) n, MAX(updated_at) t FROM cards WHERE cancelled = 0').first();
+    return reply(200, { version: 2, cards: c.n, lastCardAt: c.t ? iso(c.t) : null, serverTime: iso(now()) });
   }
   throw new Fail(404, 'Not found');
 }
 
 // ---------------------------------------------------------------- static pages and the entry point
-// In the single-file bundle (build.js) the driver page files are embedded here; with wrangler they come from env.ASSETS.
+// In the single-file bundle (build.js) the parent page files are embedded here; with wrangler they come from env.ASSETS.
 let EMBEDDED_ASSETS = null;
-const MIME = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', svg: 'image/svg+xml', webmanifest: 'application/manifest+json' };
+const MIME = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', svg: 'image/svg+xml', webmanifest: 'application/manifest+json', png: 'image/png' };
 async function fetchAsset(env, request, path) {
   if (env.ASSETS) {
     const u = new URL(request.url);
@@ -219,7 +162,7 @@ export default {
       const url = new URL(request.url);
       const parts = url.pathname.split('/').filter(Boolean);
       const m = request.method;
-      if (parts[0] === 'api') return await driver(request, env, url, parts);
+      if (parts[0] === 'api') return await parent(request, env, url, parts);
       if (parts[0] === 'office') return await office(request, env, url, parts);
       if (parts[0] === 't' && parts.length === 2 && m === 'GET') return await asset(env, request, '/index.html');
       if (parts[0] === 'sw.js' && m === 'GET') return await asset(env, request, '/app/sw.js', { 'Service-Worker-Allowed': '/', 'Content-Type': 'text/javascript; charset=utf-8' });
@@ -233,10 +176,7 @@ export default {
   },
 
   async scheduled(_event, env) {
-    const days = Number(env.RETENTION_DAYS || 30), cut = now() - days * 86400;
     await env.DB.batch([
-      env.DB.prepare('DELETE FROM events WHERE recv_at < ?').bind(cut),
-      env.DB.prepare('DELETE FROM photos WHERE recv_at < ?').bind(cut),
       env.DB.prepare('DELETE FROM cards WHERE expires_at IS NOT NULL AND expires_at < ?').bind(now() - 7 * 86400),
       env.DB.prepare('DELETE FROM nonces WHERE at < ?').bind(now() - 3600),
       env.DB.prepare('DELETE FROM rate WHERE window < ?').bind(Math.floor(now() / WINDOW) - 2),

@@ -62,7 +62,12 @@
     else D.dirty = true;
   }
   function connection(ok) {
-    if (D.connected !== ok) { D.connected = ok; HS.emit('connection', ok); }
+    if (D.connected !== ok) {
+      D.connected = ok;
+      var h = document.documentElement;   // css/base.css shows the offline bar and dims the save buttons
+      if (h && h.setAttribute) { if (ok) h.removeAttribute('data-offline'); else h.setAttribute('data-offline', ''); }
+      HS.emit('connection', ok);
+    }
   }
   D.refresh = function () {
     if (refreshing) return refreshing;
@@ -100,10 +105,10 @@
     return refreshing;
   };
   D.startPolling = function () {
-    clearInterval(timer);
+    clearInterval(timer); D.polling = true;
     timer = setInterval(function () { D.refresh().catch(function () {}); }, 2000);
   };
-  D.stopPolling = function () { clearInterval(timer); timer = null; };
+  D.stopPolling = function () { clearInterval(timer); timer = null; D.polling = false; connection(true); };
   function flushDirty() { if (D.dirty && !HS.overlay.isOpen && !HS.panel.count()) repaint(); }
   HS.on('overlay-closed', flushDirty);
   HS.on('panel-closed', flushDirty);

@@ -4,6 +4,7 @@ not at all, one line in the history), checked against the user's permissions and
 Reads (door card, balances, early warning, settlements, profitability, reports) are computed from the rows with SQL
 aggregates, so they stay fast with years of attendance and are identical on every PC."""
 import json
+import re
 import copy
 import math
 import time
@@ -432,7 +433,8 @@ def door_card(store, student_id, now=None, scopes=None):
             continue
         trial = not own and not same_subject   # not enrolled in this subject: a free trial session, once per group
         candidates.append({'session': s, 'own': own, 'makeup': not own and same_subject, 'now': D.door_window(s, mins, cfg['doorEarlyMinutes'], cfg['doorLateMinutes']),
-                           'done': s['id'] in att, 'status': (att.get(s['id']) or {}).get('status'),
+                           # marked absent (or excused) by the roll call and now standing at the door: not done, he can still check in
+                           'done': (att.get(s['id']) or {}).get('status') in ('present', 'late'), 'status': (att.get(s['id']) or {}).get('status'),
                            **({'trial': True, 'trialUsed': trial_used(store, student_id, s['groupId'])} if trial else {})})
     candidates.sort(key=lambda c: (not c['own'], not c['now'], abs((D.hm(c['session']['start']) or 0) - mins)))
     best = next((c for c in candidates if c['own'] and c['now'] and not c['done']), None)
@@ -489,7 +491,8 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None, tria
         makeup = True
     ctx.need_teacher(home.get('teacherId'))
     existing = ctx.store.row('attendance', D.attendance_id(sess['id'], student_id))
-    if existing and status is None:
+    # a second scan changes nothing - but a student the roll call marked absent who then arrives is here now: record him
+    if existing and status is None and existing.get('status') in ('present', 'late'):
         return {'id': existing['id'], 'status': existing['status'], 'already': True, 'makeup': bool(existing.get('makeup'))}
     cfg = settings(ctx.store)
     mins = now.hour * 60 + now.minute
@@ -505,7 +508,8 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None, tria
     elif sess.get('status') == 'planned':
         ops.append({'e': 'sessions', 'id': sess['id'], 'op': 'put', 'ver': sess['ver'], 'row': {**_strip(sess), 'status': 'held'}})
     row = {'sessionId': sess['id'], 'studentId': student_id, 'groupId': home['groupId'], 'teacherId': (ctx.store.row('groups', home['groupId']) or {}).get('teacherId'),
-           'date': sess['date'], 'status': status, 'at': (cur or {}).get('at') or now.strftime('%H:%M'), 'via': via, 'makeup': makeup, 'by': ctx.user}
+           'date': sess['date'], 'status': status, 'via': via, 'makeup': makeup, 'by': ctx.user,
+           'at': (cur or {}).get('at') if cur and cur.get('status') in ('present', 'late') and status in ('present', 'late') else now.strftime('%H:%M')}
     ops.append({'e': 'attendance', 'id': aid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
     ctx.commit(f'Attendance: {st.get("name")} ({status})', ops)
     return {'id': aid, 'status': status, 'already': False, 'makeup': makeup}
@@ -918,7 +922,12 @@ def _build_payment(ctx, d):
             raise Problem('err.notFound', 'Handout not found.')
         if m.get('teacherId'):
             ctx.need_teacher(m['teacherId'])
-        qty = max(1, int(d.get('qty') or 1))
+        try:
+            qty = max(1, int(d.get('qty') or 1))
+        except (TypeError, ValueError):
+            raise Problem('err.amount', 'Write the amount.')
+        if m.get('stock') is not None and (m.get('stock') or 0) < qty:   # never sell paper that is not on the shelf
+            raise Problem('err.noStock', 'Only {n} left in stock.', n=max(0, m.get('stock') or 0))
         row.update({'materialId': m['id'], 'qty': qty, 'teacherId': m.get('teacherId') or ''})
         ops.append({'e': 'materials', 'id': m['id'], 'op': 'put', 'ver': m['ver'], 'row': {**_strip(m), 'stock': (m.get('stock') or 0) - qty}})
         label = f'Handout {m["name"]} x{qty}' + (f' to {st["name"]}' if st else '')
@@ -951,12 +960,52 @@ def ref_used(store, method, ref):
     return {'no': r[0], 'name': (st or {}).get('name') or ''}
 
 
+def _request_key(d):
+    """The page sends one random key per payment dialog. When the answer of a saved payment is lost (the network to the
+    centre PC dropped after the save), pressing Save again returns the first receipt instead of taking the money twice."""
+    key = str(d.get('key') or '')
+    return key if re.fullmatch(r'[0-9a-f]{12,32}', key) else ''
+
+
+def _already_paid(ctx, pid, requested=None):
+    old = ctx.store.row('payments', pid) if pid else None
+    if old:
+        ctx.need('money.collect')
+        if old.get('teacherId'):
+            ctx.need_teacher(old['teacherId'])
+        if old.get('studentId'):
+            student_file(ctx.store, old['studentId'], ctx.scopes)  # do not return a hidden student's wallet receipt
+        if requested is not None:
+            try:
+                expected = {'studentId': requested.get('studentId') or '', 'kind': requested.get('kind') or 'fee',
+                            'amount': round(float(requested.get('amount')), 2), 'method': requested.get('method') or 'cash',
+                            'ref': D.norm_text(requested.get('ref'))[:60], 'note': D.norm_text(requested.get('note'))[:200]}
+                if expected['kind'] == 'fee':
+                    expected.update(groupId=requested.get('groupId') or '', period=str(requested.get('period') or '')[:7],
+                                    sessions=int(requested.get('sessions') or 0) or None)
+                elif expected['kind'] == 'material':
+                    expected.update(materialId=requested.get('materialId'), qty=max(1, int(requested.get('qty') or 1)))
+                matches = all(old.get(k) == v for k, v in expected.items())
+            except (TypeError, ValueError, OverflowError):
+                matches = False
+            shift = ctx.store.row('shifts', old.get('shiftId'))
+            if not matches or not shift or shift.get('userId') != ctx.user_id:
+                raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
+        return {**old, 'again': True}
+    return None
+
+
 @atomic_operation
 def pay(ctx, d):
+    key = _request_key(d)
+    pid = ('pk' + key) if key else ''
+    again = _already_paid(ctx, pid, d)   # checked under the operation lock, so two quick retries cannot both save
+    if again:
+        return again
     row, ops, label = _build_payment(ctx, d)
     with ctx.store.lock:  # numbering and saving under one lock: two clicks never get the same number
         row['no'] = _next_no(ctx.store, 'payments', 'R', ctx.letter(), date.today().year)
-        pid = new_id('pa')
+        pid = pid or new_id('pa')
         ops.insert(0, {'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
         ctx.commit(f'{label} ({row["no"]})', ops)
     return {'id': pid, **row}
@@ -974,6 +1023,17 @@ def pay_many(ctx, d):
         raise Problem('err.chooseGroup', 'Choose the student and the group.')
     if (d.get('method') or 'cash') == 'wallet':
         raise BadRequest('Pay each child from his own money in advance')
+    key = _request_key(d)
+    if key and ctx.store.row('payments', 'pk' + key + 'n0'):   # the answer was lost: give back the first save
+        first = ctx.store.row('payments', 'pk' + key + 'n0')
+        saved = ctx.store.rows('payments', 'batch=?', (first.get('batch'),))
+        if len(saved) != len(items) or any(not isinstance(it, dict) for it in items):
+            raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
+        receipts = [_already_paid(ctx, 'pk' + key + 'n' + str(n),
+                    {**d, **it, 'kind': 'fee'}) for n, it in enumerate(items)]
+        if not all(receipts):
+            raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
+        return {'batch': receipts[0].get('batch'), 'total': round(sum(r['amount'] for r in receipts), 2), 'receipts': receipts, 'again': True}
     built = []
     for it in items:
         if not isinstance(it, dict):
@@ -988,7 +1048,7 @@ def pay_many(ctx, d):
         for n, (row, o, _label) in enumerate(built):
             row['no'] = D.doc_no(first[0], 2000 + first[1], first[2], first[3] + n)
             row['batch'] = batch
-            pid = new_id('pa')
+            pid = ('pk' + key + 'n' + str(n)) if key else new_id('pa')
             ops.append({'e': 'payments', 'id': pid, 'op': 'put', 'row': row})
             ops.extend(o)
             receipts.append({'id': pid, **row})
@@ -1171,7 +1231,7 @@ def cached_read(fn):
 
 
 @cached_read
-def risk_list(store, scopes=None, limit=500):
+def risk_list(store, scopes=None, limit=500, include_money=True):
     """Students who may drop out, highest score first, with reasons - the "call today" list."""
     ens, sess, att, marks, recent = _risk_inputs(store)
     if scopes is not None:
@@ -1187,18 +1247,19 @@ def risk_list(store, scopes=None, limit=500):
             continue
         frm = e.get('from') or ''
         statuses = [att.get((sid, e['studentId']), 'absent') for sid, d in sess.get(g['id'], []) if d >= frm]
-        b = bals.get(e['id']) or {}
+        b = (bals.get(e['id']) or {}) if include_money else {}
         score, why = D.risk(statuses, marks.get((e['studentId'], g.get('teacherId')), []), b.get('balance', 0), b.get('unit', 0),
                             e['studentId'] in recent)
         if score >= cfg['riskCall']:
             out.append({'studentId': e['studentId'], 'student': students.get(e['studentId']), 'groupId': g['id'], 'teacherId': g.get('teacherId'),
-                        'score': score, 'why': why, 'followed': e['studentId'] in recent, 'balance': b.get('balance', 0),
+                        'score': score, 'why': why, 'followed': e['studentId'] in recent,
+                        **({'balance': b.get('balance', 0)} if include_money else {}),
                         'last': statuses[-6:], 'level': 'high' if score >= cfg['riskHigh'] else 'medium'})
     out.sort(key=lambda r: -r['score'])
     return out[:limit]
 
 
-def risk_for_student(store, student_id, d=None, scopes=None):
+def risk_for_student(store, student_id, d=None, scopes=None, include_money=True):
     ens, sess, att, marks, recent = _risk_inputs(store, {student_id})
     groups = {g['id']: g for g in store.rows('groups', scopes=scopes)}
     ens = [e for e in ens if scopes is None or e.get('teacherId') in scopes]
@@ -1210,7 +1271,7 @@ def risk_for_student(store, student_id, d=None, scopes=None):
         if not g:
             continue
         statuses = [att.get((sid, student_id), 'absent') for sid, dd in sess.get(g['id'], []) if dd >= (e.get('from') or '')]
-        b = bals.get(e['id']) or {}
+        b = (bals.get(e['id']) or {}) if include_money else {}
         score, why = D.risk(statuses, marks.get((student_id, g.get('teacherId')), []), b.get('balance', 0), b.get('unit', 0), student_id in recent)
         if score > worst['score']:
             worst = {'score': score, 'why': why, 'groupId': g['id']}
@@ -1256,8 +1317,8 @@ def student_file(store, student_id, scopes=None):
         marks = [m for m in marks if m['teacherId'] in allowed]
     for m in marks:
         m['rank'], m['of'] = exam_rank(store, m['examId'], student_id)
-    fus = store.rows('followups', 'student_id=?', (student_id,))
-    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id)) if st.get('familyKey') else []
+    fus = store.rows('followups', 'student_id=?', (student_id,), scopes)
+    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id), scopes) if st.get('familyKey') else []
     held = {}
     with store.lock:
         for e in ens:
@@ -1330,6 +1391,11 @@ def save_marks(ctx, exam_id, items):
             continue
         absent = bool(it.get('absent'))
         score = None
+        answers = it.get('answers') if isinstance(it.get('answers'), list) else None
+        if answers is not None and (ex.get('answerKey') or []) and not absent:
+            # a bubble sheet: the score is counted here from the answers and the key, never trusted from the page
+            answers = [str(a or '')[:2].upper() for a in answers[:200]]
+            it = {**it, 'score': grade_answers(ex['answerKey'], answers, mx)[0]}
         if not absent and it.get('score') not in (None, ''):
             try:
                 score = round(float(it['score']), 2)
@@ -1342,7 +1408,7 @@ def save_marks(ctx, exam_id, items):
         mid = D.mark_id(exam_id, sid)
         cur = ctx.store.row('marks', mid)
         row = {'examId': exam_id, 'studentId': sid, 'teacherId': ex.get('teacherId'), 'score': score, 'absent': absent,
-               'via': it.get('via') or 'manual', 'answers': it.get('answers') if isinstance(it.get('answers'), list) else (cur or {}).get('answers')}
+               'via': str(it.get('via') or 'manual')[:10], 'answers': answers if answers is not None else (cur or {}).get('answers')}
         if cur and all(cur.get(k) == row.get(k) for k in ('score', 'absent')):
             continue
         ops.append({'e': 'marks', 'id': mid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
@@ -1389,6 +1455,53 @@ def _month_facts(store, ym):
         for r in store.conn.execute("SELECT group_id, room_id FROM sessions WHERE deleted=0 AND status='held' AND date>=? AND date<=?", (a, b)):
             roomhours.setdefault(r[0], set()).add(r[1])
     return {'rev': rev, 'mat': mat, 'held': held, 'visits': visits, 'exp': exp, 'first': first, 'last': last}
+
+
+def school_statement(store, group_id, ym, scopes=None):
+    """B06 - the month of one school support group for the school administration: each student's visits and money, the
+    sessions held, and the split by the centre's rules (treasury first, then the teacher's share of the rest, the remainder to
+    the school). Everything is computed from attendance and receipts (reversals included), never stored."""
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
+    g = store.row('groups', group_id)
+    if not g or (scopes is not None and g.get('teacherId') not in scopes):
+        raise Problem('err.notFound', 'Group not found.')
+    if g.get('kind') != 'school':
+        raise Problem('err.notSchool', 'This statement is only for school support groups.')
+    first, last = D.month_bounds(ym)
+    a, b = first.isoformat(), last.isoformat()
+    cfg = settings(store)
+    with store.lock:
+        c = store.conn
+        sessions = [{'date': r[0], 'start': r[1], 'end': r[2], 'status': r[3]} for r in c.execute(
+            "SELECT date, start_time, end_time, status FROM sessions WHERE deleted=0 AND group_id=? AND date>=? AND date<=? ORDER BY date, start_time",
+            (group_id, a, b))]
+        visits = {r[0]: r[1] for r in c.execute(
+            "SELECT student_id, COUNT(*) FROM attendance WHERE deleted=0 AND group_id=? AND status IN ('present','late') AND date>=? AND date<=? "
+            "GROUP BY student_id", (group_id, a, b))}
+        paid = {r[0]: float(r[1] or 0) for r in c.execute(
+            "SELECT student_id, SUM(amount) FROM payments WHERE deleted=0 AND kind='fee' AND group_id=? AND date>=? AND date<=? GROUP BY student_id",
+            (group_id, a, b))}
+        ids = {r[0] for r in c.execute(
+            "SELECT student_id FROM enrollments WHERE deleted=0 AND group_id=? AND (from_date IS NULL OR from_date='' OR from_date<=?) "
+            "AND (to_date IS NULL OR to_date='' OR to_date>=?)", (group_id, b, a))}
+    ids |= set(visits) | set(paid)
+    students = []
+    for sid in ids:
+        st = store.row('students', sid) or {}
+        students.append({'studentId': sid, 'code': st.get('code') or '', 'name': st.get('name') or '', 'visits': visits.get(sid, 0),
+                         'paid': round(paid.get(sid, 0), 2)})
+    students.sort(key=lambda x: (x['name'], x['code']))
+    collected = round(sum(x['paid'] for x in students), 2)
+    split = D.school_split(collected, float(cfg['schoolTreasuryPct']), float(cfg['schoolTeacherPct']))
+    held = [x for x in sessions if x['status'] == 'held']
+    max_students, max_fee = int(cfg['schoolMaxStudents']), float(cfg['schoolMaxFee'])
+    t = store.row('teachers', g.get('teacherId')) or {}
+    return {'group': {'id': g['id'], 'name': g.get('name'), 'teacher': t.get('name') or '', 'subjectId': g.get('subjectId'), 'gradeCode': g.get('gradeCode'),
+                      'fee': g.get('fee'), 'feeType': g.get('feeType')},
+            'period': ym, 'students': students, 'sessions': sessions, 'held': len(held), 'collected': collected, 'split': split,
+            'rules': {'treasuryPct': float(cfg['schoolTreasuryPct']), 'teacherPct': float(cfg['schoolTeacherPct']), 'maxStudents': max_students, 'maxFee': max_fee},
+            'checks': {'students': len(students) <= max_students, 'fee': float(g.get('fee') or 0) <= max_fee}}
 
 
 def settlement(store, teacher_id, ym, facts=None):
@@ -1694,7 +1807,7 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
             add('absentees', 'warn', 'followup?tab=messages', 'chat', n=n)
     # 5. students about to leave
     if can({'followup.view'}):
-        risky = risk_list(store, scopes, limit=2000)
+        risky = risk_list(store, scopes, limit=2000, include_money=can({'money.view', 'money.collect'}))
         high = len({r['studentId'] for r in risky if r['level'] == 'high' and not r['followed']})
         if high:
             add('riskHigh', 'bad', 'followup', 'bell', n=high)

@@ -71,7 +71,7 @@ reversible; unit test for logic, browser test for each new screen flow, regressi
 
 ---
 
-## Part C — What exists now (verified 2026-10-04, commit `1f295f9`)
+## Part C — Architecture and current implementation (updated 2026-10-05)
 
 ### C1. Origin
 The repository is a fork of the owner's **Trip Orders** engine (`coolman1984/Yousef-Transportation`, commit
@@ -97,11 +97,11 @@ installer `installer/hessa.iss` (new AppId), entry `server/hs_main.py`.
 | `domain.py` | **new**, pure rules | text/mobile, doc numbers, student codes, grades, timetable clashes, fees, risk, settlement, signals |
 | `center.py` | **new**, operations + reads | door, roll call, enrol/transfer, shifts, receipts, expenses, risk list, student file, exams, settlements, profitability, dashboard, reports, Excel import |
 | `app.py` | engine routes + **new `/api/c/*`**, `/api/delta`, `/api/import/preview` | trip routes removed |
-| `gateway_client.py` | rewritten for **parent cards** (push only) | `card_for(store, student_id)` |
+| `gateway_client.py` | **parent cards** (push only; `check()` reads the mailbox status) | `card_for(store, student_id)`: one child, published marks only, the next 7 days |
 | `formats.py`, `xlsx_read.py`, `xlsx_write.py`, `xlsx.py`, `docx_read.py`, `docx_write.py`, `com_office.py` | engine readers/writers | used by the student import |
 
-Verified: `python3 -c "import app"` starts and creates all 17 tables. Engine tests `test_unit test_convergence test_xlsx`
-pass (42 tests, 3 skipped). **Nothing in `center.py`/`domain.py` has been executed by a test yet.**
+Verified (2026-10-05): every centre module is executed by tests through real HTTP, several PCs and Chromium - see Part G and
+`TASKS.md`. The old note "nothing in center.py is tested" is history.
 
 ### C3. Data model (`server/store.py` → `ENTITIES`)
 Every row also has engine columns: `id, ver, created_at/by, updated_at/by, deleted, deleted_at/by/txn`.
@@ -188,18 +188,18 @@ Plus `POST /api/import/preview?name=&grade=&group=` (raw file body) and `GET /ap
 
 Errors: HTTP 400 `{error, key, vars}` from `center.Problem` → the page shows `HS.t(key, vars)`; 403 `{error}`; 409 conflict.
 
-### C7. Known gaps in the current code (fix in task P1)
-1. **P1.1 implemented 2026-10-04:** startup assets now exist in the prescribed order, with centre scaffolds and the shared data wrapper in `ui.js`. Centre navigation and visual verification remain dependent on P1.2.
+### C7. Implementation status and invariants
+1. P1.1: startup assets exist in the prescribed order; the centre pages and shared data wrapper are implemented and browser tested.
 2. P1.2 implemented: centre pages, permission-aware palette, shortcuts, tour and onboarding.
-3. P1 cleanup implemented: overview/lists are centre scaffolds; access scopes are teachers. Full lists/settings/overview follow in P3 and P5.
+3. Lists, settings and the command-centre overview are implemented; account scopes refer to teachers.
 4. P1.5/P1.6 implemented: centre dictionaries and updated design tests pass.
-5. P1.4 implemented: two-second delta polling with fallback and deferred repaint; Chrome timing verification pending.
-6. `tests/test_e2e_browser.py` tests trip flows → rewrite (P8).
-7. `gateway/public/*` is the driver page → becomes the parent page (P7).
-8. `center.dashboard()` calls `risk_list()` on every load (slow for big centres) → cache by data version (P2.6).
-9. `server/app.py` `link_page()` references `/js/quick.js`, which does not exist in this repo → copy it from BAMS or remove personal-link page JS (check BAMS `js/quick.js`).
+5. P1.4: two-second delta polling with fallback and deferred repaint; `test_acceptance` checks propagation in under three seconds without a full-state request.
+6. Done 2026-10-05: `tests/test_e2e_browser.py` tests centre flows (E07).
+7. Done 2026-10-05: `gateway/public/*` is the parent page, read only (P7).
+8. P2.6: scoped risk/dashboard caches are bounded and invalidated by store version; sample tests check response-size and latency budgets.
+9. Fixed 2026-10-05 (A03): `js/quick.js` exists.
 10. Lock order: `center.pay()` holds `store.lock` then `ctx.letter()` takes `journal.lock` (same order as `store._save`). Keep this order everywhere; never take `store.lock` while holding `journal.lock`.
-11. `README.md`, `CLAUDE.md`, `.claude/skills/*`, `docs/DESIGN.md`, guides do not exist yet for Hessa (P10).
+11. Done 2026-10-05: `README.md`, `.claude/skills/hessa/SKILL.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md`, guides per role (P10).
 
 ---
 
@@ -239,7 +239,7 @@ Grades: الصف الأول الابتدائي … السادس الابتدائ
 **P1.1 index.html.** Script list exactly: `lib/qrcode.min.js, js/core.js, js/i18n.js, js/i18n/en.js, js/i18n/ar.js, js/prefs.js,
 js/shell.js, js/data.js, js/ui.js, js/views/join.js, js/views/auth.js, js/views/overview.js, js/views/door.js, js/views/students.js,
 js/views/groups.js, js/views/money.js, js/views/exams.js, js/views/followup.js, js/views/settlements.js, js/views/reports.js,
-js/views/lists.js, js/views/importx.js, js/views/print.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
+js/views/lists.js, js/views/importx.js, js/views/print.js, js/omr.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
 js/views/mailbox.js, js/views/soon.js, js/views/settings.js, js/views/help.js, js/app.js`. `<title>Hessa</title>`,
 noscript text "Hessa needs JavaScript. يحتاج نظام حصة إلى تفعيل جافاسكريبت." New favicon (amber square + cap).
 Create each new view file as a minimal `HS.views.<id> = HS.withData({render, mount})` first (skeleton), then fill it in its task.
@@ -566,13 +566,13 @@ groups with free seats, WhatsApp booking link) pushed as a public card (no stude
 cd /home/user/Teachers
 node --test tests/test_frontend.js                                                # startup asset/order regression
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
+python3 tools/build_windows.py --check                                            # every file the installer ships
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)
-python3 -m unittest test_sample test_multinode                                                          # before a PR (~4 min)
-HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser              # when screens changed
-# Windows: HS_CHROMIUM="C:\Program Files\Google\Chrome\Application\chrome.exe"; pyflakes lives in data/qa-deps (PYTHONPATH)
-cd ../gateway && node --test --no-warnings test/                                                        # when gateway changed
-grep -rn "trip\|Trip\|vehicle\|driver" js server --include=*.js --include=*.py | grep -v "^server/\(sync\|journal\|replica\)"   # must be empty after P1
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_xlsx test_integration   # always (~2 min)
+python3 -m unittest test_sample test_multinode test_gateway_parent test_recovery                                  # before a PR (~5 min)
+HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance        # when screens changed
+cd ../gateway && node --test --no-warnings test/gateway.test.js                                                   # when gateway changed
+grep -rn "trip\|Trip\|vehicle\|driver" js server --include=*.js --include=*.py | grep -v "^server/\(sync\|journal\|replica\)"   # only "strip"
 ```
 Run the app: `cd server && python3 app.py` → http://localhost:8095 (first start on the PC itself creates the admin).
 Never run `playwright install`; never edit `server/` or `js/` while multi-PC or browser tests run; kill test servers by PID.
@@ -627,10 +627,14 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |
+| 2026-10-05 | Remote work (owner: run on the client PC, work from phone or another PC over the internet) | Outbound tunnel (Tailscale recommended, Cloudflare Tunnel alternative), no own relay; remote work off until switched on at the centre, only `remote.use`; a laptop with its own copy covers the PC being off (`docs/REMOTE_ACCESS.md`) |
+| 2026-10-05 | Version | 1.1.0 (continues after the engine's 1.0.2, never lowered) |
 | open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |
 | open | Forgive the debt of a student who left for good | default: no — the debt stays visible, marked “left” |
 | open | Monthly groups during the mid-year break (23 Jan – 4 Feb 2027) | default: full months are charged |
 | open | Joining a month group late: from which day is “next month” the default | default: day 21 |
 
 ### P2 implementation evidence (2026-10-04)
-Domain/API regression modules now exist. Centre operations are covered through real local HTTP; offline journal merging has a separate test_center_multinode module. Real process/proxy partition checks and sample response benchmarks remain pending. Money and attendance must use dedicated /api/c operations, never generic commits.
+Domain/API regression modules cover centre operations through real local HTTP. `test_center_multinode` checks signed offline merging,
+`test_center_network` exercises real process/proxy partitions, and `test_sample` checks response benchmarks. Money and attendance must
+use dedicated /api/c operations, never generic commits. Hardware/account acceptance still follows TASKS.md.

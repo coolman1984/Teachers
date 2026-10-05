@@ -75,13 +75,43 @@
     paint(); document.body.appendChild(el);
   }
 
+  /* ---------- the whole month as one spreadsheet: a sheet per section, the reader's language, the same (scoped) numbers ---------- */
+  function sheets(r) {
+    var t = HS.t, payouts = r.payouts || 0, net = Math.round((r.income - r.expenseTotal - payouts) * 100) / 100;
+    var pair = function (obj, label) { return Object.keys(obj).map(function (k) { return [label(k), obj[k]]; }).sort(function (a, b) { return b[1] - a[1]; }); };
+    var pc = function (x) { return x === null || x === undefined ? '' : Math.round(x * 1000) / 10; };
+    return [
+      { name: t('rep.x.summary'), head: [t('rep.x.item'), t('rep.x.value')], rows: [
+        [t('rep.x.month'), ym], [t('rep.income'), r.income], [t('rep.expenses'), r.expenseTotal], [t('rep.payouts'), payouts], [t('rep.net'), net],
+        [t('rep.new'), r.newEnrolments], [t('rep.leftShort'), r.left], [t('rep.voids'), r.voids.count], [t('rep.x.voidAmount'), r.voids.amount],
+        [t('rep.visits'), r.days.reduce(function (a, d) { return a + d.visits; }, 0)]] },
+      { name: t('rep.byTeacher'), head: [t('f.teacherId'), t('rep.income')], rows: pair(r.byTeacher, function (k) { return D.teacherName(k) || t('rep.noTeacher'); }) },
+      { name: t('rep.byMethod'), head: [t('pay.method'), t('rep.income')], rows: pair(r.byMethod, function (k) { return t('pay.method.' + k); }) },
+      { name: t('rep.byExpense'), head: [t('rep.x.category'), t('rep.expenses')], rows: pair(r.expenses, function (k) { return t('exp.cat.' + k); }) },
+      { name: t('rep.attDays'), head: [t('f.date'), t('rep.visits')], rows: r.days.map(function (d) { return [d.date, d.visits]; }) },
+      { name: t('rep.moneyDays'), head: [t('f.date'), t('rep.income')], rows: r.moneyDays.map(function (d) { return [d.date, d.amount]; }) },
+      { name: t('rep.profitability'), head: [t('f.group'), t('f.teacherId'), t('set.revenue'), t('set.centre'), t('rep.roomCost'), t('rep.profit'), t('rep.x.enrolled'), t('rep.x.capacity'), t('rep.x.fillPct'), t('rep.x.attPct'), t('rep.signal'), t('rep.x.todo')],
+        rows: r.profitability.map(function (g) { return [g.name, D.teacherName(g.teacherId), g.revenue, g.centerShare, g.roomCost || 0, g.centerProfit, g.enrolled, g.capacity || '', pc(g.utilisation), pc(g.attendanceRate), t('signal.' + g.signal), t('rep.do.' + g.signal)]; }) },
+      { name: t('rep.diffs'), head: [t('f.no'), t('f.user'), t('shift.closedAt'), t('shift.diff'), t('shift.reason')],
+        rows: r.shiftDiffs.map(function (x) { return [x.no, x.user_name || '', String(x.closed_at || '').replace('T', ' ').slice(0, 16), x.diff, x.diff_reason || '']; }) }
+    ];
+  }
+  function exportExcel(btn) {
+    btn.disabled = true;
+    HS.api('POST', '/api/xlsx', { filename: 'Hessa ' + ym, sheets: sheets(data) }, { blob: true }).then(function (blob) {
+      U.download(HS.t('nav.reports') + ' ' + ym + '.xlsx', blob, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      HS.toast(HS.t('rep.x.done'));
+    }, function (e) { HS.toast(U.errorText(e), 'bad', 5000); }).then(function () { btn.disabled = false; });
+  }
+
   HS.views.reports = HS.withData({
     render: function (ctx) {
       var q = (ctx && ctx.route && ctx.route.q) || {};
       if (q.ym && /^\d{4}-\d{2}$/.test(q.ym)) ym = q.ym;
       ym = ym || HS.thisMonth();
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.reports')) + '</h1><p>' + HS.esc(HS.t('page.reports.d')) + '</p></div>' + HS.monthPicker(ym) +
-          '<button class="btn" data-present>' + HS.icon('present', 'sm') + HS.esc(HS.t('rep.present')) + '</button><button class="btn" data-printrep>' + HS.icon('printer', 'sm') + HS.esc(HS.t('rep.print')) + '</button></div>' +
+          '<button class="btn" data-present>' + HS.icon('present', 'sm') + HS.esc(HS.t('rep.present')) + '</button><button class="btn" data-printrep>' + HS.icon('printer', 'sm') + HS.esc(HS.t('rep.print')) + '</button>' +
+          (HS.can('excel.export') ? '<button class="btn" data-xlsx>' + HS.icon('download', 'sm') + HS.esc(HS.t('rep.x.btn')) + '</button>' : '') + '</div>' +
         '<div data-rep><div class="skeleton" style="height:8rem"></div><div class="skeleton" style="height:16rem;margin-top:1rem"></div></div>';
     },
     mount: function (root) {
@@ -90,6 +120,7 @@
       root.addEventListener('click', function (e) {
         var m = e.target.closest('[data-month]'); if (m) { HS.go('reports?ym=' + HS.monthShift(ym, Number(m.dataset.month))); return; }
         if (e.target.closest('[data-present]') && data) { present(data); return; }
+        var x = e.target.closest('[data-xlsx]'); if (x && data) { exportExcel(x); return; }
         if (e.target.closest('[data-printrep]') && data) HS.printHTML('<div class="ps-head"><div><div class="ps-org">' + HS.esc((D.state.settings || {}).systemName || HS.t('app.name')) + '</div><h1>' + HS.esc(HS.t('nav.reports') + ' · ' + HS.monthName(ym)) + '</h1></div></div>' + body(data));
       });
     }

@@ -15,7 +15,6 @@ export function makeEnv(extra = {}) {
   return {
     DB: new D1(process.env.GATEWAY_DB || ':memory:'),
     OFFICE_SECRET: process.env.OFFICE_SECRET || '',
-    RETENTION_DAYS: '30',
     ASSETS: {
       async fetch(req) {
         const p = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^([/\\])+/, '');

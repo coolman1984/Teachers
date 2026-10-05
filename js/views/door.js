@@ -8,8 +8,10 @@
 
   /* ---------- sounds (short, optional; a USB scanner user hears ok / warning without looking) ---------- */
   var audio = null;
+  // door switches are centre settings (Settings → Rules), shared by every PC; a missing value means on
+  function rule(key) { var s = (HS.data.state && HS.data.state.settings) || {}; return s[key] !== false; }
   function beep(kind) {
-    if (HS.prefs.data.doorSounds === false) return;
+    if (!rule('doorSounds')) return;
     try {
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
@@ -45,6 +47,11 @@
   }
   function moneyRows(c) {
     if (!c.enrollments.length) return '<p class="muted">' + HS.esc(HS.t('door.noGroups')) + '</p>' + enrolButton(true);
+    if (!HS.can(['money.view', 'money.collect'])) {   // attendance without money (an assistant): the groups, no balances
+      return '<ul class="money-rows">' + c.enrollments.map(function (e) {
+        return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + (e.left ? ' <span class="badge warn">' + HS.esc(HS.t('enr.' + (e.status || 'left'))) + '</span>' : '') + '</b></div></li>';
+      }).join('') + '</ul>';
+    }
     return '<ul class="money-rows">' + c.enrollments.map(function (e) {
       var m = e.money || {}, bal = Number(m.balance) || 0;
       return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + (e.left ? ' <span class="badge warn">' + HS.esc(HS.t('enr.' + (e.status || 'left'))) + '</span>' : '') + '</b><span class="muted">' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) +
@@ -78,12 +85,14 @@
       riskBadge(c.risk) +
       '<section><h3 class="sec">' + HS.esc(HS.t('door.session')) + '</h3>' + sessionButtons(c) + '</section>' +
       '<div class="checkin-row">' + checkinButton(c, done, canCheck) + '</div>' +
-      '<section><h3 class="sec">' + HS.esc(HS.t('door.money')) + '</h3>' + moneyRows(c) + '</section>' +
+      '<section><h3 class="sec">' + HS.esc(HS.t(HS.can(['money.view', 'money.collect']) ? 'door.money' : 'stu.tab.groups')) + '</h3>' + moneyRows(c) + '</section>' +
       (c.lastFamily ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.esc(HS.t('fam.done', { n: c.lastFamily.receipts.length, a: HS.fmt.num(c.lastFamily.total) })) + '</span>' +
         '<button class="btn sm" data-printfam>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
       (c.lastReceipt ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.t('door.receipt', { no: { html: U.bdi(c.lastReceipt.no) } }) + ' · ' + U.money(c.lastReceipt.amount) + '</span>' +
         '<button class="btn sm" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
       '<div class="row wrap">' + (c.family && c.family.length && HS.can('money.collect') ? '<button class="btn sm" data-family>' + HS.icon('users', 'sm') + HS.esc(HS.t('fam.btn', { n: c.family.length })) + '</button>' : '') +
+        (HS.can('money.collect') && HS.incomeDialog ? '<button class="btn sm" data-sell>' + HS.icon('doc', 'sm') + HS.esc(HS.t('door.sell')) + '</button>' +
+          '<button class="btn sm" data-topup>' + HS.icon('plus', 'sm') + HS.esc(HS.t('door.topup')) + '</button>' : '') +
         (HS.can('messages.send') && HS.can('contacts.view') && s.parentMobile ? '<button class="btn sm" data-wa>' + HS.icon('chat', 'sm') + HS.esc(HS.t('door.message')) + '</button>' : '') +
         (c.enrollments.length ? enrolButton(false) : '') + '</div>';
   }
@@ -152,14 +161,15 @@
           return;
         }
         btn.disabled = true;
-        HS.post('/api/c/pay', { studentId: card.student.id, groupId: enrolment.groupId, kind: 'fee', amount: amount.value, method: method,
+        HS.post('/api/c/pay', { studentId: card.student.id, groupId: enrolment.groupId, kind: 'fee', amount: amount.value, method: method, key: payKey,
           ref: (el.querySelector('#pay-r') || {}).value || '', period: p ? p.value : '', confirmDuplicate: dupSeen }).then(function (r) {
           HS.overlay.close(); beep('ok');
           HS.toast(HS.t('pay.done', { no: r.no }));
-          if (HS.printReceipt && HS.prefs.data.autoReceipt) HS.printReceipt(r);
+          if (HS.printReceipt && HS.prefs.data.autoReceipt === 'on') HS.printReceipt(r);
           done(r);
         }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       }
+      var payKey = HS.data.newId('');   // one key per dialog: Save pressed again after a lost answer returns the same receipt
       var dupSeen = false;   // the same transfer number twice is shown once; pressing Save again confirms it is a real second payment
       // ... but only for the reference and method that were shown: changing either asks again
       el.querySelector('#pay-r').addEventListener('input', function () { dupSeen = false; });
@@ -177,7 +187,7 @@
     people.forEach(function (p) { p.lines.forEach(function (l) { rows.push({ p: p, l: l, amount: l.due > 0 ? l.due : '', on: l.due > 0 }); }); });
     if (!rows.length) return;
     ensureShift().then(function () {
-      var method = 'cash', dupSeen = false;
+      var method = 'cash', dupSeen = false, payKey = HS.data.newId('');
       var el = HS.dialog({ title: HS.t('fam.title'), wide: true, body:
         '<p class="muted">' + HS.esc(HS.t('fam.b')) + '</p><ul class="fam-lines" data-lines>' + rows.map(function (r, i) {
           return '<li class="fam-line"><label class="grow"><input type="checkbox" data-f="' + i + '"' + (r.on ? ' checked' : '') + '> <b>' + HS.esc(r.p.name) + '</b>' +
@@ -212,10 +222,10 @@
         var btn = this, items = picked();
         if (!items.length) { err.hidden = false; err.textContent = HS.t('err.amount'); return; }
         btn.disabled = true; err.hidden = true;
-        HS.post('/api/c/pay/many', { method: method, ref: el.querySelector('#fam-r').value, confirmDuplicate: dupSeen,
+        HS.post('/api/c/pay/many', { method: method, ref: el.querySelector('#fam-r').value, confirmDuplicate: dupSeen, key: payKey,
           items: items.map(function (x) { return { studentId: x.r.p.id, groupId: x.r.l.groupId, amount: x.amount }; }) }).then(function (r) {
           HS.overlay.close(); beep('ok'); HS.toast(HS.t('fam.done', { n: r.receipts.length, a: HS.fmt.num(r.total) }));
-          if (HS.printFamilyReceipt && HS.prefs.data.autoReceipt) HS.printFamilyReceipt(r);
+          if (HS.printFamilyReceipt && HS.prefs.data.autoReceipt === 'on') HS.printFamilyReceipt(r);
           done(r);
         }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       });
@@ -352,7 +362,7 @@
           if (window.innerWidth < 900 && cardBox.scrollIntoView) cardBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
           var own = c.candidates.filter(function (x) { return x.own && x.now && !x.done; });
           var done = c.candidates.filter(function (x) { return x.session.id === c.pick && x.done; })[0];
-          if (auto && HS.prefs.data.autoCheckin !== false && c.suggested && own.length === 1 && HS.can('attendance.mark')) checkin();
+          if (auto && rule('autoCheckin') && c.suggested && own.length === 1 && HS.can('attendance.mark')) checkin();
           else if (done) { beep('warn'); if (auto) HS.toast(HS.t('door.already', { status: HS.t('att.' + done.status) }), 'bad'); }   // the same card scanned twice
         }, function (e) { cardBox.innerHTML = U.empty('alert', U.errorText(e)); beep('warn'); });
       }
@@ -403,17 +413,20 @@
           payDialog(card, en, function (receipt) { paintShift(); openCard(card.student.id, false).then(function () { if (card) { card.lastReceipt = receipt; paintCard(); } }); });
           return;
         }
+        var extra = e.target.closest('[data-sell],[data-topup]');
+        if (extra) {   // a handout or money in advance from the card: the student is already known, the receipt shows below
+          var st = card.student, teachers = card.enrollments.map(function (x) { return x.teacherId; });
+          HS.incomeDialog(function (receipt) { paintShift(); openCard(st.id, false).then(function () { if (card) { card.lastReceipt = receipt; paintCard(); } }); },
+            extra.hasAttribute('data-topup') ? 'wallet_topup' : 'material', { student: st, teacherIds: teachers });
+          return;
+        }
         if (e.target.closest('[data-print]') && card.lastReceipt) { HS.printReceipt(card.lastReceipt); return; }
         if (e.target.closest('[data-printfam]') && card.lastFamily) { HS.printFamilyReceipt(card.lastFamily); return; }
         if (e.target.closest('[data-family]')) { var fid = card.student.id; familyDialog(card, function (r) { paintShift(); openCard(fid, false).then(function () { if (card) { card.lastFamily = r; paintCard(); } }); }); return; }
         if (e.target.closest('[data-enrol]')) { var sid = card.student.id; HS.pickGroup(card.student, function () { openCard(sid, false); }); return; }
         var eg = e.target.closest('[data-enrol-g]');
         if (eg) { var sid2 = card.student.id; U.run(HS.post('/api/c/enroll', { studentId: sid2, groupId: eg.dataset.enrolG, billFrom: HS.defaultBillFrom ? HS.defaultBillFrom(HS.data.get('groups', eg.dataset.enrolG)) : undefined }), 'common.saved', eg).then(function () { return openCard(sid2, false); }, function () {}); return; }
-        if (e.target.closest('[data-wa]')) {
-          HS.get('/api/c/wa?studentId=' + encodeURIComponent(card.student.id) + '&kind=monthly&lang=' + HS.lang).then(function (r) {
-            if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener');
-          }, function (er) { HS.toast(U.errorText(er), 'bad'); });
-        }
+        if (e.target.closest('[data-wa]')) HS.waQueue([{ id: card.student.id, name: card.student.name }], 'monthly', null);   // asks "was it sent?" like every message
       });
       root.addEventListener('click', function (e) {
         var r = e.target.closest('[data-roster]'); if (r) { HS.openRoster(r.dataset.roster); return; }

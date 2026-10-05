@@ -523,9 +523,10 @@ class Store:
         if kind != 'put' or not isinstance(op.get('row'), dict):
             raise BadRequest(f'Invalid change: {entity}/{rid}')
         row = op['row']
-        v = row.get('src')
-        if isinstance(v, str) and v.startswith('/files/') and ('..' in v or '\\' in v or ':' in v):
-            raise BadRequest('Invalid file reference')  # file references must stay inside the uploads folder
+        value = row.get('value')
+        for v in (row.get('src'), value, value.get('src') if isinstance(value, dict) else None):   # a setting (the logo) can hold one too
+            if isinstance(v, str) and v.startswith('/files/') and ('..' in v or '\\' in v or ':' in v):
+                raise BadRequest('Invalid file reference')  # file references must stay inside the uploads folder
         for f in ('amount', 'fee', 'price', 'cost', 'openingCash', 'countedCash'):
             x = _coerce(R, row.get(f))
             if x is not None and not -10_000_000 <= x <= 10_000_000:

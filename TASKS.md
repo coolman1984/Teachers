@@ -7,17 +7,17 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P0.1 Field research → `docs/01-research-report.md`
 - [x] P0.2 Product spec (approved by the owner 2026-10-04) → `docs/02-product-spec.md`
 - [x] P0.3 Fork the Yousef-Transportation engine (9f5ef29), rename to Hessa (HS, ports 8095/8463, own AppId)
-- [x] P0.4 Data model (`store.ENTITIES`), permissions/profiles (`auth.py`), rules (`domain.py`), operations (`center.py`), API (`app.py`), parent-card client (`gateway_client.py`) – written, NOT tested
+- [x] P0.4 Data model (`store.ENTITIES`), permissions/profiles (`auth.py`), rules (`domain.py`), operations (`center.py`), API (`app.py`), parent-card client (`gateway_client.py`) – tested by the centre, role, gateway and network suites
 - [x] P0.5 Execution plan for the next agents → `docs/EXECUTION_PLAN.md`
 
 ## Phase P1 – Make the fork run again
 - [x] P1.1 index.html script list + skeleton view files
   - [x] Startup-order regression, both-language placeholders, failed-load retry
-  - [ ] Chrome visual verification after P1.2 makes centre navigation reachable; full P1 checks still pending
+  - [x] Every page (21 routes) on a 360 px phone, Arabic and English, night theme, extra-large font: no error, nothing wider than the screen (`test_acceptance.test_a`, review E04) - it found the overview, follow-up, settlements, reports, devices and settings pages pushed sideways (fixed minimum column widths); every auto grid now uses `minmax(min(X, 100%), 1fr)`
 - [x] P1.2 shell.js pages, palette, shortcuts, tour, slides
 - [x] P1.3 ui.js / data.js helpers (money, grade, att badges; error keys)
 - [x] P1.4 Fast refresh with /api/delta
-  - [ ] Two-context Chrome timing check (<3 s, no /api/state request) after browser transport is available
+  - [x] Two-screen timing check: a check-in reaches the other door screen in under 3 s with no /api/state request (`test_acceptance.test_b`, review E03)
 - [x] P1.5 i18n EN + Formal Arabic reset
 - [x] P1.6 test_design.py updated and green
 
@@ -37,13 +37,13 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P3.1 Subjects, rooms, teachers (terms), handouts lists
 - [x] P3.2 Settings tabs (centre, rules, lists, messages, gateway, access by teachers, data)
 
-  - [ ] Chrome visual and keyboard checks for P3 forms (browser transport pending)
+  - [x] Visual check of P3 forms through the page sweep above (keyboard: Enter/Escape flows covered by ShellTest)
 
 ## Phase P4 – Sample centre
 - [x] P4 server/sample.py + tools/make_sample.py + tests/test_sample.py + "delete all sample data"
   - [x] Deterministic centre, sample-account disable/reload, real-record preservation, scopes, history signatures
   - [x] Load sample centre into the local owner app while preserving admin login
-  - [ ] Chrome visual checks for sample controls and import preview (desktop launch works; browser inspection transport unavailable)
+  - [x] Sample centre built and removed without touching a real record; import preview through the browser (`test_acceptance.test_d`, `CentreAdminTest.test_c`, review E05)
 
 ## Phase P5 – Core screens
 - [ ] P5.1 Door
@@ -51,7 +51,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Fees per enrolment, pay dialog (opens the cash shift first), e-wallet reference, 80 mm receipt print
   - [x] Today's sessions strip + roll-call panel (P5.4 basics); live refresh without redrawing the door
   - [x] Browser tests `tests/test_e2e_center.py` (door flow, roll call, phone tab bar) – 3 OK with local Chrome
-  - [ ] Handout sale, wallet top-up and sounds setting on the card; camera scan verified on HTTPS
+  - [x] Handout sale (teacher's handouts first, never beyond stock - `err.noStock`) and money in advance from the card; sounds setting obeyed (A04)
+  - [ ] Camera scan verified on HTTPS (B03: the camera button appears in a secure context, which the remote address now gives - to try on a phone)
 - [ ] P5.2 Students + student panel + cards/receipt printing
   - [x] List filters (grade, group, teacher, debt, risk, no parent number) with computed balances (`/api/c/balances`)
   - [x] Student file tabs; grade-system-track form; enrol/move/end with seats; follow-up log; ID cards with QR (10 per A4)
@@ -89,9 +90,15 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A01 The parent link the program hands out is the page the gateway serves (`/t/<token>`, was `/app/#<token>` whose fragment never reaches the server); the message text carries the same link
 - [x] A02 A replaced link or a removed student is revoked on the gateway; the list of hashes the gateway may hold is kept on this PC (`gateway-cards.json`, hashes only) so the revoke survives an internet outage and a restart
 - [x] A03 Staff personal-link page: `js/quick.js` now exists (a real browser signs in by itself; a preview or scanner never does; another signed-in person is asked first), Arabic-first page, broken characters fixed
-- [ ] A04 Door sound / automatic check-in settings not read by the door
-- [ ] A05 Opening WhatsApp counted as "sent"; follow-up save failures hidden
-- [ ] A06 Windows build needs `docs/GATEWAY_SETUP.md` and `docs/RELEASE_NOTES.md`
+- [x] A04 Door sound / automatic check-in are centre settings (Settings → Rules) and the door obeys them on every PC
+- [x] A05 Opening WhatsApp/SMS is not "sent": the person confirms, only then a follow-up is logged and counted; a failed save shows and can be retried (door and student file use the same sender)
+- [x] A06 `docs/GATEWAY_SETUP.md` (Egyptian Arabic) and `docs/RELEASE_NOTES.md` written; `build_windows.py --check` fails in seconds on any missing shipped file and runs on every push
+- [x] B04 Receipt paper per PC (80 mm, 58 mm, A5) + automatic printing switch + test print in Settings → Appearance; the page is measured so a roll stops after the text (`size: 80mm auto` was invalid CSS and printed on A4). PDF width checked in Chromium for all three
+  - [ ] Try the three sizes on the centre's real printers (needs the printers)
+- [x] Door: a student the roll call marked absent who then arrives was told "already: absent" and stayed absent (found by the acceptance test) - now checked in as present/late with the arrival time; a second scan still changes nothing
+- [x] E02 Every built-in profile tries by direct request what its screens never offer - all refused (`tests/test_center_roles.py`); found that the Assistant profile (door + attendance) received balances and payments in the student file and the door card although the spec says assistants see no money - the server now strips them (`money_filter`) and the door shows the groups only
+- [x] E11 Door peak: 30 cards (find + card + check-in) in 1.2 s on a 420-student sample centre (plan: 90 s with people); real PCs of the centre still to measure
+- [x] A07 Lost connection to the centre PC: a bar on every page, save buttons dimmed, writes refused in the browser (no hidden queue); a payment saved again after a lost answer returns the same receipt (one key per dialog, `pk<key>` ids)
 
 ## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)
 - [x] A1 Devices & Sync page and the light in the top bar (PCs, to decide, warnings, record check, administrator key, backup administrator PC)
@@ -107,38 +114,76 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A11 Spreadsheet formula protection and one download helper (`U.csv`, `U.download`); phone overflow of wide tables fixed (`.stack > *`)
 - [x] A12 Help topics "Several PCs and sharing" and the new safety answers (EN + Formal Arabic); administrator guide
 - [x] A13 Decision: BAMS "office mode" (thin PC) is **not** ported - a browser on the centre PC's address already is that; the Add-a-PC dialog explains the choice
-- [ ] A14 History button in the group panel and Settings lists (API `GET /api/audit?entity=&id=` is ready)
-- [ ] A15 The detail sentences of the Logins & security list come from the server in English (the event names are translated)
+- [x] A14 History button in the group panel and every Settings list editor (`logs.view`; review B07)
+- [x] A15 Logins & security details read in the reader's language: every fixed server sentence has a pattern + dictionary text (old entries too; the stored log is never rewritten; `SecurityWordsTest` checks every sentence in the server code; review B08)
+
+## Work from outside the centre (owner's request, review D01-D08 - 2026-10-05)
+- [x] D01 Outbound secure tunnel instead of an open port: Tailscale (recommended: free, private, also carries laptop sync) or Cloudflare Tunnel (public address, needs a domain) - `docs/REMOTE_ACCESS.md`; no custom relay to build or host
+- [x] D02 A tunnel request is never "the PC itself" (it came from 127.0.0.1 - it would have opened first start, joining and backup folders to the internet); refused until the administrator switches remote work on at the centre (Settings → Remote work, `config.json` of that PC); only people with the new `remote.use` permission sign in; taking the permission away ends the remote session at the next request; every sign-in and refusal logged with the real address
+- [x] D03 The same screens over HTTPS (Secure cookie, HSTS, Origin checked against the forwarded host); a Tailscale device reaching the program straight (100.64.0.0/10) counts as outside too
+- [x] D04 Writes from outside: one key per payment dialog (A07) - a retry after a lost answer returns the same receipt; success is shown only after the centre PC saved it
+- [x] D05 A laptop at home with its own copy: the existing signed sync over the Tailscale network, joined through the 15-minute adding window (guide)
+- [x] D06 Centre PC off: nobody works from outside, the open pages say so and save nothing (A07); a laptop with its own copy keeps working (documented choice; no hosted copy of the children's data)
+- [x] D07 Conflicts: remote work goes to the same centre server (no second writer); laptop copies use the existing merge rules and money stays append-only
+- [x] D08 Remote switch, last request from outside, allowed people on one page; tunnel secrets live in the tunnel program, never in Hessa's data
+  - [ ] Try both tunnels with the owner's accounts and a phone on 4G (needs the owner's Tailscale/Cloudflare login)
 
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)
 - [x] P6.2 Sequential WhatsApp/SMS sender (HS.waQueue, never bulk, every send logged, not twice the same day) + per-kind default texts
 - [x] P6.3 Teacher settlements (formula in words, approve / changed-after-approval, prefilled payout, printed statement)
-- [ ] P6.4 Reports + profitability + presentation
+- [x] P6.4 Reports + profitability + presentation
   - [x] Month figures, daily charts, breakdowns, profitability with one decision per group, drawer differences, 4-slide presentation, print
-  - [ ] Excel export of the report (sheets per section)
-- [ ] P6.5 School support groups statement
+  - [x] Excel export of the report: 8 sheets (summary, per teacher, per method, expenses, attendance per day, money per day, profitability, drawer differences) in the reader's language, same scoped numbers as the screen (review B05)
+- [x] P6.5 School support groups statement (`GET /api/c/school`: students, visits, paid incl. reversals, sessions, treasury → teacher → school split, limit checks; screen + A4 print + Excel from the group panel; review B06)
 
 ## Phase P7 – Parent link
-- [ ] P7.1 Worker routes
-- [ ] P7.2 Parent page
-- [ ] P7.3 Office side + GATEWAY_SETUP.md + tests
+- [x] P7.1 Worker routes: parents read one card (`GET /api/card/<token>`, every other method 405, the old phone write routes and their tables removed); a replaced link keeps a "stopped" row 30 days (410) so the phone wipes its copy; office: cards, status, empty inbox/ack for compatibility (review C01)
+- [x] P7.2 Parent page: Formal Arabic first + English, light/dark from the phone, 360 px, < 120 KB (test), money per group, next 7 days (temporary timetables included), published marks with rank, last 30 attendance days, payments; service worker keeps the last copy with its age and deletes it on 404/410 (review C02-C04)
+- [x] P7.3 Office side: Settings → Parent links is a 4-step guided setup with live status (links here vs cards on the mailbox, last success, the reason of the last failure in the reader's language), copy office secret (logged), send now, setup code; student file "Parent link" tab (create + copy, create + WhatsApp, replace); exams "Shown to parents" switch (marks hidden until then); `tests/test_gateway_parent.py` drives the real Worker code + Chromium (review C05, C06)
+  - [ ] Try a real Cloudflare account and an old Android phone at the centre
 
 ## Phase P8 – Daily scenario tests (browser)
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)
   - [x] 11 browser scenarios incl. the core journey as the Front desk profile (advisor -> shift -> scan -> pay -> absentee message -> close)
-  - [ ] Teacher-scoped login scenario and two-PC UI scenario
-  - [ ] Migrate legacy `tests/test_e2e_browser.py` trip/import/reports/slides scenarios (6 errors since the fork, same before and after 2026-10-05; shell tests pass)
-  - [ ] Migrate legacy `tests/test_multinode.py` (still writes trip entities; 24 errors + 1 failure since the fork, excluded from CI) to centre entities
+  - [x] Teacher-scoped login scenario (`CentreAdminTest.test_a`)
+  - [ ] Two-PC scenario through two browsers (the engine side is covered by test_multinode/test_center_network)
+  - [x] Legacy `tests/test_e2e_browser.py` trip scenarios replaced by `CentreAdminTest` (teacher account limited to one teacher incl. password change and API refusal, Recycle Bin restore of a room, student import with Arabic digits and re-import matching, slides both directions, month report + presentation) - 12/12 pass (review E07)
+  - [x] `tests/test_multinode.py` migrated: the neutral record is a teacher (scoped by its own id like a trip was by category), attachments ride on settings rows; all 35 multi-PC scenarios pass and run in CI (review E08). Found on the way: a bad `/files/..` path inside a setting value was not refused (fixed in `store.py`)
+  - [x] CI: a `browser` job runs the screen tests with the runner's Chrome (review E09)
 
 ## Phase P9 – Differentiators 2
-- [ ] P9.1 Bubble sheets print + phone reading
+- [x] P9.1 Bubble sheets print + phone reading (review G01, G02): answer key in the exam form (Latin or Arabic letters, live count), A4 sheets at true size named per student (code pre-filled) or blank, Arabic or Latin letters; `js/omr.js` reads photos in the browser (Otsu threshold, corner squares, homography, bubble darkness), flags empty/double rows and unknown codes, a person checks before saving; the server counts the score from the answers (never trusts the page). `tests/test_omr.py`: 960/960 bubbles right over 6 turned, perspective, blurred, noisy photos incl. light pen marks; the whole teacher journey in Chromium
+  - [ ] Try printed sheets and real phone photos at the centre
 - [ ] P9.2 AI question generator (optional key)
 - [ ] P9.3 Top students image, certificates, teacher page
+  - [x] Top students picture (1080 x 1350 PNG, centre colours, medals, first + father's name by default) and certificates for the first three (A4 print) - only from an exam shown to parents, never published by itself (review G05)
 - [ ] P9.4 Video protection (ask the owner first)
 
 ## Phase P10 – Docs and delivery
-- [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version 0.1.0
+- [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version
+  - [x] `README.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md` (data folders, ports, tools, recovery drills mapped to the tests that prove them, how to add a field/page), `.claude/skills/hessa/SKILL.md` (review F05, F07, F09)
+  - [x] Guides in Egyptian Arabic with pictures of the real screens (fictional sample centre, `tools/make_screens.py` re-takes them): owner, front desk, teacher, assistant, parent (review F06)
+  - [x] Help: 15 topics, 63 questions in both languages - parent links, work from outside, printing, late arrival, handouts at the door, the offline bar, publishing marks (review F08)
+  - [x] Disaster drill as a test: the only PC died, a new PC restores the backup copied from the USB folder - records, receipt, attendance and the computed balance are back (`tests/test_recovery.py`, review E10)
+  - [x] Installer: firewall only for private/domain networks (never public Wi-Fi), Arabic first with English, the finish page says what to do when phones cannot connect (review F03; `InstallerTest`)
+  - [x] Version 1.1.0 in the program, the installer and RELEASE_NOTES (never lowered; review F04); release steps in BUILD_AND_RELEASE.md
+  - [x] Plan, build docs and administrator guide brought up to date with the code (review F10)
+  - [ ] Install on a clean Windows PC, update over an older version, try a real printer and phones (F01, F02 - needs Windows and the centre's devices)
   - [x] Help centre: 11 topics, 46 questions in both languages, Arabic-tolerant search, "?" opens the current page's topic
   - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
-  - [ ] Final centre browser acceptance and installer/release verification remain pending
+  - [x] Centre browser acceptance: `test_acceptance` + `test_e2e_*` + `test_center_review` in a CI browser job
+  - [ ] Installer/release verification on Windows (manual, see F01/F02 above)
+
+## Branch integration review (2026-10-05)
+- [x] Audit all four remote branches: both Claude heads are ancestors of main; the ccr head adds ten commits to main
+- [x] Preserve the earlier workspace's uncommitted files; their parent-link repairs are already represented in published history
+- [x] Permanent gateway revocations, deleted-student revocation without a local card cache, unchanged-card republish on URL change; fresh/old D1 schema migration tests
+- [x] Payment retries compare the complete saved request; family retries cannot silently truncate or reorder the saved batch
+- [x] Student siblings and follow-ups obey teacher scopes; roster money obeys financial permissions; link secrets are removed from screen responses
+- [x] Assistant state/delta, sibling door cards and follow-up responses hide finances; financial tabs/request permissions agree
+- [x] Settings feedback and device actions fit a 360 px screen in both languages with the largest font
+- [x] Include integration regressions in CI; Windows releases also require the browser job to pass
+- [x] Record branch inventory, acceptance criteria, fixes and verification evidence in docs/INTEGRATION.md and DEVELOPMENT_HISTORY.md
+
+The integration pull request's GitHub status records whether the merge has completed; use a merge commit to preserve all branch ancestry.

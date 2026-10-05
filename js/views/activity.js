@@ -6,7 +6,7 @@
   'use strict';
   var HS = window.HS, U = HS.ui, A = HS.audit;
   var PAGE = 100;
-  var TONE = { 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
+  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
     'user-unlocked': 'warn', 'forced-logout': 'warn', 'password-reset': 'warn', 'admin-reset': 'warn', 'user-disabled': 'warn', 'user-deleted': 'warn',
     'profile-deleted': 'warn', 'link-created': 'warn', 'node-enrolled': 'warn', 'node-revoked': 'warn', 'pairing-code': 'warn', 'pairing-request': 'warn',
     'pairing-rejected': 'warn', 'pc-adding-open': 'warn', 'authority-exported': 'warn', 'authority-imported': 'warn', 'backup-set': 'warn', 'backup-removed': 'warn',
@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), security: blank() };
@@ -35,6 +35,91 @@
   function short(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   function opt(v, label, cur) { return '<option value="' + HS.esc(v) + '"' + (String(cur) === String(v) ? ' selected' : '') + '>' + HS.esc(label) + '</option>'; }
 
+  /* ---------- the detail sentence in the reader's language ----------
+     The server writes each security detail as one fixed English sentence (the log is evidence: it is never rewritten). Here every
+     known sentence becomes a dictionary text with its numbers and names, so old entries read in Arabic too; an unknown one is shown as
+     written. A list of changes ("User name: a -> b; Role: …") is translated part by part. */
+  var DETAIL = [
+    [/^First administrator account created on this PC \(it is now the administrator PC\)$/, 'setup'],
+    [/^Unknown user name$/, 'unknownUser'],
+    [/^Account is locked until (.+)$/, 'lockedUntil'],
+    [/^Wrong password \(attempt (\d+) of (\d+)\)$/, 'wrongPassword'],
+    [/^Locked for (\d+) minutes after (\d+) wrong passwords$/, 'lockedFor'],
+    [/^Account is disabled$/, 'disabled'],
+    [/^Unknown or switched-off personal link$/, 'linkUnknown'],
+    [/^Personal link used, but the account is disabled$/, 'linkDisabled'],
+    [/^Personal link refused: administrator accounts must use their password$/, 'linkAdmin'],
+    [/^Logged in with the personal link(?: - (.+))?$/, 'linkLogin'],
+    [/^A new personal link was made \(an older one stops working on every PC\)$/, 'linkReplaced'],
+    [/^Personal link created(?: \(logs in without a password\))?$/, 'linkCreated'],
+    [/^Personal link switched off on every PC$/, 'linkOff'],
+    [/^Current password was wrong$/, 'currentWrong'],
+    [/^Changed own password; (\d+) other session\(s\) logged out$/, 'ownPassword'],
+    [/^(\d+) permission\(s\); updated for (\d+) person\(s\)$/, 'profileSaved'],
+    [/^People who had it keep their permissions$/, 'profileDeleted'],
+    [/^Role: (.*); active: (True|False); teachers: (.+); permissions: (.*)$/, 'userCreated'],
+    [/^All open sessions on every PC are ended$/, 'sessionsEnded'],
+    [/^Temporary password set by the administrator; must be changed at next login; logged out on every PC$/, 'tempPassword'],
+    [/^Unlocked on (.+)$/, 'unlocked'],
+    [/^Sessions ended by the administrator on (.+) \((\d+) here\)$/, 'forcedLogout'],
+    [/^Account deleted on every PC \(kept in the logs; the user name stays reserved\)$/, 'userDeleted'],
+    [/^Logged out automatically after (\d+) minutes without activity$/, 'idle'],
+    [/^Logged out automatically after the maximum session time \((\d+) hours\)$/, 'maxAge'],
+    [/^Session ended - the account is disabled or deleted$/, 'sessionDisabled'],
+    [/^Session ended - the personal link was switched off or the account became an administrator$/, 'sessionLink'],
+    [/^Confirmed on this PC: same computer as before \(name or network card changed\)$/, 'nodeConfirmed'],
+    [/^Second backup folder set$/, 'folderSet'],
+    [/^Second backup folder removed$/, 'folderRemoved'],
+    [/^(\d+) records changed back; safety backup: (.+)$/, 'restored'],
+    [/^Administrator key saved as a file \(passphrase protected\)$/, 'keySaved'],
+    [/^Administrator key exported \(passphrase protected\)$/, 'keySaved'],
+    [/^OK$/, 'checkOk'],
+    [/^(\d+) problem\(s\)$/, 'checkProblems'],
+    [/^Emergency password reset on the administrator PC \(maintenance tool\)$/, 'emergencyReset'],
+    [/^This PC is now the administrator PC \(key imported\)\. Remove the old administrator PC in Devices & Sync\.$/, 'keyImported'],
+    [/^This PC was removed: the administrator key was deleted here$/, 'pcRemoved'],
+    [/^No longer a backup administrator PC: the administrator key was deleted here$/, 'backupEnded'],
+    [/^This PC is now a backup administrator PC$/, 'backupStarted'],
+    [/^The administrator key was handed to the backup administrator PC$/, 'keySent'],
+    [/^PC (.+) \((.+)\) asks to join; confirmation number (\d+)$/, 'pairing'],
+    [/^Office secret shown$/, 'secretShown'],
+    [/^Setup code shown$/, 'codeShown'],
+    [/^Signed in from outside the centre$/, 'remoteLogin'],
+    [/^Sign-in from outside the centre refused: no permission$/, 'remoteRefused'],
+    [/^Work from outside the centre switched on$/, 'remoteOn'],
+    [/^Work from outside the centre switched off$/, 'remoteOff']
+  ];
+  var PART = [
+    [/^(User name|Name|Job title|Role|Active|Must change password|Notes): (.*) -> (.*)$/, 'field'],
+    [/^Permissions (added|removed): (.+)$/, 'perms'],
+    [/^Teachers: (.+) -> (.+)$/, 'teachers']
+  ];
+  var FIELD = { 'User name': 'sec.f.username', Name: 'sec.f.name', 'Job title': 'sec.f.title', Role: 'sec.f.role', Active: 'sec.f.active', 'Must change password': 'sec.f.mustChange', Notes: 'sec.f.notes' };
+  function word(v) { return v === 'True' ? HS.t('common.yes') : v === 'False' ? HS.t('common.no') : v === 'all' ? HS.t('common.all') : v; }
+  function perms(list) { return String(list || '').split(', ').filter(Boolean).map(function (p) { return HS.has('perm.' + p) ? HS.t('perm.' + p) : p; }).join('، '); }
+  function teachers(v) { return v === 'all' ? HS.t('common.all') : String(v).split(', ').map(function (id) { return (HS.data && HS.data.teacherName && HS.data.teacherName(id)) || id; }).join('، '); }
+  function part(text) {
+    for (var i = 0; i < PART.length; i++) {
+      var m = PART[i][0].exec(text); if (!m) continue;
+      if (PART[i][1] === 'field') return HS.t('sec.p.field', { f: HS.has(FIELD[m[1]]) ? HS.t(FIELD[m[1]]) : m[1], a: word(m[2]), b: word(m[3]) });
+      if (PART[i][1] === 'perms') return HS.t('sec.p.' + m[1], { list: perms(m[2]) });
+      return HS.t('sec.p.teachers', { a: teachers(m[1]), b: teachers(m[2]) });
+    }
+    return text;
+  }
+  A.securityDetail = function (detail) {
+    var text = String(detail || '');
+    for (var i = 0; i < DETAIL.length; i++) {
+      var m = DETAIL[i][0].exec(text);
+      if (!m) continue;
+      var k = 'sec.d.' + DETAIL[i][1];
+      if (DETAIL[i][1] === 'userCreated') return HS.t(k, { a: m[1], b: word(m[2]), c: m[3] === 'all' ? HS.t('common.all') : m[3], d: perms(m[4]) || HS.t('sec.p.none') });
+      if (DETAIL[i][1] === 'linkLogin') return HS.t(k) + (m[1] ? ' - ' + m[1] : '');
+      return HS.t(k, { a: m[1] || '', b: m[2] || '', c: m[3] || '' });
+    }
+    return text.indexOf('; ') > 0 && PART.some(function (p) { return p[0].test(text.split('; ')[0]); }) ? text.split('; ').map(part).join(' · ') : text;
+  };
+
   /* ---------- one entry ---------- */
   function changeRow(r) { return A.entryHTML(r, { hist: true }); }
   function securityRow(r) {
@@ -42,7 +127,7 @@
     return '<li class="log-row' + (tone === 'bad' ? ' is-bad' : '') + '"><div class="log-head"><span class="badge ' + tone + '">' + HS.esc(HS.has(k) ? HS.t(k) : r.event) + '</span>' +
       (r.target ? '<b class="log-name">' + HS.esc(short(r.target, 60)) + '</b>' : '') + '<span class="grow"></span><time class="faint num">' + HS.esc(A.when(r.ts)) + '</time></div>' +
       '<div class="log-sub faint">' + HS.esc(r.user || '') + (r.ip ? ' · <bdi dir="ltr">' + HS.esc(r.ip) + '</bdi>' : '') + ' · ' + HS.esc(r.node_name || '') + '</div>' +
-      (r.detail ? '<div class="log-sum' + (QUIET[r.event] ? ' faint' : '') + '" dir="auto">' + HS.esc(short(r.detail, 300)) + '</div>' : '') + '</li>';
+      (r.detail ? '<div class="log-sum' + (QUIET[r.event] ? ' faint' : '') + '" dir="auto">' + HS.esc(short(A.securityDetail(r.detail), 300)) + '</div>' : '') + '</li>';
   }
 
   /* ---------- the page ---------- */
@@ -101,7 +186,7 @@
       var rows = r.rows || [], lines;
       if (kind === 'security') {
         lines = [[HS.t('f.time'), HS.t('f.user'), HS.t('act.event'), HS.t('act.target'), HS.t('act.ip'), HS.t('f.pc'), HS.t('act.detail')]].concat(rows.map(function (x) {
-          return [x.ts, x.user, HS.has('sec.' + x.event) ? HS.t('sec.' + x.event) : x.event, x.target, x.ip, x.node_name, x.detail];
+          return [x.ts, x.user, HS.has('sec.' + x.event) ? HS.t('sec.' + x.event) : x.event, x.target, x.ip, x.node_name, A.securityDetail(x.detail)];
         }));
       } else {
         lines = [[HS.t('f.time'), HS.t('f.user'), HS.t('f.pc'), HS.t('f.action'), HS.t('act.op'), HS.t('f.what'), HS.t('act.target'), HS.t('act.detail')]].concat(rows.map(function (x) {

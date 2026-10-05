@@ -193,10 +193,14 @@ class DoorTest(BrowserBase):
         self.assertIn('Synthetic Student 2', text)
         self.assertIn('غياب', text)                                            # the Arabic absence template
         pg.click('.dialog [data-open]')
-        pg.wait_for_selector('.dialog .empty')                                   # one student -> the queue is done
+        pg.wait_for_selector('.dialog [data-sent]')                              # opening a chat is not sending (review A05)
         self.assertTrue(pg.evaluate('window.__opened').startswith('https://wa.me/201000000000?text='))
-        logged = [f for f in self.c.get('/api/state')['followups'] if f['studentId'] == 'e2e-s2' and f['type'] == 'whatsapp']
-        self.assertEqual([f['reason'] for f in logged], ['absence'])
+        sent = lambda: [f['reason'] for f in self.c.get('/api/state')['followups'] if f['studentId'] == 'e2e-s2' and f['type'] == 'whatsapp']  # noqa: E731
+        self.assertEqual(sent(), [])
+        pg.click('.dialog [data-sent]')
+        pg.wait_for_selector('.dialog .empty')                                   # one student -> the queue is done
+        self.assertIn('1', pg.inner_text('.dialog .empty'))
+        self.assertEqual(sent(), ['absence'])
         self.assertEqual(self.errors, [])
 
     def test_exam_paste_column_ranks_ties_and_saves(self):
@@ -477,6 +481,7 @@ class DoorTest(BrowserBase):
                 break
             pg.click('.dialog [data-skip]')
         pg.click('.dialog [data-open]')
+        pg.click('.dialog [data-sent]'); pg.wait_for_selector('.dialog [data-text], .dialog .empty')
         pg.click('.dialog [data-close]')
         # 4. closing: 300 opening + 75 cash = 375 counted exactly
         pg.goto(self.S.base + '/#/money')

@@ -83,6 +83,7 @@
           '<button class="icon-btn desk-only" data-act="keys" aria-label="' + HS.esc(HS.t('top.shortcuts')) + '" title="' + HS.esc(HS.t('top.shortcuts')) + ' (?)">' + HS.icon('keyboard') + '</button>' +
           '</span>' +
         '</header>' +
+        '<div class="offline-bar" role="alert">' + HS.icon('alert') + '<span><b>' + HS.esc(HS.t('top.offline')) + '</b> ' + HS.esc(HS.t('top.offline.b')) + '</span></div>' +
         '<main class="content" id="view" tabindex="-1"></main>' +
       '</div>' + tabbarHTML() +
       '<div id="panels" aria-live="polite"></div>' +

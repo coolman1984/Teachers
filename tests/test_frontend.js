@@ -269,7 +269,7 @@ test('settings show centre forms and keep save controls permission aware in both
     assert.ok(html.includes('data-message-preview'));
     ctx.route.q.tab='gateway';
     html=HS.views.settings.render(ctx);
-    assert.ok(html.includes('data-gateway-form'));
+    assert.ok(html.includes('data-gw-root'));               // the guided setup page (filled from /api/gateway after mount)
     assert.equal(html.includes('officeSecret'),false);
   }
 });

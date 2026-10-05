@@ -1,66 +1,69 @@
-/* Driver page texts. Arabic first; the driver can switch to English. */
+/* Hessa parent page - texts. Formal Arabic first (the centre's language); the parent can switch to English. */
 (function () {
   'use strict';
-  var D = window.D = window.D || {};
+  var P = window.P = window.P || {};
   var dict = {
     ar: {
-      title: 'أمر التشغيل', trip: 'مشوارك', start: 'البداية', road: 'في الطريق', end: 'النهاية', paper: 'الورقة', done: 'تم',
-      no: 'رقم الأمر', date: 'التاريخ', car: 'السيارة', dest: 'الوجهة', stops: 'المحطات', pax: 'الركاب', driver: 'السائق',
-      begin: 'ابدأ المشوار', begin_hint: 'هتصوّر عداد الكيلومترات وتكتب الرقم. ده بياخد نص دقيقة.',
-      odo_start: 'صوّر عداد البداية', odo_end: 'صوّر عداد النهاية', retake: 'صوّر تاني', km_start: 'قراءة العداد عند البداية', km_end: 'قراءة العداد عند النهاية',
-      km_hint: 'اكتب الرقم زي ما هو ظاهر في العداد.', confirm_start: 'ابدأ', confirm_end: 'أنهِ المشوار',
-      running: 'المشوار شغّال', since: 'من الساعة', elapsed: 'مدة المشوار', finish: 'أنهِ المشوار', note: 'أضف ملاحظة', note_ph: 'اكتب ملاحظتك', send: 'ابعت',
-      route: 'خط السير الفعلي', route_hint: 'لو غيّرت المسار، اكتبه هنا. لو لأ سيبه زي ما هو.',
-      paper_t: 'صوّر الورقة الموقّعة', paper_hint: 'الورقة بتوقيع الراكب وتوقيعك. صوّرها واضحة.', skip_paper: 'هصوّرها بعدين', paper_missing: 'لسه ما صوّرتش الورقة الموقّعة.',
-      thanks: 'تسلم إيدك!', thanks_b: 'المشوار اتسجّل. لو لسه فيه حاجة ما وصلتش، هتتبعت لوحدها أول ما الشبكة ترجع.',
-      saved_here: 'اتحفظ على موبايلك', received: 'وصل للمكتب', waiting: 'مستني شبكة', failed: 'تعذّر الإرسال — دوس لإعادة المحاولة',
-      offline: 'مفيش شبكة دلوقتي. كمّل شغلك، كل حاجة بتتحفظ وهتتبعت لوحدها.', sending: 'بيتبعت…', all_sent: 'كل حاجة وصلت للمكتب',
-      n_waiting: 'فيه {n} حاجة مستنية الإرسال', retry: 'حاول تاني',
-      cancelled: 'المشوار ده اتلغى', cancelled_b: 'كلّم المكتب لو دي غلطة.', expired: 'اللينك ده انتهت صلاحيته', expired_b: 'اطلب لينك جديد من المكتب.', unknown: 'اللينك ده مش شغّال', unknown_b: 'اتأكد إنك فتحت اللينك كامل، أو اطلب لينك جديد من المكتب.',
-      second: 'المشوار ده مفتوح على موبايل تاني', second_b: 'تقدر تكمّل، بس المكتب هيراجع اللي بتبعته.',
-      end_low: 'عداد النهاية أقل من عداد البداية. اتأكد من الرقم.', end_low_send: 'الرقم صح، ابعت', check_km: 'اتأكد من الرقم',
-      km_required: 'اكتب قراءة العداد', photo_required: 'صوّر العداد الأول', photo_ok: 'الصورة اتحفظت',
-      cam_take: 'التقط', cam_cancel: 'إلغاء', cam_gallery: 'اختار من المعرض', cam_denied: 'مقدرناش نفتح الكاميرا. تقدر تختار صورة.',
-      skip_photo: 'كمّل من غير صورة', pax_none: 'مفيش ركاب مسجّلين', kmu: 'كم',
-      lang: 'English', contrast: 'وضوح أعلى', stamp: 'الصورة هتتختم برقم الأمر والوقت.', back: 'رجوع', next: 'التالي',
-      new_version: 'المشوار اتحدّث من المكتب', loading: 'ثواني…', tryagain: 'حاول تاني', server_time_off: 'ساعة موبايلك مختلفة عن الساعة الفعلية. اظبطها من إعدادات الموبايل.',
+      app: 'حصة', lang: 'English', loading: 'جارٍ التحميل…', readOnly: 'للاطلاع فقط',
+      updated: 'آخر تحديث من المركز: {t}', saved: 'أنت غير متصل بالإنترنت. هذه آخر نسخة محفوظة على هاتفك ({t}) وقد تكون قديمة.',
+      minutes: 'منذ {n} دقيقة', hours: 'منذ {n} ساعة', days: 'منذ {n} يوم', now: 'الآن',
+      money: 'المدفوعات والمستحق', owes: 'مستحق', credit: 'رصيد مقدم', clear: 'لا يوجد مستحق', left: 'متبقٍ {n} حصة', wallet: 'رصيد مقدم عام: {a}',
+      fee_session: 'بالحصة', fee_month: 'شهريًا', fee_package: 'باقة',
+      week: 'مواعيد الأيام السبعة القادمة', noWeek: 'لا توجد حصص في الأيام السبعة القادمة.', today: 'اليوم', tomorrow: 'غدًا',
+      att: 'الحضور (آخر {n} حصة)', attRate: 'نسبة الحضور {p}%', noAtt: 'لم تُسجَّل حصص بعد.',
+      present: 'حاضر', late: 'متأخر', absent: 'غائب', excused: 'غياب بعذر',
+      marks: 'الدرجات', noMarks: 'لا توجد نتائج منشورة بعد.', rank: 'الترتيب {r} من {n}', absentExam: 'غائب عن الامتحان',
+      payments: 'آخر المدفوعات', noPay: 'لا توجد مدفوعات بعد.', receipt: 'إيصال {no}', reversed: 'إلغاء إيصال',
+      groups: 'المجموعات', teacher: 'المعلم',
+      revoked: 'هذا الرابط لم يعد يعمل', revoked_b: 'أوقفه المركز أو استبدله برابط جديد. اطلب الرابط الجديد من المركز. حُذفت النسخة المحفوظة على هذا الهاتف.',
+      expired: 'انتهت صلاحية هذا الرابط', expired_b: 'اطلب رابطًا جديدًا من المركز.',
+      notyet: 'الرابط قيد التجهيز', notyet_b: 'يرسل المركز البيانات خلال دقائق. أعد فتح الرابط بعد قليل.',
+      bad: 'الرابط غير مكتمل', bad_b: 'تأكد من فتح الرابط كاملًا كما وصلك.',
+      offline: 'لا يوجد اتصال بالإنترنت', offline_b: 'افتح الرابط مرة أخرى عند عودة الاتصال.',
+      busy: 'طلبات كثيرة', busy_b: 'انتظر دقيقة ثم أعد المحاولة.', retry: 'أعد المحاولة', refresh: 'تحديث',
+      grade_P1: 'الصف الأول الابتدائي', grade_P2: 'الصف الثاني الابتدائي', grade_P3: 'الصف الثالث الابتدائي', grade_P4: 'الصف الرابع الابتدائي',
+      grade_P5: 'الصف الخامس الابتدائي', grade_P6: 'الصف السادس الابتدائي', grade_M1: 'الصف الأول الإعدادي', grade_M2: 'الصف الثاني الإعدادي',
+      grade_M3: 'الصف الثالث الإعدادي', grade_S1: 'الصف الأول الثانوي', grade_S2: 'الصف الثاني الثانوي', grade_S3: 'الصف الثالث الثانوي',
+      currency: 'ج.م', code: 'الكود'
     },
     en: {
-      title: 'Trip order', trip: 'Your trip', start: 'Start', road: 'On the road', end: 'End', paper: 'Paper', done: 'Done',
-      no: 'Order no.', date: 'Date', car: 'Car', dest: 'Destination', stops: 'Stops', pax: 'Passengers', driver: 'Driver',
-      begin: 'Start the trip', begin_hint: 'You will photograph the odometer and type the number. It takes half a minute.',
-      odo_start: 'Photograph the start odometer', odo_end: 'Photograph the end odometer', retake: 'Take again', km_start: 'Odometer reading at the start', km_end: 'Odometer reading at the end',
-      km_hint: 'Type the number exactly as the odometer shows it.', confirm_start: 'Start', confirm_end: 'End the trip',
-      running: 'Trip in progress', since: 'Since', elapsed: 'Trip time', finish: 'End the trip', note: 'Add a note', note_ph: 'Write your note', send: 'Send',
-      route: 'Route actually taken', route_hint: 'If the route changed, write it here. If not, leave it as it is.',
-      paper_t: 'Photograph the signed paper', paper_hint: 'The paper with the passenger\'s signature and yours. Take it clearly.', skip_paper: 'I will photograph it later', paper_missing: 'The signed paper has not been photographed yet.',
-      thanks: 'Well done!', thanks_b: 'The trip is recorded. Anything that has not arrived yet will be sent by itself when the network is back.',
-      saved_here: 'Saved on your phone', received: 'Received by the office', waiting: 'Waiting for network', failed: 'Could not send - tap to retry',
-      offline: 'No network right now. Keep going: everything is saved and will be sent by itself.', sending: 'Sending…', all_sent: 'Everything reached the office',
-      n_waiting: '{n} item(s) waiting to be sent', retry: 'Try again',
-      cancelled: 'This trip was cancelled', cancelled_b: 'Call the office if this is a mistake.', expired: 'This link has expired', expired_b: 'Ask the office for a new link.', unknown: 'This link does not work', unknown_b: 'Make sure you opened the whole link, or ask the office for a new one.',
-      second: 'This trip is open on another phone', second_b: 'You can continue, but the office will review what you send.',
-      end_low: 'The end reading is lower than the start reading. Check the number.', end_low_send: 'The number is right, send', check_km: 'Check the number',
-      km_required: 'Type the odometer reading', photo_required: 'Photograph the odometer first', photo_ok: 'Photo saved',
-      cam_take: 'Capture', cam_cancel: 'Cancel', cam_gallery: 'Choose from gallery', cam_denied: 'The camera could not be opened. You can choose a photo.',
-      skip_photo: 'Continue without a photo', pax_none: 'No passengers listed', kmu: 'km',
-      lang: 'العربية', contrast: 'Higher contrast', stamp: 'The photo is stamped with the order number and time.', back: 'Back', next: 'Next',
-      new_version: 'The trip was updated by the office', loading: 'One moment…', tryagain: 'Try again', server_time_off: 'Your phone clock is different from the real time. Fix it in the phone settings.',
-    },
+      app: 'Hessa', lang: 'العربية', loading: 'Loading…', readOnly: 'Read only',
+      updated: 'Last update from the centre: {t}', saved: 'You are offline. This is the last copy saved on your phone ({t}) and may be old.',
+      minutes: '{n} min ago', hours: '{n} h ago', days: '{n} day(s) ago', now: 'just now',
+      money: 'Payments and what is due', owes: 'Due', credit: 'Paid in advance', clear: 'Nothing due', left: '{n} session(s) left', wallet: 'Money in advance: {a}',
+      fee_session: 'Per session', fee_month: 'Monthly', fee_package: 'Package',
+      week: 'Sessions in the next seven days', noWeek: 'No sessions in the next seven days.', today: 'Today', tomorrow: 'Tomorrow',
+      att: 'Attendance (last {n} sessions)', attRate: 'Attendance {p}%', noAtt: 'No sessions recorded yet.',
+      present: 'Present', late: 'Late', absent: 'Absent', excused: 'Excused',
+      marks: 'Marks', noMarks: 'No published results yet.', rank: 'Rank {r} of {n}', absentExam: 'Absent from the exam',
+      payments: 'Latest payments', noPay: 'No payments yet.', receipt: 'Receipt {no}', reversed: 'Reversed receipt',
+      groups: 'Groups', teacher: 'Teacher',
+      revoked: 'This link no longer works', revoked_b: 'The centre stopped it or replaced it with a new link. Ask the centre for the new one. The copy saved on this phone was removed.',
+      expired: 'This link has expired', expired_b: 'Ask the centre for a new link.',
+      notyet: 'The link is being prepared', notyet_b: 'The centre sends the data within minutes. Open the link again shortly.',
+      bad: 'The link is incomplete', bad_b: 'Make sure you opened the whole link as you received it.',
+      offline: 'No internet connection', offline_b: 'Open the link again when you are back online.',
+      busy: 'Too many requests', busy_b: 'Wait a minute and try again.', retry: 'Try again', refresh: 'Refresh',
+      grade_P1: 'Primary 1', grade_P2: 'Primary 2', grade_P3: 'Primary 3', grade_P4: 'Primary 4', grade_P5: 'Primary 5', grade_P6: 'Primary 6',
+      grade_M1: 'Preparatory 1', grade_M2: 'Preparatory 2', grade_M3: 'Preparatory 3', grade_S1: 'Secondary 1', grade_S2: 'Secondary 2', grade_S3: 'Secondary 3',
+      currency: 'EGP', code: 'Code'
+    }
   };
-  D.lang = 'ar';
-  try { var s = localStorage.getItem('to.lang'); if (s === 'ar' || s === 'en') D.lang = s; else if ((navigator.language || '').toLowerCase().indexOf('ar') !== 0 && /^en/i.test(navigator.language || '')) D.lang = 'en'; } catch (e) { /* private mode */ }
-  D.t = function (k, v) {
-    var s = (dict[D.lang] || {})[k]; if (s === undefined) s = dict.en[k]; if (s === undefined) return k;
+  P.lang = 'ar';
+  try { var s = localStorage.getItem('hs.parent.lang'); if (s === 'ar' || s === 'en') P.lang = s; } catch (e) { /* private mode */ }
+  P.t = function (k, v) {
+    var s = (dict[P.lang] || {})[k]; if (s === undefined) s = dict.en[k]; if (s === undefined) return k;
     if (v) s = s.replace(/\{(\w+)\}/g, function (m, n) { return v[n] === undefined ? m : v[n]; });
     return s;
   };
-  D.setLang = function (l) {
-    D.lang = l === 'en' ? 'en' : 'ar';
-    try { localStorage.setItem('to.lang', D.lang); } catch (e) { /* ignore */ }
-    document.documentElement.lang = D.lang; document.documentElement.dir = D.lang === 'ar' ? 'rtl' : 'ltr';
+  P.has = function (k) { return dict[P.lang][k] !== undefined; };
+  P.setLang = function (l) {
+    P.lang = l === 'en' ? 'en' : 'ar';
+    try { localStorage.setItem('hs.parent.lang', P.lang); } catch (e) { /* ignore */ }
+    document.documentElement.lang = P.lang; document.documentElement.dir = P.lang === 'ar' ? 'rtl' : 'ltr';
+    document.title = P.t('app');
   };
-  D.setLang(D.lang);
-  D.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  D.digits = function (s) { return String(s).replace(/[٠-٩]/g, function (d) { return d.charCodeAt(0) - 1632; }).replace(/[۰-۹]/g, function (d) { return d.charCodeAt(0) - 1776; }); };
+  P.setLang(P.lang);
+  P.esc = function (s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  P.dict = dict;
 })();

@@ -131,14 +131,28 @@
   HS.editStudent = editStudent;
 
   /* ---------- the student file ---------- */
-  var TABS = ['profile', 'groups', 'attendance', 'money', 'marks', 'follow', 'history'];
+  var TABS = ['profile', 'groups', 'attendance', 'money', 'marks', 'follow', 'parent', 'history'];
   // assistants record attendance and marks without seeing money (product spec, roles table)
-  function seesMoney() { return HS.can(['money.view', 'money.collect', 'door.use']); }
-  function tabs() { return TABS.filter(function (t) { return (t !== 'money' || seesMoney()) && (t !== 'history' || HS.can('logs.view')); }); }
+  function seesMoney() { return HS.can(['money.view', 'money.collect']); }
+  function tabs() { return TABS.filter(function (t) { return (t !== 'money' || seesMoney()) && (t !== 'history' || HS.can('logs.view')) && (t !== 'parent' || HS.can('messages.send')); }); }
+  /* the parent link: what it shows, whether one exists, and the three things the desk does with it */
+  function parentTab(f) {
+    var pl = f.parentLink || {};
+    var what = '<p class="muted">' + HS.esc(HS.t('pl.what')) + '</p>';
+    if (!pl.gateway) return what + '<div class="tip">' + HS.icon('info') + '<span>' + HS.esc(HS.t('pl.noGateway')) + (HS.can('gateway.manage') ? ' <a href="#/settings?tab=gateway">' + HS.esc(HS.t('pl.setup')) + '</a>' : '') + '</span></div>';
+    var phone = HS.can('contacts.view') && f.student.parentMobile;
+    return what + (pl.has ? '<div class="tip ok">' + HS.icon('check') + '<span>' + HS.esc(HS.t('pl.has')) + '</span></div>' : '<div class="tip">' + HS.icon('link') + '<span>' + HS.esc(HS.t('pl.none')) + '</span></div>') +
+      '<div class="row wrap" style="gap:.5rem">' +
+        (phone ? '<button class="btn primary" data-pl-send>' + HS.icon('chat', 'sm') + HS.esc(HS.t(pl.has ? 'pl.sendAgain' : 'pl.createSend')) + '</button>' : '') +
+        '<button class="btn' + (phone ? '' : ' primary') + '" data-pl-copy>' + HS.icon('copy', 'sm') + HS.esc(HS.t(pl.has ? 'pl.copy' : 'pl.createCopy')) + '</button>' +
+        (pl.has ? '<button class="btn ghost" data-pl-replace>' + HS.icon('refresh', 'sm') + HS.esc(HS.t('pl.replace')) + '</button>' : '') + '</div>' +
+      '<div data-pl-out></div><p class="faint">' + HS.esc(HS.t('pl.privacy')) + '</p>';
+  }
   function kv(k, v) { return '<dt>' + HS.esc(HS.t(k)) + '</dt><dd>' + (v === '' || v === null || v === undefined ? '<span class="faint">–</span>' : v) + '</dd>'; }
   function tabBody(tab, f) {
     var s = f.student;
     if (tab === 'history') return '<div data-history></div>';
+    if (tab === 'parent') return parentTab(f);
     if (tab === 'profile') {
       return '<dl class="kv">' + kv('f.code', '<b class="num">' + U.bdi(s.code || '') + '</b>') + kv('f.gradeCode', U.grade(s.gradeCode, s.system, s.track)) + kv('f.school', HS.esc(s.school || '')) +
         (HS.can('contacts.view') ? kv('f.mobile', s.mobile ? U.bdi(s.mobile) : '') + kv('f.parentName', HS.esc(s.parentName || '')) + kv('f.parentMobile', s.parentMobile ? U.bdi(s.parentMobile) : '') : '') +
@@ -231,7 +245,28 @@
             var o = e.target.closest('[data-open]'); if (o) { openStudent(o.dataset.open); return; }
             if (e.target.closest('[data-edit]')) { editStudent(id); return; }
             if (e.target.closest('[data-card]')) { HS.printCards([f.student]); return; }
-            if (e.target.closest('[data-wa]')) { HS.get('/api/c/wa?studentId=' + encodeURIComponent(id) + '&kind=monthly&lang=' + HS.lang).then(function (r) { if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener'); }, function (er) { HS.toast(U.errorText(er), 'bad'); }); return; }
+            var plb = e.target.closest('[data-pl-send],[data-pl-copy],[data-pl-replace]');
+            if (plb) {
+              var replace = plb.hasAttribute('data-pl-replace');
+              var make = function () {
+                return U.run(HS.post('/api/c/portal', { studentId: id, replace: replace }), replace ? 'pl.replaced' : null, plb).then(function (r) {
+                  f.parentLink.has = true;
+                  var tb = p.querySelector('[data-tabbody]'); if (tb && tab === 'parent') tb.innerHTML = tabBody('parent', f);
+                  var out = p.querySelector('[data-pl-out]');
+                  if (out) {
+                    out.innerHTML = '<label class="field"><span class="lbl">' + HS.esc(HS.t('pl.link')) + '</span><input class="input" readonly dir="ltr" value="' + HS.esc(r.url) + '"></label>';
+                    out.querySelector('input').select();
+                  }
+                  if (plb.hasAttribute('data-pl-send')) HS.waQueue([{ id: id, name: f.student.name }], 'report', function () { reload('parent'); });
+                  else { try { if (navigator.clipboard) navigator.clipboard.writeText(r.url).then(function () { HS.toast(HS.t('link.copied')); }, function () {}); } catch (er) { /* selected */ } }
+                  plb.disabled = false;
+                });
+              };
+              if (replace) U.confirm({ title: HS.t('pl.replace'), body: HS.t('pl.replace.b'), danger: true, ok: HS.t('pl.replace') }).then(function (yes) { if (yes) make().catch(function () {}); });
+              else make().catch(function () {});
+              return;
+            }
+            if (e.target.closest('[data-wa]')) { HS.waQueue([{ id: id, name: f.student.name }], 'monthly', function () { reload('follow'); }); return; }
             if (e.target.closest('[data-enrol]')) { pickGroup(f.student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: id, groupId: gid }, extra || {})); }, function () { reload('groups'); }); return; }
             var tr = e.target.closest('[data-transfer]');
             if (tr) {
@@ -335,7 +370,7 @@
     mount: function (root, ctx) {
       function paint() { var rows = filtered(); root.querySelector('[data-sum]').innerHTML = summary(rows); root.querySelector('[data-rows]').innerHTML = table(rows); }
       paint();
-      if (HS.can(['money.view', 'money.collect', 'followup.view']) && !money) HS.get('/api/c/balances').then(function (r) { money = r; if (root.isConnected !== false) paint(); }, function () {});
+      if (HS.can(['money.view', 'money.collect']) && !money) HS.get('/api/c/balances').then(function (r) { money = r; if (root.isConnected !== false) paint(); }, function () {});
       if (HS.can('followup.view') && !risky) HS.get('/api/c/risk').then(function (r) { risky = {}; r.forEach(function (x) { if (!risky[x.studentId] || x.level === 'high') risky[x.studentId] = x.level; }); if (root.isConnected !== false) paint(); }, function () {});
       root.addEventListener('input', HS.debounce(function (e) { if (e.target.dataset.f === 'q') { F.q = e.target.value; F.limit = PAGE; paint(); } }, 120));
       root.addEventListener('change', function (e) { var k = e.target.dataset.f; if (k && k !== 'q') { F[k] = e.target.value; F.limit = PAGE; paint(); } });

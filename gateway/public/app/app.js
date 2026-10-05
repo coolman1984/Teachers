@@ -1,250 +1,123 @@
-/* Hessa - driver page. Five steps: your trip, start, on the road, end, paper. Works without a network:
-   every step is saved on the phone first and sent when possible. */
+/* Hessa parent page: one child's card, read only. The link token is the key; the card comes from /api/card/<token>.
+   Offline: the service worker keeps the last copy on this phone and the page says how old it is. A stopped link removes it. */
 (function () {
   'use strict';
-  var D = window.D, app = document.getElementById('app');
-  var m = location.pathname.match(/^\/t\/([A-Za-z0-9_-]{16,64})/);
-  D.token = m ? m[1] : '';
-  var KEY = 'trip:' + D.token;
-  var STEPS = ['trip', 'start', 'road', 'end', 'paper'];
-  var S = { card: null, draft: null, photo: null, error: null, second: false, low: false, clockOff: false, tick: null, device: '' };
+  var P = window.P, app = document.getElementById('app');
+  var m = location.pathname.match(/^\/t\/([A-Za-z0-9_-]{16,64})$/);
+  var token = m ? m[1] : '';
+  var S = { card: null, savedAt: '', sentAt: '' };
 
-  function $(sel, root) { return (root || app).querySelector(sel); }
-  function isoLocal(d) {
-    var p = function (n) { return ('0' + n).slice(-2); }, o = -d.getTimezoneOffset(), sg = o >= 0 ? '+' : '-'; o = Math.abs(o);
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + sg + p(Math.floor(o / 60)) + ':' + p(o % 60);
+  function num(n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+  function money(n) { return P.lang === 'ar' ? num(n) + ' ' + P.t('currency') : P.t('currency') + ' ' + num(n); }
+  function loc() { return P.lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-GB'; }
+  function day(iso, opts) {
+    try { return new Intl.DateTimeFormat(loc(), opts || { day: 'numeric', month: 'short' }).format(new Date(iso + 'T12:00:00')); } catch (e) { return iso; }
   }
-  function save() { return D.outbox.saveDraft(S.draft); }
-  function go(stage) { S.draft.stage = stage; S.photo = null; S.low = false; save(); draw(); window.scrollTo(0, 0); }
-  function fmtTime(iso) { var d = new Date(iso); return isNaN(d) ? '' : ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
-  function elapsed(iso) {
-    var ms = Date.now() - new Date(iso).getTime(); if (!(ms > 0)) return '0:00';
-    var mins = Math.floor(ms / 60000); return Math.floor(mins / 60) + ':' + ('0' + (mins % 60)).slice(-2);
+  function ago(iso) {
+    var t = new Date(iso).getTime(); if (!t) return '';
+    var mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (mins < 2) return P.t('now');
+    if (mins < 60) return P.t('minutes', { n: mins });
+    if (mins < 48 * 60) return P.t('hours', { n: Math.round(mins / 60) });
+    return P.t('days', { n: Math.round(mins / 1440) });
   }
+  function ltr(s) { return '<bdi dir="ltr">' + P.esc(s) + '</bdi>'; }
+  function section(title, body, cls) { return '<section class="card' + (cls ? ' ' + cls : '') + '"><h2>' + P.esc(title) + '</h2>' + body + '</section>'; }
 
-  /* ---------- pieces ---------- */
-  function head() {
-    var c = S.card || {};
-    return '<header class="top"><div class="ttl"><b>' + D.esc(D.t('title')) + '</b>' + (c.no ? '<span class="no" dir="ltr">' + D.esc(c.no) + '</span>' : '') + '</div>' +
-      '<div class="tools"><button class="chip" data-a="hc" aria-pressed="' + (document.documentElement.dataset.hc === '1') + '">' + D.esc(D.t('contrast')) + '</button>' +
-      '<button class="chip" data-a="lang">' + D.esc(D.t('lang')) + '</button></div></header>';
+  /* ---------- the card ---------- */
+  function header(c) {
+    var grade = P.has('grade_' + c.grade) ? P.t('grade_' + c.grade) : (c.grade || '');
+    return '<header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><span>' + P.esc(c.center || P.t('app')) + '</span></div>' +
+      '<button class="chip" data-lang>' + P.esc(P.t('lang')) + '</button></header>' +
+      '<div class="who"><h1>' + P.esc(c.name) + '</h1><p>' + P.esc(grade) + ' · ' + P.esc(P.t('code')) + ' ' + ltr(c.code) + '</p></div>';
   }
-  function stepper(stage) {
-    var idx = stage === 'done' ? STEPS.length : STEPS.indexOf(stage);
-    return '<ol class="steps" aria-label="progress">' + STEPS.map(function (s, i) {
-      return '<li class="' + (i < idx ? 'done' : i === idx ? 'now' : '') + '"' + (i === idx ? ' aria-current="step"' : '') + '><i>' + (i < idx ? '✓' : i + 1) + '</i><span>' + D.esc(D.t(s)) + '</span></li>';
-    }).join('') + '</ol>';
+  function freshness() {
+    if (S.savedAt) return '<p class="note warn" role="status">' + P.esc(P.t('saved', { t: ago(S.savedAt) })) + '</p>';
+    return '<p class="note" role="status">' + P.esc(P.t('updated', { t: ago(S.card.updatedAt || S.sentAt) })) + ' · ' + P.esc(P.t('readOnly')) + '</p>';
   }
-  function row(k, v) { return v ? '<div class="kv"><span>' + D.esc(D.t(k)) + '</span><b>' + D.esc(v) + '</b></div>' : ''; }
-  function banners() {
-    var b = '';
-    if (S.second || D.secondDevice) b += '<div class="note warn" role="status"><b>' + D.esc(D.t('second')) + '</b><span>' + D.esc(D.t('second_b')) + '</span></div>';
-    if (S.clockOff) b += '<div class="note warn" role="status">' + D.esc(D.t('server_time_off')) + '</div>';
-    return b;
+  function moneyCard(c) {
+    var rows = (c.groups || []).map(function (g) {
+      var b = Number(g.balance) || 0, tone = b < -0.009 ? 'bad' : b > 0.009 ? 'ok' : '';
+      var sub = [P.t('fee_' + (g.feeType || 'session')), g.unit ? money(g.unit) : '', g.sessionsLeft !== undefined && g.sessionsLeft !== null ? P.t('left', { n: g.sessionsLeft }) : ''].filter(Boolean).join(' · ');
+      return '<li><div class="grow"><b>' + P.esc(P.lang === 'en' && g.subjectEn ? g.subjectEn : g.subject || g.group) + '</b><small>' + P.esc(g.group) + (g.teacher ? ' · ' + P.esc(g.teacher) : '') + '</small><small>' + P.esc(sub) + '</small></div>' +
+        '<span class="bal ' + tone + '"><b>' + P.esc(money(Math.abs(b))) + '</b><small>' + P.esc(P.t(b < -0.009 ? 'owes' : b > 0.009 ? 'credit' : 'clear')) + '</small></span></li>';
+    }).join('');
+    return section(P.t('money'), (rows ? '<ul class="rows">' + rows + '</ul>' : '') + (Number(c.wallet) > 0 ? '<p class="note">' + P.esc(P.t('wallet', { a: money(c.wallet) })) + '</p>' : ''));
   }
-  function photoBox(kind, labelKey) {
-    var ph = S.photo;
-    return '<div class="photo">' + (ph ? '<img alt="" src="' + ph.url + '"><div class="ok">✓ ' + D.esc(D.t('photo_ok')) + (ph.fallback ? ' · ' + D.esc(D.t('cam_gallery')) : '') + '</div>' : '') +
-      '<button class="btn ' + (ph ? 'ghost' : 'big') + '" data-a="shoot" data-kind="' + kind + '">' + D.esc(D.t(ph ? 'retake' : labelKey)) + '</button>' +
-      '<p class="hint">' + D.esc(D.t('stamp')) + '</p></div>';
+  function weekCard(c) {
+    var t = new Date(), iso = function (d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
+    var today = iso(t), tm = new Date(t.getTime() + 86400000), tomorrow = iso(tm);
+    var list = (c.week || []).filter(function (w) { return w.date >= today; });
+    if (!list.length) return section(P.t('week'), '<p class="empty">' + P.esc(P.t('noWeek')) + '</p>');
+    return section(P.t('week'), '<ul class="rows">' + list.map(function (w) {
+      var label = w.date === today ? P.t('today') : w.date === tomorrow ? P.t('tomorrow') : day(w.date, { weekday: 'long', day: 'numeric', month: 'short' });
+      return '<li' + (w.date === today ? ' class="hi"' : '') + '><div class="grow"><b>' + P.esc(label) + '</b><small>' + P.esc(w.group) + '</small></div><span class="time">' + ltr(w.start + '–' + w.end) + '</span></li>';
+    }).join('') + '</ul>');
   }
-  function kmField(id, labelKey, val) {
-    return '<label class="field" for="' + id + '"><span>' + D.esc(D.t(labelKey)) + '</span><input id="' + id + '" class="km" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" dir="ltr" value="' + D.esc(val || '') + '"><small>' + D.esc(D.t('km_hint')) + '</small></label>';
+  function attCard(c) {
+    var a = c.attendance || [];
+    if (!a.length) return section(P.t('att', { n: 0 }), '<p class="empty">' + P.esc(P.t('noAtt')) + '</p>');
+    var came = a.filter(function (x) { return x.status === 'present' || x.status === 'late'; }).length;
+    var dots = a.slice().reverse().map(function (x) {
+      return '<i class="d ' + P.esc(x.status) + '" title="' + P.esc(day(x.date) + ' · ' + x.group + ' · ' + P.t(x.status)) + '"></i>';
+    }).join('');
+    var last = a.slice(0, 5).map(function (x) { return '<li><div class="grow"><b>' + P.esc(day(x.date, { weekday: 'short', day: 'numeric', month: 'short' })) + '</b><small>' + P.esc(x.group) + '</small></div><span class="tag ' + P.esc(x.status) + '">' + P.esc(P.t(x.status)) + '</span></li>'; }).join('');
+    return section(P.t('att', { n: a.length }), '<p class="big">' + P.esc(P.t('attRate', { p: Math.round(came * 100 / a.length) })) + '</p><div class="dots" role="img" aria-label="' + P.esc(P.t('attRate', { p: Math.round(came * 100 / a.length) })) + '">' + dots + '</div>' +
+      '<p class="legend">' + ['present', 'late', 'absent', 'excused'].map(function (k) { return '<span><i class="d ' + k + '"></i>' + P.esc(P.t(k)) + '</span>'; }).join('') + '</p><ul class="rows">' + last + '</ul>');
   }
-
-  /* ---------- screens ---------- */
-  function screenTrip() {
-    var c = S.card, pax = (c.passengers || []).join('، ');
-    return '<section class="card"><h1>' + D.esc(D.t('trip')) + '</h1>' + row('date', c.date) + row('driver', c.driverName) + row('car', [c.plate, c.vehicleType].filter(Boolean).join(' · ')) +
-      row('dest', c.destination) + row('stops', (c.stops || []).join(' ← ')) + row('pax', pax || '') + '</section>' +
-      '<p class="hint">' + D.esc(D.t('begin_hint')) + '</p><button class="btn big" data-a="begin">' + D.esc(D.t('begin')) + '</button>';
+  function marksCard(c) {
+    var list = (c.marks || []).slice().reverse();
+    if (!list.length) return section(P.t('marks'), '<p class="empty">' + P.esc(P.t('noMarks')) + '</p>');
+    return section(P.t('marks'), '<ul class="rows">' + list.map(function (x) {
+      var pct = !x.absent && x.max ? Math.round(Number(x.score) * 100 / Number(x.max)) : null;
+      return '<li><div class="grow"><b>' + P.esc(x.title) + '</b><small>' + P.esc(day(x.date)) + (x.rank && x.of ? ' · ' + P.esc(P.t('rank', { r: x.rank, n: x.of })) : '') + '</small>' +
+        (pct !== null ? '<span class="meter"><i class="w' + Math.max(0, Math.min(10, Math.round(pct / 10))) + '"></i></span>' : '') + '</div>' +
+        '<span class="score">' + (x.absent ? P.esc(P.t('absentExam')) : ltr(num(x.score) + ' / ' + num(x.max)) + '<small>' + pct + '%</small>') + '</span></li>';
+    }).join('') + '</ul>');
   }
-  function screenStart() {
-    return '<section class="card"><h1>' + D.esc(D.t('start')) + '</h1>' + photoBox('start_odo', 'odo_start') + kmField('km', 'km_start', S.draft.kmInput) + '</section>' +
-      (S.error ? '<div class="note bad" role="alert">' + D.esc(S.error) + '</div>' : '') +
-      '<button class="btn big" data-a="start">' + D.esc(D.t('confirm_start')) + '</button>' +
-      (S.photo ? '' : '<button class="link" data-a="start-nophoto">' + D.esc(D.t('skip_photo')) + '</button>');
+  function payCard(c) {
+    var list = c.payments || [];
+    if (!list.length) return section(P.t('payments'), '<p class="empty">' + P.esc(P.t('noPay')) + '</p>');
+    return section(P.t('payments'), '<ul class="rows">' + list.map(function (p) {
+      return '<li><div class="grow"><b>' + P.esc(day(p.date)) + '</b><small>' + P.esc(p.amount < 0 ? P.t('reversed') : P.t('receipt', { no: '' })) + ltr(p.no || '') + (p.group ? ' · ' + P.esc(p.group) : '') + '</small></div>' +
+        '<span class="amt' + (p.amount < 0 ? ' neg' : '') + '">' + P.esc(money(p.amount)) + '</span></li>';
+    }).join('') + '</ul>');
   }
-  function screenRoad() {
-    var d = S.draft;
-    return '<section class="card live"><h1><span class="pulse"></span>' + D.esc(D.t('running')) + '</h1>' + row('since', fmtTime(d.startAt)) +
-      '<div class="kv"><span>' + D.esc(D.t('elapsed')) + '</span><b id="el" dir="ltr">' + elapsed(d.startAt) + '</b></div>' + row('km_start', d.startKm != null ? String(d.startKm) : '') +
-      row('dest', S.card.destination) + '</section>' +
-      '<div id="notebox"></div><button class="btn ghost" data-a="note">' + D.esc(D.t('note')) + '</button>' +
-      '<button class="btn big" data-a="finish">' + D.esc(D.t('finish')) + '</button>';
-  }
-  function screenEnd() {
-    var d = S.draft, route = d.routeInput != null ? d.routeInput : (S.card.destination || '');
-    return '<section class="card"><h1>' + D.esc(D.t('end')) + '</h1>' + photoBox('end_odo', 'odo_end') + kmField('km', 'km_end', d.kmInput) +
-      '<label class="field" for="route"><span>' + D.esc(D.t('route')) + '</span><textarea id="route" rows="2">' + D.esc(route) + '</textarea><small>' + D.esc(D.t('route_hint')) + '</small></label></section>' +
-      (S.low ? '<div class="note warn" role="alert"><b>' + D.esc(D.t('end_low')) + '</b></div><button class="btn ghost" data-a="check">' + D.esc(D.t('check_km')) + '</button><button class="btn big" data-a="end-force">' + D.esc(D.t('end_low_send')) + '</button>' :
-        (S.error ? '<div class="note bad" role="alert">' + D.esc(S.error) + '</div>' : '') + '<button class="btn big" data-a="end">' + D.esc(D.t('confirm_end')) + '</button>' +
-        (S.photo ? '' : '<button class="link" data-a="end-nophoto">' + D.esc(D.t('skip_photo')) + '</button>'));
-  }
-  function screenPaper() {
-    return '<section class="card"><h1>' + D.esc(D.t('paper_t')) + '</h1><p class="hint">' + D.esc(D.t('paper_hint')) + '</p>' + photoBox('paper', 'paper_t') + '</section>' +
-      (S.photo ? '<button class="btn big" data-a="paper">' + D.esc(D.t('send')) + '</button>' : '') + '<button class="link" data-a="skip-paper">' + D.esc(D.t('skip_paper')) + '</button>';
-  }
-  function screenDone() {
-    var d = S.draft;
-    return '<section class="card centre"><div class="big-ok">✓</div><h1>' + D.esc(D.t('thanks')) + '</h1><p>' + D.esc(D.t('thanks_b')) + '</p>' +
-      (d.paperDone ? '' : '<div class="note warn">' + D.esc(D.t('paper_missing')) + '</div><button class="btn big" data-a="to-paper">' + D.esc(D.t('paper_t')) + '</button>') + '</section><div id="items"></div>';
-  }
-  function screenGone(why) {
-    var k = why === 'cancelled' ? ['cancelled', 'cancelled_b'] : why === 'expired' ? ['expired', 'expired_b'] : ['unknown', 'unknown_b'];
-    return '<section class="card centre"><div class="big-ok bad">!</div><h1>' + D.esc(D.t(k[0])) + '</h1><p>' + D.esc(D.t(k[1])) + '</p></section>';
-  }
-
-  /* ---------- sync bar ---------- */
-  function syncBar() {
-    var box = $('#sync'); if (!box) return;
-    D.outbox.items(KEY).then(function (items) {
-      var waiting = items.filter(function (i) { return !i.sentAt && !i.error; }).length, failed = items.filter(function (i) { return i.error; }).length, sent = items.filter(function (i) { return i.sentAt; }).length;
-      var off = !navigator.onLine || D.outbox.online === false;
-      var html;
-      if (failed) html = '<button class="sync bad" data-a="retry">! ' + D.esc(D.t('failed')) + '</button>';
-      else if (waiting) html = '<div class="sync wait">✓ ' + D.esc(D.t('saved_here')) + ' · ' + D.esc(D.t('n_waiting', { n: waiting })) + (off ? '<br><small>' + D.esc(D.t('offline')) + '</small>' : '') + '</div>';
-      else if (sent) html = '<div class="sync ok">✓✓ ' + D.esc(D.t('all_sent')) + '</div>';
-      else html = '';
-      box.innerHTML = html;
-      var list = $('#items');
-      if (list) list.innerHTML = items.map(function (i) {
-        var st = i.sentAt ? '✓✓ ' + D.t('received') : i.error ? '! ' + D.t('failed') : '✓ ' + D.t('saved_here');
-        var name = i.kind === 'photo' ? ({ start_odo: D.t('odo_start'), end_odo: D.t('odo_end'), paper: D.t('paper_t') }[i.photoKind] || i.photoKind) : ({ start: D.t('start'), end: D.t('end'), note: D.t('note'), route: D.t('route') }[JSON.parse(i.json).type] || '');
-        return '<div class="item ' + (i.sentAt ? 'ok' : i.error ? 'bad' : 'wait') + '"><span>' + D.esc(name) + '</span><b>' + D.esc(st) + '</b></div>';
-      }).join('');
-    });
-  }
-
-  /* ---------- drawing ---------- */
   function draw() {
-    clearInterval(S.tick);
-    if (D.gone) { app.innerHTML = head() + '<main>' + screenGone(D.goneWhy) + '</main>'; return; }
-    var st = S.draft.stage, body = { trip: screenTrip, start: screenStart, road: screenRoad, end: screenEnd, paper: screenPaper, done: screenDone }[st]();
-    app.innerHTML = head() + '<main>' + stepper(st) + banners() + body + '</main><footer id="sync" aria-live="polite"></footer>';
-    if (st === 'road') S.tick = setInterval(function () { var e = $('#el'); if (e) e.textContent = elapsed(S.draft.startAt); }, 20000);
-    syncBar();
+    var c = S.card;
+    app.innerHTML = header(c) + freshness() + moneyCard(c) + weekCard(c) + marksCard(c) + attCard(c) + payCard(c) +
+      '<footer class="foot"><button class="chip" data-refresh>' + P.esc(P.t('refresh')) + '</button></footer>';
+  }
+  function message(kind) {
+    app.innerHTML = '<header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><span>' + P.esc(P.t('app')) + '</span></div><button class="chip" data-lang>' + P.esc(P.t('lang')) + '</button></header>' +
+      '<section class="card msg ' + kind + '"><h1>' + P.esc(P.t(kind)) + '</h1><p>' + P.esc(P.t(kind + '_b')) + '</p>' +
+      (kind === 'offline' || kind === 'busy' || kind === 'notyet' ? '<button class="btn" data-refresh>' + P.esc(P.t('retry')) + '</button>' : '') + '</section>';
   }
 
-  /* ---------- actions ---------- */
-  function newEvent(type, data) {
-    var e = { uuid: D.outbox.uuid(), v: 1, type: type, tripId: S.card.tripId || '', deviceId: S.device, seq: (S.draft.seq = (S.draft.seq || 0) + 1), phoneAt: isoLocal(new Date()), queued: false, data: data };
-    return D.outbox.add({ kind: 'event', uuid: e.uuid, token: D.token, tripKey: KEY, json: JSON.stringify(e) }).then(function () { return e; });
+  /* ---------- loading ---------- */
+  function forget() {
+    // a stopped link: nothing of this child stays on the phone (the service worker drops its copy too)
+    try { if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ forget: location.pathname }); } catch (e) { /* ignore */ }
   }
-  function addPhoto(kind, ph, eventUuid) {
-    return D.outbox.add({ kind: 'photo', uuid: D.outbox.uuid(), token: D.token, tripKey: KEY, photoKind: kind, blob: ph.blob, sha: ph.sha, fallback: ph.fallback, eventUuid: eventUuid });
+  function load() {
+    if (!token) { message('bad'); return; }
+    if (!S.card) app.innerHTML = '<p class="boot">' + P.esc(P.t('loading')) + '</p>';
+    fetch('/api/card/' + token, { headers: { Accept: 'application/json' }, cache: 'no-store' }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (r.ok && d.card) { S.card = d.card; S.sentAt = d.sentAt || ''; S.savedAt = r.headers.get('X-Hessa-Saved') || ''; draw(); return; }
+        if (r.status === 404) { S.card = null; forget(); message('notyet'); return; }
+        if (r.status === 410) { S.card = null; forget(); message(d.expired ? 'expired' : 'revoked'); return; }
+        if (r.status === 429) { if (!S.card) message('busy'); return; }
+        if (!S.card) message('bad');
+      });
+    }, function () { if (!S.card) message('offline'); });
   }
-  function readKm() {
-    var el = $('#km'); if (!el) return null;
-    var v = D.digits(el.value).replace(/[^0-9]/g, ''); return v === '' ? null : parseInt(v, 10);
-  }
-  function fail(msg) { S.error = D.t(msg); draw(); }
-
-  var actions = {
-    lang: function () { D.setLang(D.lang === 'ar' ? 'en' : 'ar'); draw(); },
-    reload: function () { location.reload(); },
-    hc: function () { var on = document.documentElement.dataset.hc !== '1'; document.documentElement.dataset.hc = on ? '1' : '0'; try { localStorage.setItem('to.hc', on ? '1' : '0'); } catch (e) { /* ignore */ } draw(); },
-    begin: function () { go('start'); },
-    shoot: function (btn) {
-      var kind = btn.dataset.kind;
-      D.camera.capture({ no: S.card.no, plate: S.card.plate }).then(function (ph) {
-        if (S.photo && S.photo.url) URL.revokeObjectURL(S.photo.url);
-        S.photo = ph; S.error = null;
-        var km = $('#km'), route = $('#route'); if (km) S.draft.kmInput = km.value; if (route) S.draft.routeInput = route.value;
-        draw();
-      }, function (e) { if (e && e.message !== 'cancel') S.error = D.t('cam_denied'); draw(); });
-    },
-    start: function () { doStart(true); },
-    'start-nophoto': function () { doStart(false); },
-    finish: function () { S.draft.kmInput = ''; go('end'); },
-    check: function () { S.low = false; draw(); },
-    end: function () { doEnd(false, true); },
-    'end-nophoto': function () { doEnd(false, false); },
-    'end-force': function () { doEnd(true, !!S.photo); },
-    paper: function () { addPhoto('paper', S.photo, null).then(function () { S.draft.paperDone = true; go('done'); }); },
-    'skip-paper': function () { go('done'); },
-    'to-paper': function () { go('paper'); },
-    retry: function () { D.outbox.retryFailed(KEY); },
-    note: function () {
-      var box = $('#notebox');
-      box.innerHTML = '<label class="field"><span>' + D.esc(D.t('note')) + '</span><textarea id="notetxt" rows="2" placeholder="' + D.esc(D.t('note_ph')) + '"></textarea></label><button class="btn" data-a="note-send">' + D.esc(D.t('send')) + '</button>';
-      $('#notetxt').focus();
-    },
-    'note-send': function () {
-      var t = ($('#notetxt') || {}).value || ''; if (!t.trim()) return;
-      newEvent('note', { text: t.trim().slice(0, 500) }).then(function () { save(); $('#notebox').innerHTML = ''; syncBar(); });
-    },
-  };
-  function doStart(withPhoto) {
-    var km = readKm();
-    if (km === null) return fail('km_required');
-    S.error = null;
-    var ph = withPhoto ? S.photo : null;
-    newEvent('start', { startKm: km }).then(function (e) {
-      S.draft.startKm = km; S.draft.startAt = e.phoneAt; S.draft.kmInput = '';
-      return ph ? addPhoto('start_odo', ph, e.uuid) : null;
-    }).then(function () { go('road'); });
-  }
-  function doEnd(force, withPhoto) {
-    var km = readKm(), route = ($('#route') || {}).value || '';
-    if (km === null) return fail('km_required');
-    S.draft.routeInput = route;
-    if (!force && S.draft.startKm != null && km < S.draft.startKm) { S.low = true; S.draft.kmInput = String(km); draw(); return; }
-    S.error = null;
-    var ph = withPhoto ? S.photo : null;
-    var stops = route.split(/\s*[-←>،,]\s*/).filter(Boolean).slice(0, 12);
-    newEvent('end', { endKm: km, routeText: route.trim().slice(0, 300), stops: stops }).then(function (e) {
-      S.draft.endKm = km; S.draft.endAt = e.phoneAt;
-      return ph ? addPhoto('end_odo', ph, e.uuid) : null;
-    }).then(function () { go('paper'); });
-  }
-
   app.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-a]'); if (!b || !actions[b.dataset.a]) return;
-    actions[b.dataset.a](b);
+    if (e.target.closest('[data-lang]')) { P.setLang(P.lang === 'ar' ? 'en' : 'ar'); if (S.card) draw(); else load(); return; }
+    if (e.target.closest('[data-refresh]')) load();
   });
-  app.addEventListener('input', function (e) {
-    if (!S.draft) return;
-    if (e.target.id === 'km') { S.draft.kmInput = e.target.value; save(); }
-    if (e.target.id === 'route') { S.draft.routeInput = e.target.value; save(); }
-  });
-  D.outbox.onchange(function () { if (D.gone && S.draft) draw(); else syncBar(); });
-  window.addEventListener('online', syncBar); window.addEventListener('offline', syncBar);
-
-  /* ---------- start ---------- */
-  function boot() {
-    try { if (localStorage.getItem('to.hc') === '1') document.documentElement.dataset.hc = '1'; } catch (e) { /* ignore */ }
-    if (!D.token) { app.innerHTML = head() + '<main>' + screenGone('unknown') + '</main>'; return; }
-    app.innerHTML = head() + '<main><p class="boot">' + D.esc(D.t('loading')) + '</p></main>';
-    Promise.all([D.outbox.deviceId(), D.outbox.getDraft(KEY)]).then(function (r) {
-      S.device = r[0]; S.draft = r[1];
-      // offline: the copy of the card kept on this phone with the draft is enough to carry on
-      return fetch('/api/card/' + D.token, { cache: 'no-cache' }).catch(function (e) { if (S.draft && S.draft.card) return { offlineCard: true }; throw e; });
-    }).then(function (res) {
-      if (res.offlineCard) return { card: S.draft.card };
-      if (res.status === 404) { app.innerHTML = head() + '<main>' + screenGone('unknown') + '</main>'; return null; }
-      if (res.status === 410) return res.json().then(function (j) { D.gone = true; D.goneWhy = j.cancelled ? 'cancelled' : 'expired'; draw0(); return null; });
-      return res.json();
-    }).then(function (j) {
-      if (!j) return;
-      S.card = j.card;
-      if (j.serverTime && Math.abs(Date.now() - new Date(j.serverTime).getTime()) > 10 * 60000) S.clockOff = true;
-      if (!S.draft) {
-        var st = S.card.status;
-        S.draft = { key: KEY, stage: st === 'started' ? 'road' : (st === 'finished' || st === 'closed') ? 'done' : 'trip', startAt: S.card.startAt || null, startKm: S.card.startKm != null ? S.card.startKm : null };
-        if (S.draft.stage === 'done') S.draft.paperDone = true;
-      }
-      return fetch('/api/bind/' + D.token, { method: 'POST', body: JSON.stringify({ deviceId: S.device }) }).then(function (r) { return r.json(); }).then(function (b) { if (b && b.secondDevice) S.second = true; }, function () { /* offline: bound with the first event */ });
-    }).then(function () {
-      if (!S.card) return;
-      S.draft.card = S.card; save(); draw(); D.outbox.kick(true);
-    }, function () {
-      app.innerHTML = head() + '<main><section class="card centre"><div class="big-ok bad">!</div><h1>' + D.esc(D.t('offline')) + '</h1><button class="btn big" data-a="reload">' + D.esc(D.t('tryagain')) + '</button></section></main>';
-    });
-  }
-  function draw0() { app.innerHTML = head() + '<main>' + screenGone(D.goneWhy) + '</main>'; }
-  app.addEventListener('click', function (e) { var b = e.target.closest('[data-a="lang"],[data-a="hc"]'); if (b && !S.draft) { actions[b.dataset.a](); if (!S.card) boot(); } });
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () { /* the page works without it */ });
-  boot();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.card) load(); });
+  window.addEventListener('online', load);
+  if ('serviceWorker' in navigator && token) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () { /* the page still works without it */ });
+  load();
 })();

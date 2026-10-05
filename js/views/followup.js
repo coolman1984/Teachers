@@ -25,41 +25,68 @@
     });
   }
 
-  /* ---------- the WhatsApp sender: one chat at a time, the person presses Send in WhatsApp ---------- */
+  /* ---------- the WhatsApp sender: one chat at a time, the person presses Send in WhatsApp ----------
+     Opening a chat is not sending: the program cannot see WhatsApp, so after the chat opens the person says whether the
+     message went. Only "Yes, sent" logs a follow-up (and counts); a failed save says so and can be tried again. */
   HS.waQueue = function (items, kind, done) {
     if (!items.length) { HS.toast(HS.t('wa.nobody'), 'bad'); return; }
-    var i = 0, sent = 0, cur = null;
+    var i = 0, sent = 0, cur = null, opened = '';
     var el = HS.dialog({ title: HS.t('wa.title', { kind: HS.t('wa.kind.' + kind) }), wide: true, body: '<div data-q></div>',
-      footer: '<span class="grow faint" data-progress></span><button class="btn ghost" data-skip>' + HS.esc(HS.t('common.skip')) + '</button>' +
-        '<button class="btn" data-copy>' + HS.icon('copy', 'sm') + HS.esc(HS.t('common.copy')) + '</button><button class="btn" data-sms>' + HS.esc(HS.t('wa.sms')) + '</button>' +
-        '<button class="btn primary" data-open>' + HS.icon('chat', 'sm') + HS.esc(HS.t('wa.open')) + '</button>' });
-    var box = el.querySelector('[data-q]');
+      footer: '<span class="grow faint" data-progress></span><span class="row wrap" data-step style="gap:.4rem"></span>' });
+    var box = el.querySelector('[data-q]'), step = el.querySelector('[data-step]');
+    function buttons(html) { step.innerHTML = html; }
+    function chooseButtons() {
+      buttons('<button class="btn ghost" data-skip>' + HS.esc(HS.t('common.skip')) + '</button>' +
+        '<button class="btn" data-copy>' + HS.icon('copy', 'sm') + HS.esc(HS.t('common.copy')) + '</button><button class="btn" data-sms' + (cur && cur.to ? '' : ' disabled') + '>' + HS.esc(HS.t('wa.sms')) + '</button>' +
+        '<button class="btn primary" data-open' + (cur && cur.to ? '' : ' disabled') + '>' + HS.icon('chat', 'sm') + HS.esc(HS.t('wa.open')) + '</button>');
+    }
+    function askButtons() {
+      buttons('<button class="btn" data-notsent>' + HS.esc(HS.t('wa.notSent')) + '</button>' +
+        '<button class="btn" data-reopen>' + HS.esc(HS.t('wa.reopen')) + '</button>' +
+        '<button class="btn primary" data-sent>' + HS.icon('check', 'sm') + HS.esc(HS.t('wa.sent')) + '</button>');
+    }
     function show() {
+      opened = '';
       if (i >= items.length) {
         box.innerHTML = U.empty('check', HS.t('wa.done', { n: sent, m: items.length }), HS.t('wa.done.b'));
-        el.querySelectorAll('[data-skip],[data-copy],[data-sms],[data-open]').forEach(function (b) { b.hidden = true; });
-        el.querySelector('[data-progress]').textContent = ''; if (done) done(); return;
+        buttons(''); el.querySelector('[data-progress]').textContent = ''; if (done) done(); return;
       }
       var it = items[i];
       el.querySelector('[data-progress]').textContent = HS.t('wa.progress', { n: i + 1, m: items.length });
       box.innerHTML = '<div class="meter big"><i style="width:' + Math.round(i * 100 / items.length) + '%"></i></div><div class="skeleton" style="height:6rem"></div>';
+      cur = null; chooseButtons();
       HS.get('/api/c/wa?studentId=' + encodeURIComponent(it.id) + '&kind=' + kind + '&lang=' + HS.lang + (it.amount ? '&amount=' + it.amount : '')).then(function (r) {
         cur = r;
         box.innerHTML = '<div class="meter big"><i style="width:' + Math.round(i * 100 / items.length) + '%"></i></div>' +
           '<div class="stu-head"><span class="avatar sm">' + HS.esc(String(it.name || '?').charAt(0)) + '</span><div class="grow"><b>' + HS.esc(it.name) + '</b><span class="muted" style="display:block">' + (r.to ? U.bdi('+' + r.to) : HS.esc(HS.t('stu.noMobile'))) + '</span></div></div>' +
           '<textarea class="input wa-text" rows="5" data-text>' + HS.esc(r.text) + '</textarea>' +
-          '<p class="faint">' + HS.esc(HS.t('wa.hint')) + '</p>';
-        el.querySelector('[data-open]').disabled = el.querySelector('[data-sms]').disabled = !r.to;
-      }, function (e) { cur = null; box.innerHTML = U.empty('alert', U.errorText(e)); });
+          '<p class="faint" data-hint>' + HS.esc(HS.t('wa.hint')) + '</p><div class="tip bad" data-err hidden role="alert"></div>';
+        chooseButtons();
+      }, function (e) { cur = null; box.innerHTML = U.empty('alert', U.errorText(e)); chooseButtons(); });
     }
     function next() { i++; show(); }
-    function log(type) { HS.post('/api/c/followup', { studentId: items[i].id, type: type, reason: kind }).catch(function () {}); sent++; }
+    function openChat(type, msg) {
+      opened = type;
+      if (type === 'whatsapp') window.open('https://wa.me/' + cur.to + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+      else location.href = 'sms:+' + cur.to + '?body=' + encodeURIComponent(msg);
+      var hint = box.querySelector('[data-hint]'); if (hint) hint.textContent = HS.t('wa.ask');
+      askButtons();
+    }
+    function confirmSent(btn) {
+      var err = box.querySelector('[data-err]');
+      btn.disabled = true; if (err) err.hidden = true;
+      HS.post('/api/c/followup', { studentId: items[i].id, type: opened, reason: kind }).then(function () { sent++; next(); }, function (e) {
+        btn.disabled = false; if (err) { err.hidden = false; err.textContent = HS.t('wa.saveFailed') + ' ' + U.errorText(e); }
+      });
+    }
     el.addEventListener('click', function (e) {
       var text = el.querySelector('[data-text]'), msg = text ? text.value : '';
-      if (e.target.closest('[data-skip]')) { next(); return; }
+      if (e.target.closest('[data-skip]') || e.target.closest('[data-notsent]')) { next(); return; }
       if (e.target.closest('[data-copy]') && text) { text.select(); try { navigator.clipboard ? navigator.clipboard.writeText(msg) : document.execCommand('copy'); } catch (er) { /* the text stays selected */ } HS.toast(HS.t('link.copied')); return; }
-      if (e.target.closest('[data-open]') && cur && cur.to) { window.open('https://wa.me/' + cur.to + '?text=' + encodeURIComponent(msg), '_blank', 'noopener'); log('whatsapp'); next(); return; }
-      if (e.target.closest('[data-sms]') && cur && cur.to) { location.href = 'sms:+' + cur.to + '?body=' + encodeURIComponent(msg); log('sms'); next(); }
+      if (e.target.closest('[data-open]') && cur && cur.to) { openChat('whatsapp', msg); return; }
+      if (e.target.closest('[data-sms]') && cur && cur.to) { openChat('sms', msg); return; }
+      if (e.target.closest('[data-reopen]') && cur && cur.to) { openChat(opened || 'whatsapp', msg); return; }
+      var ok = e.target.closest('[data-sent]'); if (ok && opened) confirmSent(ok);
     });
     show();
   };
@@ -129,6 +156,7 @@
       var q = (ctx && ctx.route && ctx.route.q) || {};
       if (q.tab && TABS.indexOf(q.tab) >= 0) F.tab = q.tab;
       var tabs = TABS.filter(function (t) { return t !== 'debts' || HS.can(['money.view', 'money.collect']); });
+      if (tabs.indexOf(F.tab) < 0) F.tab = tabs[0];
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.followup')) + '</h1><p>' + HS.esc(HS.t('page.followup.d')) + '</p></div></div>' +
         '<div class="tabs" role="tablist" style="margin-bottom:1rem">' + tabs.map(function (t) { return '<button role="tab" data-ftab="' + t + '" aria-selected="' + (t === F.tab) + '">' + HS.esc(HS.t('fu.tab.' + t)) + '</button>'; }).join('') + '</div>' +
         (F.tab === 'calls' ? '<div class="toolbar"><select class="input" data-f="teacher" style="width:auto">' + opt('', HS.t('f.teacherId') + ': ' + HS.t('common.all'), F.teacher) + D.list('teachers').map(function (t) { return opt(t.id, t.name, F.teacher); }).join('') + '</select>' +

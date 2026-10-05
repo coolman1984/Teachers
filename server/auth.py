@@ -101,6 +101,7 @@ PERMISSIONS = [
         ('settings.edit', 'Change general settings (centre, rules, lists)'),
         ('backups.manage', 'See and create backups'),
         ('trash.restore', 'Recycle Bin: see and restore deleted records'),
+        ('remote.use', 'Work from outside the centre (phone or laptop over the internet)'),
     ]),
     (ADMIN_GROUP, [
         ('users.manage', 'Manage people, links, profiles and permissions'),

@@ -58,35 +58,47 @@
     }, 160));
     ul.addEventListener('click', function (e) { var li = e.target.closest('[data-i]'); if (!li) return; var s = list[Number(li.dataset.i)]; holder.querySelector('[data-sid]').value = s.id; q.value = s.name + ' · ' + s.code; ul.innerHTML = ''; if (onPick) onPick(s); });
   }
-  function incomeDialog(done, kind) {
+  // opts.student {id, name, code}: opened from the door card, the student is fixed and his teachers' handouts come first
+  function incomeDialog(done, kind, opts) {
+    opts = opts || {};
     HS.ensureShift().then(function () {
-      var mats = D.list('materials').filter(function (m) { return m.active !== false; });
-      var el = HS.dialog({ title: HS.t('money.income'), body:
-        '<div class="field"><span class="lbl">' + HS.esc(HS.t('money.kind')) + '</span>' + seg('kind', ['material', 'wallet_topup', 'other'], kind || (mats.length ? 'material' : 'other'), 'pay.kind.') + '</div>' +
-        '<div class="tip">' + HS.icon('info') + '<span>' + HS.t('money.feesAtDoor', { link: { html: '<a href="#/door" data-close>' + HS.esc(HS.t('nav.door')) + '</a>' } }) + '</span></div>' +
-        '<div class="field"><span class="lbl">' + HS.esc(HS.t('f.name')) + ' <span class="faint" data-optional>(' + HS.esc(HS.t('money.optional')) + ')</span></span><div data-picker></div></div>' +
-        '<div class="grid cols-2" data-mat><div class="field"><label for="in-m">' + HS.esc(HS.t('money.handout')) + '</label><select class="input" id="in-m">' + mats.map(function (m) { return opt(m.id, m.name + ' (' + (m.stock || 0) + ')', ''); }).join('') + '</select></div>' +
+      var mats = D.list('materials').filter(function (m) { return m.active !== false; }), who = opts.student;
+      if (who && opts.teacherIds) {
+        var mine = function (m) { return !m.teacherId || opts.teacherIds.indexOf(m.teacherId) >= 0 ? 0 : 1; };
+        mats = mats.filter(function (m) { return HS.can('materials.manage') || !mine(m); }).sort(function (a, b) { return mine(a) - mine(b) || (a.gradeCode === who.gradeCode ? -1 : b.gradeCode === who.gradeCode ? 1 : 0); });
+      }
+      var kinds = who ? ['material', 'wallet_topup'] : ['material', 'wallet_topup', 'other'];
+      var payKey = D.newId('');   // one key per dialog: Save pressed again after a lost answer returns the same receipt
+      var el = HS.dialog({ title: HS.t(who ? (kind === 'wallet_topup' ? 'door.topup' : 'door.sell') : 'money.income'), body:
+        '<div class="field"><span class="lbl">' + HS.esc(HS.t('money.kind')) + '</span>' + seg('kind', kinds, kind || (mats.length ? 'material' : 'other'), 'pay.kind.') + '</div>' +
+        (who ? '' : '<div class="tip">' + HS.icon('info') + '<span>' + HS.t('money.feesAtDoor', { link: { html: '<a href="#/door" data-close>' + HS.esc(HS.t('nav.door')) + '</a>' } }) + '</span></div>') +
+        (who ? '<div class="stu-head"><span class="avatar sm">' + HS.esc(String(who.name || '?').charAt(0)) + '</span><div class="grow"><b>' + HS.esc(who.name) + '</b> <span class="badge num">' + U.bdi(who.code || '') + '</span></div></div><div hidden data-picker></div>'
+          : '<div class="field"><span class="lbl">' + HS.esc(HS.t('f.name')) + ' <span class="faint" data-optional>(' + HS.esc(HS.t('money.optional')) + ')</span></span><div data-picker></div></div>') +
+        '<div class="grid cols-2" data-mat>' + (mats.length ? '<div class="field"><label for="in-m">' + HS.esc(HS.t('money.handout')) + '</label><select class="input" id="in-m">' + mats.map(function (m) { return opt(m.id, m.name + ' (' + (m.stock || 0) + ')', ''); }).join('') + '</select><span class="help" data-stock></span></div>'
+          : '<p class="muted" style="grid-column:1/-1">' + HS.esc(HS.t('door.noHandouts')) + '</p><select hidden id="in-m"></select>') +
           '<div class="field"><label for="in-q">' + HS.esc(HS.t('money.qty')) + '</label><input class="input" id="in-q" type="number" min="1" value="1" dir="ltr"></div></div>' +
         '<div class="field"><label for="in-a">' + HS.esc(HS.t('pay.amount')) + '</label><input class="input big-num" id="in-a" type="number" min="0" step="any" dir="ltr"></div>' +
         '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span>' + seg('method', METHODS.slice(0, 4), 'cash', 'pay.method.') + '</div>' +
         '<div class="field"><label for="in-n">' + HS.esc(HS.t('f.notes')) + '</label><input class="input" id="in-n"></div><div class="tip bad" data-err hidden></div>',
         footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.icon('check', 'sm') + HS.esc(HS.t('pay.save')) + '</button>' });
       studentPicker(el.querySelector('[data-picker]'));
+      if (who) el.querySelector('[data-sid]').value = who.id;
       wireSegs(el);
       function sync() {
-        var k = segValue(el, 'kind'), m = D.get('materials', el.querySelector('#in-m').value);
+        var k = segValue(el, 'kind'), m = D.get('materials', el.querySelector('#in-m').value), opt = el.querySelector('[data-optional]'), stock = el.querySelector('[data-stock]');
         el.querySelector('[data-mat]').hidden = k !== 'material';
-        el.querySelector('[data-optional]').hidden = k === 'wallet_topup';
+        if (opt) opt.hidden = k === 'wallet_topup';
+        if (stock) { var left = m ? Number(m.stock) || 0 : 0; stock.textContent = m ? HS.t('door.stockLeft', { n: left }) : ''; stock.className = 'help' + (m && left < (Number(el.querySelector('#in-q').value) || 1) ? ' neg' : ''); }
         if (k === 'material' && m) el.querySelector('#in-a').value = (Number(m.price) || 0) * (Number(el.querySelector('#in-q').value) || 1);
       }
       el.addEventListener('change', sync); el.querySelector('#in-q').addEventListener('input', sync); sync();
       el.querySelector('[data-close][href]') && el.querySelector('[data-close][href]').addEventListener('click', HS.overlay.close);
       el.querySelector('[data-ok]').addEventListener('click', function (ev) {
         var k = segValue(el, 'kind'), err = el.querySelector('[data-err]');
-        var body = { kind: k, studentId: el.querySelector('[data-sid]').value || '', amount: el.querySelector('#in-a').value, method: segValue(el, 'method'), note: el.querySelector('#in-n').value };
+        var body = { kind: k, studentId: el.querySelector('[data-sid]').value || '', amount: el.querySelector('#in-a').value, method: segValue(el, 'method'), note: el.querySelector('#in-n').value, key: payKey };
         if (k === 'material') { body.materialId = el.querySelector('#in-m').value; body.qty = el.querySelector('#in-q').value; }
         var btn = ev.currentTarget; btn.disabled = true;
-        HS.post('/api/c/pay', body).then(function (r) { HS.overlay.close(); HS.toast(HS.t('pay.done', { no: r.no })); done(r); },
+        HS.post('/api/c/pay', body).then(function (r) { HS.overlay.close(); HS.toast(HS.t('pay.done', { no: r.no })); if (who && HS.printReceipt && HS.prefs.data.autoReceipt === 'on') HS.printReceipt(r); done(r); },
           function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); });
       });
     }, function () {});
