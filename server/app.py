@@ -1131,7 +1131,7 @@ class Handler(BaseHTTPRequestHandler):
             card = center.door_card(STORE, qs.get('id', ''), None, sc)
             card['student'] = self.contact_filter(card['student'])
             card['shift'] = center.my_shift(STORE, self.u['id'], NODE.id)
-            return self.send(200, card)
+            return self.send(200, self.money_filter(card))
         if action == 'roster':
             self.need('door.use', 'groups.view', 'attendance.mark')
             r = center.roster(STORE, qs.get('session', ''), sc)
@@ -1141,10 +1141,11 @@ class Handler(BaseHTTPRequestHandler):
         if action == 'student':
             self.need('students.view')
             f = center.student_file(STORE, qs.get('id', ''), sc)
+            f = self.money_filter(f)
             f['student'] = {k: v for k, v in self.contact_filter(f['student']).items() if k not in ('portalHash', 'portalNonce')}
             f['parentLink'] = {'has': bool(f['student'] and STORE.row('students', f['student']['id']).get('portalHash')),
                                'gateway': SECRETS.configured, 'canMake': self.can('messages.send')}
-            if not self.can('money.view', 'money.collect', 'door.use') and self.u['scopes'] is None:
+            if not self.can('money.view', 'money.collect') and self.u['scopes'] is None:
                 f['payments'] = []
             return self.send(200, f)
         if action == 'risk':
@@ -1219,6 +1220,16 @@ class Handler(BaseHTTPRequestHandler):
         if 'teachers' in data and not self.can('contacts.view'):
             data['teachers'] = [{k: v for k, v in t.items() if k != 'mobile'} for t in data['teachers']]
         return data
+
+    def money_filter(self, d):
+        """Balances and money in advance only for people who work with money (an assistant at the door takes attendance,
+        not payments - product spec, roles table)."""
+        if self.can('money.view', 'money.collect'):
+            return d
+        for e in d.get('enrollments') or []:
+            e.pop('money', None)
+        d.pop('wallet', None)
+        return d
 
     def contact_filter(self, s):
         """Parents' numbers only for people allowed to see them."""

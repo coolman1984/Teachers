@@ -133,7 +133,7 @@
   /* ---------- the student file ---------- */
   var TABS = ['profile', 'groups', 'attendance', 'money', 'marks', 'follow', 'parent', 'history'];
   // assistants record attendance and marks without seeing money (product spec, roles table)
-  function seesMoney() { return HS.can(['money.view', 'money.collect', 'door.use']); }
+  function seesMoney() { return HS.can(['money.view', 'money.collect']); }
   function tabs() { return TABS.filter(function (t) { return (t !== 'money' || seesMoney()) && (t !== 'history' || HS.can('logs.view')) && (t !== 'parent' || HS.can('messages.send')); }); }
   /* the parent link: what it shows, whether one exists, and the three things the desk does with it */
   function parentTab(f) {

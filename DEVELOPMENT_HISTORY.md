@@ -2,6 +2,18 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Every role tries what it must not do (review E02 - 2026-10-05)
+
+**What:** `tests/test_center_roles.py` signs in as each built-in profile (front desk, teacher limited to one teacher, assistant,
+accountant, viewer) and sends the requests its screens never offer: reverse a receipt, approve a settlement, read reports, export
+everything, manage people, read the security log, edit a receipt through the generic save, switch remote work on, read the gateway
+secret, check in another teacher's student, take money, enter marks, write anything as a viewer. All are refused by the server.
+**Found:** the Assistant profile has `door.use` (to take attendance at the door), and the server treated `door.use` as permission
+to see money: the student file carried every payment and the door card every balance. The spec says assistants see no money. The
+server now removes balances, money in advance and payments for anyone without `money.view`/`money.collect` (`money_filter`), and the
+door card shows the groups only for them.
+**Lessons:** hiding a screen is not a permission; the test must ask the server directly, as an attacker would.
+
 ## Documents for every reader, help inside the program, a tested disaster drill, a safer installer (review E10, F01-F10 - 2026-10-05)
 
 **Why:** the people of a centre are not technical; the owner, the desk, a teacher, an assistant and a parent each need one page in

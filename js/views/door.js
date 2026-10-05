@@ -47,6 +47,11 @@
   }
   function moneyRows(c) {
     if (!c.enrollments.length) return '<p class="muted">' + HS.esc(HS.t('door.noGroups')) + '</p>' + enrolButton(true);
+    if (!HS.can(['money.view', 'money.collect'])) {   // attendance without money (an assistant): the groups, no balances
+      return '<ul class="money-rows">' + c.enrollments.map(function (e) {
+        return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + (e.left ? ' <span class="badge warn">' + HS.esc(HS.t('enr.' + (e.status || 'left'))) + '</span>' : '') + '</b></div></li>';
+      }).join('') + '</ul>';
+    }
     return '<ul class="money-rows">' + c.enrollments.map(function (e) {
       var m = e.money || {}, bal = Number(m.balance) || 0;
       return '<li><div class="grow"><b class="ellipsis" style="display:block">' + HS.esc(groupLabel(e.groupId)) + (e.left ? ' <span class="badge warn">' + HS.esc(HS.t('enr.' + (e.status || 'left'))) + '</span>' : '') + '</b><span class="muted">' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) +
@@ -80,7 +85,7 @@
       riskBadge(c.risk) +
       '<section><h3 class="sec">' + HS.esc(HS.t('door.session')) + '</h3>' + sessionButtons(c) + '</section>' +
       '<div class="checkin-row">' + checkinButton(c, done, canCheck) + '</div>' +
-      '<section><h3 class="sec">' + HS.esc(HS.t('door.money')) + '</h3>' + moneyRows(c) + '</section>' +
+      '<section><h3 class="sec">' + HS.esc(HS.t(HS.can(['money.view', 'money.collect']) ? 'door.money' : 'stu.tab.groups')) + '</h3>' + moneyRows(c) + '</section>' +
       (c.lastFamily ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.esc(HS.t('fam.done', { n: c.lastFamily.receipts.length, a: HS.fmt.num(c.lastFamily.total) })) + '</span>' +
         '<button class="btn sm" data-printfam>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
       (c.lastReceipt ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.t('door.receipt', { no: { html: U.bdi(c.lastReceipt.no) } }) + ' · ' + U.money(c.lastReceipt.amount) + '</span>' +

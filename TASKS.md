@@ -96,6 +96,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] B04 Receipt paper per PC (80 mm, 58 mm, A5) + automatic printing switch + test print in Settings → Appearance; the page is measured so a roll stops after the text (`size: 80mm auto` was invalid CSS and printed on A4). PDF width checked in Chromium for all three
   - [ ] Try the three sizes on the centre's real printers (needs the printers)
 - [x] Door: a student the roll call marked absent who then arrives was told "already: absent" and stayed absent (found by the acceptance test) - now checked in as present/late with the arrival time; a second scan still changes nothing
+- [x] E02 Every built-in profile tries by direct request what its screens never offer - all refused (`tests/test_center_roles.py`); found that the Assistant profile (door + attendance) received balances and payments in the student file and the door card although the spec says assistants see no money - the server now strips them (`money_filter`) and the door shows the groups only
 - [x] E11 Door peak: 30 cards (find + card + check-in) in 1.2 s on a 420-student sample centre (plan: 90 s with people); real PCs of the centre still to measure
 - [x] A07 Lost connection to the centre PC: a bar on every page, save buttons dimmed, writes refused in the browser (no hidden queue); a payment saved again after a lost answer returns the same receipt (one key per dialog, `pk<key>` ids)
 
