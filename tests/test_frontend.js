@@ -273,3 +273,15 @@ test('settings show centre forms and keep save controls permission aware in both
     assert.equal(html.includes('officeSecret'),false);
   }
 });
+
+test('one-click enrolment uses the same late-join default as the dialog (next month after day 20, monthly groups only)', () => {
+  const HS = startup('en');
+  const month = { id: 'g1', feeType: 'month' }, session = { id: 'g2', feeType: 'session' };
+  const at = day => { HS.ui.today = () => day; return HS.defaultBillFrom; };
+  assert.equal(at('2026-10-05')(month), undefined);          // early in the month: the current month is charged
+  assert.equal(at('2026-10-20')(month), undefined);
+  assert.equal(at('2026-10-21')(month), '2026-11-01');       // late in the month: start with next month
+  assert.equal(at('2026-12-28')(month), '2027-01-01');       // across the year end
+  assert.equal(at('2026-10-28')(session), undefined);        // only monthly groups have a first billed month
+  assert.equal(at('2026-10-28')(null), undefined);
+});

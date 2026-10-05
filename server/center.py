@@ -284,9 +284,15 @@ def active_enrollments(store, student_id, d):
 
 
 # ---------------------------------------------------------------- money facts per enrolment (bulk, SQL)
+# A free trial is free once per student and group. Two PCs working offline can each record a trial in a different
+# session; after they sync both rows exist, so the rule is applied when charging: only the EARLIEST trial (date, then
+# id - the same on every PC) is free, any other trial-marked visit is an ordinary paid visit. Nothing is deleted.
+FREE_TRIAL_ONLY_FIRST = ("(trial IS NULL OR trial=0 OR id <> (SELECT t.id FROM attendance t WHERE t.deleted=0 AND t.trial=1 "
+                         "AND t.student_id=attendance.student_id AND t.group_id=attendance.group_id ORDER BY t.date, t.id LIMIT 1))")
+
 def _visits(store, student_id=None, group_id=None):
     """{(student, home group): [visit dates]} - each visit is priced on its own day (a price change is not retroactive)."""
-    sql = "SELECT student_id, group_id, date FROM attendance WHERE deleted=0 AND status IN ('present','late') AND (trial IS NULL OR trial=0)"
+    sql = "SELECT student_id, group_id, date FROM attendance WHERE deleted=0 AND status IN ('present','late') AND " + FREE_TRIAL_ONLY_FIRST
     args = []
     if student_id:
         sql += ' AND student_id=?'
@@ -614,7 +620,7 @@ def roster(store, session_id, scopes=None):
 def day_off(ctx, day, reason=''):
     """Cancels every session of a day in one save: an official holiday (6 October), a power cut, an exam day.
     Planned sessions of the timetable get a cancelled record with the same deterministic id on every PC. A session
-    where students were already checked in is left as it is - what they attended stays attended (and charged)."""
+    that was already held or has any attendance recorded (even all absent) is left as it is - what happened stays."""
     ctx.need('attendance.mark')
     d = D.as_date(day) if day else _today()
     if not d:
@@ -624,11 +630,14 @@ def day_off(ctx, day, reason=''):
     reason = D.norm_text(reason)[:200]
     if len(reason) < 3:
         raise Problem('err.reason', 'Write the reason.')
+    with ctx.store.lock:
+        recorded = {r[0] for r in ctx.store.conn.execute('SELECT DISTINCT session_id FROM attendance WHERE deleted=0 AND date=?', (d.isoformat(),))}
     ops, kept = [], 0
     for sess in sessions_on(ctx.store, d, ctx.scopes):
         if sess.get('status') == 'cancelled' or not ctx.teacher_ok(sess.get('teacherId')):
             continue
-        if sess.get('present'):
+        # a session that was held or has any attendance row (even all absent or excused) is history, not a cancellation
+        if sess.get('status') == 'held' or sess.get('present') or sess['id'] in recorded:
             kept += 1
             continue
         cur = ctx.store.row('sessions', sess['id'])
@@ -1314,8 +1323,8 @@ def _month_facts(store, ym):
             "(CAST(substr(start_time,1,2) AS INTEGER)*60+CAST(substr(start_time,4,2) AS INTEGER))) FROM sessions "
             "WHERE deleted=0 AND status='held' AND date>=? AND date<=? GROUP BY group_id", (a, b))}
         visits = {r[0]: r[1] for r in store.conn.execute(
-            "SELECT group_id, COUNT(*) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND (trial IS NULL OR trial=0) "
-            "AND date>=? AND date<=? GROUP BY group_id", (a, b))}
+            "SELECT group_id, COUNT(*) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND " + FREE_TRIAL_ONLY_FIRST +
+            " AND date>=? AND date<=? GROUP BY group_id", (a, b))}
         exp = {}
         for r in store.conn.execute("SELECT teacher_id, category, SUM(amount) FROM expenses WHERE deleted=0 AND teacher_id<>'' AND teacher_id IS NOT NULL "
                                     "AND date>=? AND date<=? GROUP BY teacher_id, category", (a, b)):

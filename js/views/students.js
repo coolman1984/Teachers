@@ -302,6 +302,11 @@
   }
   function nextMonth(day) { var d = new Date(day.slice(0, 7) + '-01T12:00:00'); d.setMonth(d.getMonth() + 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-01'; }
   function monthName(day) { return new Date(day.slice(0, 10) + 'T12:00:00').toLocaleDateString(HS.lang === 'ar' ? 'ar-EG-u-nu-latn' : 'en-GB', { month: 'long' }); }
+  // the same default as the late-join choice in the enrol dialog, for shortcuts that enrol in one click (after day 20: next month)
+  HS.defaultBillFrom = function (g) {
+    var t = U.today();
+    return g && g.feeType === 'month' && Number(t.slice(8, 10)) >= 21 ? nextMonth(t) : undefined;
+  };
   // the door enrols a walk-in student without leaving the page
   HS.pickGroup = function (student, done) {
     pickGroup(student, null, function (gid, extra) { return HS.post('/api/c/enroll', Object.assign({ studentId: student.id, groupId: gid }, extra || {})); }, done);

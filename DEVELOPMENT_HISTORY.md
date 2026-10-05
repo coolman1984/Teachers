@@ -2,6 +2,22 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Review findings on the trial, day-off and reference features (2026-10-05)
+
+**Why:** an automated review (Codex) of the merged PR raised four findings; each was checked against the code and was right.
+**What:** (1) "Day off" cancelled a held session where everyone was absent (it only counted present students) - a session
+that was held or has any attendance row is now kept, so its absentees stay in follow-up. (2) The door's one-click "Enrol
+in this group" skipped the late-join choice - it now uses the same default (next month after day 20, monthly groups).
+(3) Two PCs offline could each record a free trial in a different session, and both stayed free after syncing - both visits
+are kept (nothing is lost) but only the EARLIEST trial (date, then id, identical on every PC) is free when charging.
+(4) The "this reference was already used" confirmation stayed on for the whole dialog - it is now cleared when the reference
+or the method changes, so it confirms only the value that was shown.
+**Mistakes:** my own new browser scenario opened the cash shift, which broke an older scenario that expected to open it
+(test-order coupling, found by the full run; both now accept an already-open shift).
+**Evidence:** each fix has a test that fails on the code before it (day-off API, two-node offline trial, Chromium duplicate
+reference, frontend default); Python gate 169 OK in 216 s (3 skips); frontend 19; browser test_e2e_center 13 OK; lint clean.
+The PR was merged while this was being finished, so these fixes go in as a follow-up change.
+
 ## Free trial, moving credit, family payments, repeated references (2026-10-05)
 
 **Why:** the owner agreed on the defaults and asked for the remaining edge cases of the market study.
