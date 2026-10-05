@@ -131,13 +131,14 @@
   HS.editStudent = editStudent;
 
   /* ---------- the student file ---------- */
-  var TABS = ['profile', 'groups', 'attendance', 'money', 'marks', 'follow'];
+  var TABS = ['profile', 'groups', 'attendance', 'money', 'marks', 'follow', 'history'];
   // assistants record attendance and marks without seeing money (product spec, roles table)
   function seesMoney() { return HS.can(['money.view', 'money.collect', 'door.use']); }
-  function tabs() { return TABS.filter(function (t) { return t !== 'money' || seesMoney(); }); }
+  function tabs() { return TABS.filter(function (t) { return (t !== 'money' || seesMoney()) && (t !== 'history' || HS.can('logs.view')); }); }
   function kv(k, v) { return '<dt>' + HS.esc(HS.t(k)) + '</dt><dd>' + (v === '' || v === null || v === undefined ? '<span class="faint">–</span>' : v) + '</dd>'; }
   function tabBody(tab, f) {
     var s = f.student;
+    if (tab === 'history') return '<div data-history></div>';
     if (tab === 'profile') {
       return '<dl class="kv">' + kv('f.code', '<b class="num">' + U.bdi(s.code || '') + '</b>') + kv('f.gradeCode', U.grade(s.gradeCode, s.system, s.track)) + kv('f.school', HS.esc(s.school || '')) +
         (HS.can('contacts.view') ? kv('f.mobile', s.mobile ? U.bdi(s.mobile) : '') + kv('f.parentName', HS.esc(s.parentName || '')) + kv('f.parentMobile', s.parentMobile ? U.bdi(s.parentMobile) : '') : '') +
@@ -223,9 +224,10 @@
       tab = tab || 'profile';
       HS.panel.open({ title: f.student.name, body: '<div class="stack" data-file>' + fileHTML(f, tab) + '</div>', footer: footer(f.student),
         mount: function (p) {
-          function reload(t) { return HS.get('/api/c/student?id=' + encodeURIComponent(id)).then(function (nf) { f = nf; tab = t || tab; p.querySelector('[data-file]').innerHTML = fileHTML(f, tab); }); }
+          function history() { var h = p.querySelector('[data-history]'); if (h) HS.audit.history(h, 'students', id, function () { D.load(); }); }
+          function reload(t) { return HS.get('/api/c/student?id=' + encodeURIComponent(id)).then(function (nf) { f = nf; tab = t || tab; p.querySelector('[data-file]').innerHTML = fileHTML(f, tab); history(); }); }
           p.addEventListener('click', function (e) {
-            var t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; p.querySelector('[data-file]').innerHTML = fileHTML(f, tab); return; }
+            var t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; p.querySelector('[data-file]').innerHTML = fileHTML(f, tab); history(); return; }
             var o = e.target.closest('[data-open]'); if (o) { openStudent(o.dataset.open); return; }
             if (e.target.closest('[data-edit]')) { editStudent(id); return; }
             if (e.target.closest('[data-card]')) { HS.printCards([f.student]); return; }

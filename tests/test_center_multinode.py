@@ -77,6 +77,30 @@ class CenterTwoPcTest(unittest.TestCase):
         finally:
             cluster.close()
 
+    def test_a_search_key_follows_its_name_when_two_pcs_rename_the_same_student(self):
+        """The owner is asked about the NAME only; the derived search key travels with whichever name wins, on every PC."""
+        cluster = Cluster(2)
+        try:
+            a, b = cluster.peers
+            a.commit('Synthetic student', [{'e': 'students', 'id': 's1', 'op': 'put', 'row': {'name': 'Synthetic Start', 'code': '10001', 'gradeCode': 'S1'}}])
+            cluster.converge()
+            for peer, name in ((a, 'Ahmed Mohamed Ali'), (b, 'Ahmed Mahmoud Ali')):     # both offline: neither sees the other's edit
+                row = peer.store.row('students', 's1')
+                ver = row.pop('ver')
+                row['name'] = name
+                ops = center.normalize_ops(peer.store, [{'e': 'students', 'id': 's1', 'op': 'put', 'ver': ver, 'row': row}])
+                peer.commit('Rename', ops)
+            cluster.converge()
+            self.assertEqual(len(set(cluster.fingerprints())), 1)
+            for peer in (a, b):
+                flags = [(c['entity'], c['kind'], sorted(c['detail'])) for c in peer.store.conflicts()]
+                self.assertEqual(flags, [('students', 'conflict', ['name'])])               # the owner decides one thing, not two
+                row = peer.store.row('students', 's1')
+                self.assertEqual(row['nameKey'], D.key_text(row['name']))                   # the key belongs to the name that is shown
+            self.assertEqual(a.store.row('students', 's1')['name'], b.store.row('students', 's1')['name'])
+        finally:
+            cluster.close()
+
 
 if __name__ == '__main__':
     unittest.main()

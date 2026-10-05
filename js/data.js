@@ -71,6 +71,7 @@
     refreshing = HS.get('/api/version').then(function (v) {
       if (epoch !== generation) return;
       connection(true);
+      HS.sync = v.sync || null; HS.emit('sync', HS.sync);   // the top-bar light (js/views/devices.js) rides on the poll that already runs
       if (D.version === null || v.version === D.version) return;
       return HS.get('/api/delta?since=' + encodeURIComponent(D.version)).then(function (d) {
         if (epoch !== generation) return;

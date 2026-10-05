@@ -161,6 +161,27 @@ class LanguageTest(unittest.TestCase):
         self.assertEqual(bad, [])
 
 
+class HelperCallsTest(unittest.TestCase):
+    def test_every_shared_helper_a_page_calls_exists(self):
+        """The Activity log called HS.pageHead, a helper that never existed: the page crashed on open and nobody noticed. Every
+        HS.x(), U.x() and D.x() call in the browser code must be defined somewhere in it."""
+        sources = {f: read('js', *f.split('/')) for f in JS_FILES}
+        sources['js/core.js'] = read('js', 'core.js')
+        sources['js/i18n.js'] = read('js', 'i18n.js')
+        blob = '\n'.join(sources.values())
+        for names, label in ((('HS',), 'HS'), (('U', 'HS.ui'), 'U'), (('D', 'HS.data'), 'D')):
+            defined = set()
+            for n in names:
+                defined |= set(re.findall(r'(?<![\w.])' + re.escape(n) + r'\.([A-Za-z_]\w*)\s*=(?!=)', blob))
+            used = {}
+            for f, text in sources.items():
+                for n in names:
+                    for m in re.finditer(r'(?<![\w.])' + re.escape(n) + r'\.([A-Za-z_]\w*)\(', text):
+                        used.setdefault(m.group(1), set()).add(f)
+            missing = {k: sorted(v) for k, v in used.items() if k not in defined}
+            self.assertEqual(missing, {}, f'{label}.* called but never defined')
+
+
 class CssHygieneTest(unittest.TestCase):
     def test_only_logical_directions(self):
         """Left/right would break the Arabic (mirrored) layout; use start/end. Allowed: comments and the inline SVG transform rules."""

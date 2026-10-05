@@ -79,9 +79,12 @@
       '<section><h3 class="sec">' + HS.esc(HS.t('door.session')) + '</h3>' + sessionButtons(c) + '</section>' +
       '<div class="checkin-row">' + checkinButton(c, done, canCheck) + '</div>' +
       '<section><h3 class="sec">' + HS.esc(HS.t('door.money')) + '</h3>' + moneyRows(c) + '</section>' +
+      (c.lastFamily ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.esc(HS.t('fam.done', { n: c.lastFamily.receipts.length, a: HS.fmt.num(c.lastFamily.total) })) + '</span>' +
+        '<button class="btn sm" data-printfam>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
       (c.lastReceipt ? '<div class="tip">' + HS.icon('check') + '<span class="grow">' + HS.t('door.receipt', { no: { html: U.bdi(c.lastReceipt.no) } }) + ' · ' + U.money(c.lastReceipt.amount) + '</span>' +
         '<button class="btn sm" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('receipt.print')) + '</button></div>' : '') +
-      '<div class="row wrap">' + (HS.can('messages.send') && HS.can('contacts.view') && s.parentMobile ? '<button class="btn sm" data-wa>' + HS.icon('chat', 'sm') + HS.esc(HS.t('door.message')) + '</button>' : '') +
+      '<div class="row wrap">' + (c.family && c.family.length && HS.can('money.collect') ? '<button class="btn sm" data-family>' + HS.icon('users', 'sm') + HS.esc(HS.t('fam.btn', { n: c.family.length })) + '</button>' : '') +
+        (HS.can('messages.send') && HS.can('contacts.view') && s.parentMobile ? '<button class="btn sm" data-wa>' + HS.icon('chat', 'sm') + HS.esc(HS.t('door.message')) + '</button>' : '') +
         (c.enrollments.length ? enrolButton(false) : '') + '</div>';
   }
 
@@ -166,6 +169,60 @@
     }, function () { /* the shift was not opened: nothing happens */ });
   }
 
+  /* ---------- one parent, several children: one payment, one commit, one printed sheet ---------- */
+  function familyDialog(card, done) {
+    var people = [{ id: card.student.id, name: card.student.name, code: card.student.code, lines: card.enrollments.filter(function (e) { return !e.left; }).map(function (e) {
+      var m = e.money || {}; return { groupId: e.groupId, due: m.due || 0, unit: m.unit || 0, feeType: m.feeType }; }) }].concat(card.family || []);
+    var rows = [];
+    people.forEach(function (p) { p.lines.forEach(function (l) { rows.push({ p: p, l: l, amount: l.due > 0 ? l.due : '', on: l.due > 0 }); }); });
+    if (!rows.length) return;
+    ensureShift().then(function () {
+      var method = 'cash', dupSeen = false;
+      var el = HS.dialog({ title: HS.t('fam.title'), wide: true, body:
+        '<p class="muted">' + HS.esc(HS.t('fam.b')) + '</p><ul class="fam-lines" data-lines>' + rows.map(function (r, i) {
+          return '<li class="fam-line"><label class="grow"><input type="checkbox" data-f="' + i + '"' + (r.on ? ' checked' : '') + '> <b>' + HS.esc(r.p.name) + '</b>' +
+            '<small class="muted" style="display:block">' + HS.esc(groupLabel(r.l.groupId)) + ' · ' + HS.esc(HS.t('fee.' + (r.l.feeType || 'session'))) + (r.l.due > 0 ? ' · ' + HS.esc(HS.t('door.owes')) + ' ' + U.money(r.l.due) : '') + '</small></label>' +
+            '<input class="input" type="number" inputmode="decimal" min="0" step="any" dir="ltr" data-a="' + i + '" value="' + HS.esc(r.amount) + '" placeholder="' + HS.esc(r.l.unit || '') + '" aria-label="' + HS.esc(HS.t('pay.amount')) + '"></li>'; }).join('') + '</ul>' +
+        '<div class="row between" style="align-items:center"><b>' + HS.esc(HS.t('fam.total')) + '</b><b class="big-num num" data-total></b></div>' +
+        '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span><div class="seg wrap" role="group" data-methods>' + METHODS.filter(function (x) { return x !== 'wallet'; }).map(function (x) {
+          return '<button type="button" data-m="' + x + '" aria-pressed="' + (x === method) + '">' + HS.esc(HS.t('pay.method.' + x)) + '</button>'; }).join('') + '</div></div>' +
+        '<div class="field" data-ref hidden><label for="fam-r">' + HS.esc(HS.t('pay.ref')) + '</label><input class="input" id="fam-r" dir="ltr" autocomplete="off"></div>' +
+        '<div class="field" data-cash><label for="fam-g">' + HS.esc(HS.t('pay.given')) + '</label><div class="row"><input class="input" id="fam-g" type="number" inputmode="decimal" min="0" step="any" dir="ltr"><b class="change num" data-change aria-live="polite"></b></div></div>' +
+        '<div class="tip bad" data-err hidden role="alert"></div>',
+        footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.icon('check', 'sm') + HS.esc(HS.t('pay.save')) + '</button>' });
+      var total = el.querySelector('[data-total]'), given = el.querySelector('#fam-g'), change = el.querySelector('[data-change]'), err = el.querySelector('[data-err]');
+      function picked() { return rows.map(function (r, i) {
+        var on = el.querySelector('[data-f="' + i + '"]').checked, a = Number(el.querySelector('[data-a="' + i + '"]').value) || 0; return on && a > 0 ? { r: r, amount: a } : null; }).filter(Boolean); }
+      function sum() { return Math.round(picked().reduce(function (t, x) { return t + x.amount; }, 0) * 100) / 100; }
+      function paint() {
+        var t = sum(), g = Number(given.value) || 0; total.innerHTML = U.money(t);
+        change.className = 'change num' + (g && g < t ? ' neg' : '');
+        change.innerHTML = !g ? '' : g < t ? HS.esc(HS.t('pay.short', { a: HS.fmt.num(Math.round((t - g) * 100) / 100) })) : HS.esc(HS.t('pay.change', { a: HS.fmt.num(Math.round((g - t) * 100) / 100) }));
+      }
+      el.addEventListener('input', function (e) { if (e.target.id === 'fam-r') dupSeen = false; paint(); });
+      el.addEventListener('change', paint);
+      el.querySelector('[data-methods]').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-m]'); if (!b) return;
+        method = b.dataset.m; dupSeen = false;
+        el.querySelectorAll('[data-m]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+        el.querySelector('[data-ref]').hidden = ['vodafone', 'instapay', 'fawry'].indexOf(method) < 0;
+        el.querySelector('[data-cash]').hidden = method !== 'cash';
+      });
+      el.querySelector('[data-ok]').addEventListener('click', function () {
+        var btn = this, items = picked();
+        if (!items.length) { err.hidden = false; err.textContent = HS.t('err.amount'); return; }
+        btn.disabled = true; err.hidden = true;
+        HS.post('/api/c/pay/many', { method: method, ref: el.querySelector('#fam-r').value, confirmDuplicate: dupSeen,
+          items: items.map(function (x) { return { studentId: x.r.p.id, groupId: x.r.l.groupId, amount: x.amount }; }) }).then(function (r) {
+          HS.overlay.close(); beep('ok'); HS.toast(HS.t('fam.done', { n: r.receipts.length, a: HS.fmt.num(r.total) }));
+          if (HS.printFamilyReceipt && HS.prefs.data.autoReceipt) HS.printFamilyReceipt(r);
+          done(r);
+        }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
+      });
+      paint();
+    }, function () {});
+  }
+
   /* ---------- a day off: every session of a day cancelled in one save (also used by Groups) ---------- */
   HS.dayOff = function (done) {
     var reasons = ['holiday', 'power', 'exams', 'teacher'];
@@ -232,7 +289,7 @@
     return '<div class="today-strip">' + list.map(function (s, i) {
       var live = hm(s.start) <= m && m <= hm(s.end), g = HS.data.get('groups', s.groupId) || {};
       return '<button class="today-s' + (live ? ' live' : '') + (s.status === 'cancelled' ? ' off' : '') + '" data-roster="' + HS.esc(s.id) + '" style="--i:' + Math.min(i, 12) + ';--c:' + U.groupTone(g) + '">' +
-        '<span class="num">' + U.bdi(s.start) + '</span><b class="ellipsis">' + HS.esc(g.name || s.groupId) + '</b>' +
+        '<span class="num">' + U.bdi(s.start) + '</span><b class="ellipsis">' + HS.esc(g.name || s.groupId) + '</b>' + (s.kind === 'extra' ? '<span class="badge info">' + HS.esc(HS.t('sess.extra')) + '</span>' : '') +
         '<span class="muted ellipsis">' + HS.esc(HS.data.name('rooms', s.roomId) || '') + '</span>' +
         '<span class="cnt">' + (live ? '<span class="pulse-dot"></span>' : '') + '<b class="num">' + HS.fmt.num(s.present) + '</b><span class="faint num">/' + HS.fmt.num(s.enrolled) + '</span></span></button>';
     }).join('') + '</div>';
@@ -278,7 +335,7 @@
       function paintResults() {
         results.innerHTML = list.map(function (s, i) {
           return '<li role="option" data-i="' + i + '" aria-selected="' + (i === sel) + '"><span class="avatar sm">' + HS.esc(initials(s.name)) + '</span><div class="grow"><b>' + HS.esc(s.name) + '</b>' +
-            '<span class="muted">' + U.grade(s.gradeCode, s.system, s.track) + '</span></div><span class="badge num">' + U.bdi(s.code || '') + '</span></li>';
+            '<span class="muted">' + U.grade(s.gradeCode, s.system, s.track) + (s.school ? ' · ' + HS.esc(s.school) : '') + '</span></div><span class="badge num">' + U.bdi(s.code || '') + '</span></li>';
         }).join('') || (q.value.trim().length >= 2 ? '<li class="faint none">' + HS.esc(HS.t('door.none')) + '</li>' : '');
       }
       var search = HS.debounce(function () {
@@ -347,6 +404,8 @@
           return;
         }
         if (e.target.closest('[data-print]') && card.lastReceipt) { HS.printReceipt(card.lastReceipt); return; }
+        if (e.target.closest('[data-printfam]') && card.lastFamily) { HS.printFamilyReceipt(card.lastFamily); return; }
+        if (e.target.closest('[data-family]')) { var fid = card.student.id; familyDialog(card, function (r) { paintShift(); openCard(fid, false).then(function () { if (card) { card.lastFamily = r; paintCard(); } }); }); return; }
         if (e.target.closest('[data-enrol]')) { var sid = card.student.id; HS.pickGroup(card.student, function () { openCard(sid, false); }); return; }
         var eg = e.target.closest('[data-enrol-g]');
         if (eg) { var sid2 = card.student.id; U.run(HS.post('/api/c/enroll', { studentId: sid2, groupId: eg.dataset.enrolG, billFrom: HS.defaultBillFrom ? HS.defaultBillFrom(HS.data.get('groups', eg.dataset.enrolG)) : undefined }), 'common.saved', eg).then(function () { return openCard(sid2, false); }, function () {}); return; }

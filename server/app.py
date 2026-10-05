@@ -35,6 +35,7 @@ import formats  # noqa: E402
 import gateway_client as gwc  # noqa: E402
 import store as store_mod  # noqa: E402
 from store import BadRequest, Conflict, now  # noqa: E402
+from upgrade import DataFromNewerVersion, UpgradeVerificationFailed, check_now  # noqa: E402
 from sync import SyncService  # noqa: E402
 from system import System, lock_data  # noqa: E402
 
@@ -151,8 +152,35 @@ def say(msg):
 
 
 INSTANCE = lock_data(DATA_DIR)  # taken before anything touches the data
+
+
+def stop_with_message(text):
+    """Hessa cannot start safely: say why where the person can see it (the installed program has no console), then stop."""
+    say('NOT STARTED: ' + text)
+    try:
+        os.makedirs(os.path.join(DATA_DIR, 'logs'), exist_ok=True)
+        with open(os.path.join(DATA_DIR, 'logs', 'STARTUP_PROBLEM.txt'), 'w', encoding='utf-8') as f:
+            f.write(f'{datetime.now():%Y-%m-%d %H:%M:%S}\n{text}\n')
+    except OSError:
+        pass
+    try:
+        if os.name == 'nt':
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, text, 'Hessa', 0x10)
+    except Exception:  # noqa: BLE001 - the log line above is already written
+        pass
+    raise SystemExit(3)
+
+
 if INSTANCE:
-    SYSTEM = System(DATA_DIR, CFG, UPLOADS, resolve(CFG['backup_dir']), [resolve(d) for d in CFG['extra_backup_dirs']], log=say)
+    try:
+        SYSTEM = System(DATA_DIR, CFG, UPLOADS, resolve(CFG['backup_dir']), [resolve(d) for d in CFG['extra_backup_dirs']], log=say)
+    except (DataFromNewerVersion, UpgradeVerificationFailed) as e:
+        stop_with_message(str(e))
+    try:
+        os.remove(os.path.join(DATA_DIR, 'logs', 'STARTUP_PROBLEM.txt'))  # a good start: the old message is no longer true
+    except OSError:
+        pass
     STORE, AUTH, BACKUPS, JOURNAL, NODE = SYSTEM.store, SYSTEM.auth, SYSTEM.backups, SYSTEM.journal, SYSTEM.node
     SYNC = SyncService(SYSTEM, CFG, UPLOADS, log=say)
     SECRETS = gwc.Secrets(os.path.join(DATA_DIR, 'gateway.json'))
@@ -251,6 +279,32 @@ def commit_guard(u):
             if not perms.intersection(need):
                 raise Forbidden(f'You are not allowed to {OP_WORD[op]} {ENTITY_TITLE[e]}. Ask the administrator for the permission "{PERM_LABEL[need[0]]}".')
     return guard
+
+
+def system_status(u):
+    """What the server knows about its own health, cut down to what this user may act on (an empty dict for everybody else).
+    Cheap reads only: it is asked by the overview every thirty seconds."""
+    out = {}
+    perms = set(u['perms'])
+    if perms & {'backups.manage', 'backups.restore'}:
+        listed = BACKUPS.list()
+        with STORE.lock:
+            has_data = STORE.conn.execute('SELECT 1 FROM students WHERE deleted=0 LIMIT 1').fetchone() is not None
+        out['backup'] = {'last': listed[0]['time'] if listed else None, 'folders': len(BACKUPS.extra), 'error': BACKUPS.last_error,
+                         'has_data': has_data, 'unsaved': STORE.version() != BACKUPS.last_version}
+    if 'users.manage' in perms:
+        summary = SYNC.summary()
+        roster = [n for n in JOURNAL.roster().values() if n.get('status') == 'active']
+        verify = JOURNAL.meta('last_verify') or {}
+        with STORE.lock:
+            conflicts = STORE.conn.execute('SELECT COUNT(*) FROM sync_flags').fetchone()[0]
+        out['sync'] = {'state': summary.get('state'), 'problems': summary.get('problems', 0), 'online': summary.get('online', 0), 'multi': len(roster) > 1,
+                       'authority': NODE.is_authority, 'key_saved': bool(JOURNAL.meta('key_saved')), 'conflicts': conflicts,
+                       'verify_at': verify.get('ts'), 'verify_ok': verify.get('ok') if verify else None,
+                       'pcs': len(roster)}
+    if 'gateway.manage' in perms:
+        out['gateway'] = {'configured': bool(SECRETS.configured)}
+    return out
 
 
 def lan_urls(port):
@@ -561,6 +615,9 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/backups':
             self.need('backups.manage', 'backups.restore')
             return self.send(200, BACKUPS.list())
+        if p == '/api/data-safety':  # what the last program update did to the data, and the safety copies it made
+            self.need('backups.manage', 'backups.restore')
+            return self.send(200, {**SYSTEM.upgrade.info(), 'program': VERSION})
         if p == '/api/backups/folder':
             self.need('backups.manage')
             return self.send(200, {'dirs': BACKUPS.extra, 'error': BACKUPS.last_error, 'local': self.ip in LOCAL_IPS,
@@ -577,7 +634,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, STORE.query_log('audit' if p == '/api/audit' else 'activity', qs.get('q', ''), qs.get('user', ''),
                                                   qs.get('type', ''), qs.get('scope', ''), qs.get('from', ''), qs.get('to', ''),
                                                   max(1, min(1000, int(qs.get('limit', 200)))), max(0, int(qs.get('offset', 0))), self.u['scopes'], node,
-                                                  admin=is_admin(self.u)))
+                                                  admin=is_admin(self.u), contacts=self.can('contacts.view'),
+                                                  entity=qs.get('entity', ''), rid=qs.get('id', '')))
         if p == '/api/security':
             self.need('logs.security')
             self.need_admin()
@@ -657,6 +715,13 @@ class Handler(BaseHTTPRequestHandler):
             d = self.json_body()
             try:
                 return self.send(200, SYNC.join(d.get('address'), d.get('code'), d.get('name')))
+            except ValueError as e:
+                raise BadRequest(str(e))
+        if p == '/api/join/probe':  # checks an address typed on the join screen
+            if self.ip not in LOCAL_IPS or AUTH.has_users() or NODE.role != 'unconfigured':
+                raise Forbidden('Only on a new, not yet set up PC, on the PC itself.')
+            try:
+                return self.send(200, SYNC.probe(self.json_body().get('address')))
             except ValueError as e:
                 raise BadRequest(str(e))
         if p == '/api/join/discover':
@@ -796,6 +861,11 @@ class Handler(BaseHTTPRequestHandler):
             log.info('BACKUP manual by %s: %s', self.user, name)
             STORE.log_activity(self.user, self.ip, [{'type': 'backup', 'action': 'Backup created', 'target': name}])
             return self.send(200, {'name': name})
+        if p == '/api/data-safety/check':  # "Check my data now": integrity of the databases and the whole signed history
+            self.need('backups.manage')
+            res = check_now(SYSTEM)
+            STORE.log_activity(self.user, self.ip, [{'type': 'backup', 'action': 'Data check', 'target': 'ok' if res['ok'] else 'problems found'}])
+            return self.send(200, res)
         if p == '/api/backups/folder':  # a second folder (USB drive, other disk) that gets a copy of every backup
             self.need('backups.manage')
             if not is_admin(self.u):
@@ -847,6 +917,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, box, headers={'Content-Disposition': 'attachment; filename="Hessa-administrator-key.json"'})
                 if action == 'invite':
                     return self.send(200, SYNC.create_invite(self.user))
+                if action == 'adding-open':   # the owner lets ONE new PC join (15 minutes) - the door is closed otherwise
+                    return self.send(200, SYNC.open_adding(self.user))
+                if action == 'adding-close':
+                    SYNC.close_adding(self.user, 'closed by the administrator')
+                    return self.send(200, {'ok': True})
                 if action == 'decide':
                     SYNC.decide(str(d.get('id')), bool(d.get('approve')), self.u)
                 elif action == 'update':
@@ -997,7 +1072,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.student_balances(STORE, sc))
         if action == 'advice':
             self.need('overview.view')
-            return self.send(200, center.advice(STORE, sc, self.u['perms'], user_id=self.u['id'], node_id=NODE.id))
+            return self.send(200, center.advice(STORE, sc, self.u['perms'], user_id=self.u['id'], node_id=NODE.id, system=system_status(self.u)))
+        if action == 'status':  # the overview's "is everything safe?" card: only the parts this user may act on
+            self.need('overview.view')
+            return self.send(200, system_status(self.u))
         if action == 'exam':
             self.need('exams.view', 'marks.enter')
             r = center.exam_results(STORE, qs.get('id', ''), sc)
@@ -1060,6 +1138,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.mark_many(c, str(d.get('sessionId')), d.get('marks') or {}))
         if action == 'session':
             return self.send(200, center.set_session_status(c, str(d.get('sessionId')), d.get('status'), d.get('topic')))
+        if action == 'session/add':
+            return self.send(200, center.add_session(c, str(d.get('groupId')), d.get('date'), d.get('start'), d.get('end'), d.get('topic') or ''))
         if action == 'dayoff':
             return self.send(200, center.day_off(c, d.get('date'), d.get('reason') or ''))
         if action == 'enroll':
@@ -1130,6 +1210,8 @@ class Handler(BaseHTTPRequestHandler):
         if action == 'value':
             field = d.get('field')
             row[field] = d.get('value')
+            if field == 'name' and entity in ('students', 'teachers'):
+                row['nameKey'] = center.D.key_text(row['name'])      # the search key follows the chosen name
             op = {'e': entity, 'id': rid, 'op': 'put', 'row': row, 'ver': ver, 'resolve': [field]}
             label = f'Conflict resolved: {field}'
         elif action == 'keep-deleted':

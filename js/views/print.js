@@ -70,6 +70,21 @@
   };
   HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
   HS.printReceipt = function (p) { printSheet(receipt(p)); };
+  /* one parent paid for several children: one sheet, a line per child, every receipt number listed (the QR holds the first) */
+  HS.printFamilyReceipt = function (r) {
+    var first = r.receipts[0], row = function (k, v) { return '<tr><th>' + HS.esc(HS.t(k)) + '</th><td>' + v + '</td></tr>'; };
+    printSheet('<div class="ps-receipt"><div class="r-head"><b>' + HS.esc(setting('systemName') || HS.t('app.name')) + '</b><span>' + HS.esc(HS.t('receipt.title')) + '</span></div>' +
+      '<div class="r-no" dir="ltr">' + HS.esc(first.no) + (r.receipts.length > 1 ? ' … ' + HS.esc(r.receipts[r.receipts.length - 1].no) : '') + '</div><table>' +
+      row('f.date', HS.esc(plain(U.day(first.date))) + ' ' + U.bdi(first.at || '')) +
+      r.receipts.map(function (p) {
+        var st = HS.data.get('students', p.studentId) || {};
+        return '<tr><th>' + HS.esc(st.name || '') + '<br><small>' + HS.esc(HS.data.groupName(p.groupId)) + ' · <bdi dir="ltr">' + HS.esc(p.no) + '</bdi></small></th><td>' + plain(U.money(p.amount)) + '</td></tr>'; }).join('') +
+      row('pay.method', HS.esc(HS.t('pay.method.' + first.method)) + (first.ref ? ' <bdi dir="ltr">' + HS.esc(first.ref) + '</bdi>' : '')) +
+      row('f.user', HS.esc(first.by || '')) + '</table>' +
+      '<div class="r-total">' + plain(U.money(r.total)) + '</div><div class="r-qr">' + qr(first.no) + '</div>' +
+      (setting('receiptFooter') ? '<p class="r-foot">' + HS.esc(setting('receiptFooter')) + '</p>' : '') +
+      '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>');
+  };
   HS.printHTML = function (html) { printSheet(html); };   // any page's own A4 sheet (settlement statements, reports)
   function printSheet(html) {
     var el = document.createElement('div');

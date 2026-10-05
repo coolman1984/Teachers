@@ -200,10 +200,52 @@ def active_on(row, d, start='startDate', end='endDate'):
     return (not row.get(start) or row[start] <= d) and (not row.get(end) or row[end] >= d)
 
 
+def clean_temp(t):
+    """A temporary timetable (Ramadan, exam weeks): {from, to, slots} that replaces the group's weekly times between two
+    days. One period per group. Returns None when it is empty or invalid."""
+    if not isinstance(t, dict):
+        return None
+    a, b = as_date(t.get('from')), as_date(t.get('to'))
+    slots = clean_slots(t.get('slots'))
+    if not a or not b or b < a or not slots:
+        return None
+    return {'from': a.isoformat(), 'to': b.isoformat(), 'slots': slots}
+
+
+def temp_on(group, d):
+    """The temporary timetable of the group when it covers day d, else None."""
+    t = clean_temp(group.get('tempSlots'))
+    day = d.isoformat() if isinstance(d, date) else str(d)[:10]
+    return t if t and t['from'] <= day <= t['to'] else None
+
+
+def expand_temp(groups):
+    """The groups as the clash check must see them: a group with a temporary timetable becomes up to three pseudo
+    groups with the same id - its regular times before the period, the temporary times during it, the regular times after
+    - each limited to its own dates, so a Ramadan timetable is checked against everybody else's times of those days."""
+    out = []
+    for g in groups:
+        t = clean_temp(g.get('tempSlots'))
+        if not t:
+            out.append(g)
+            continue
+        lo, hi = g.get('startDate') or '0000-00-00', g.get('endDate') or '9999-12-31'
+        before_end = (as_date(t['from']) - timedelta(days=1)).isoformat()
+        after_start = (as_date(t['to']) + timedelta(days=1)).isoformat()
+        if lo <= before_end:
+            out.append({**g, 'tempSlots': None, 'endDate': min(hi, before_end)})
+        if hi >= after_start:
+            out.append({**g, 'tempSlots': None, 'startDate': max(lo, after_start)})
+        if lo <= t['to'] and t['from'] <= hi:
+            out.append({**g, 'tempSlots': None, 'slots': t['slots'], 'startDate': max(lo, t['from']), 'endDate': min(hi, t['to'])})
+    return out
+
+
 def clashes(groups, rooms=None):
     """Timetable problems among active groups: the same room or the same teacher twice at the same time.
     Returns [{kind: 'room'|'teacher'|'capacity', a, b, day, start, end}] (a, b = group ids)."""
     rooms = rooms or {}
+    groups = expand_temp(groups)
     out, items = [], []
     for g in groups:
         if g.get('active') is False:
@@ -235,7 +277,13 @@ def clashes(groups, rooms=None):
                 out.append({'kind': 'capacity', 'a': g['id'], 'b': '', 'day': s['day'], 'start': s['start'], 'end': s['end'],
                             'roomId': room['id']})
                 break
-    return out
+    seen, unique = set(), []
+    for c in out:   # a group split around a temporary timetable meets the same group on both sides of it: say it once
+        key = (c['kind'], c['a'], c['b'], c['day'], c['start'], c['end'])
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    return unique
 
 
 def _periods_overlap(g1, g2):
@@ -249,7 +297,8 @@ def slots_on(group, d):
     if group.get('active') is False or not active_on(group, d):
         return []
     wd = weekday(d)
-    return [s for s in clean_slots(group.get('slots')) if s['day'] == wd]
+    temp = temp_on(group, d)
+    return [s for s in (temp['slots'] if temp else clean_slots(group.get('slots'))) if s['day'] == wd]
 
 
 def session_id(group_id, d, start):

@@ -25,6 +25,8 @@
       var root = HS.$('#root');
       var setup = !status.hasUsers;
       var body;
+      // a new PC chooses between "first PC" and "join the centre PC"; a moved data folder asks first (js/views/join.js)
+      if (HS.joinFlow && HS.joinFlow.intercept(status)) return;
       if (setup && !status.local) {
         body = '<div class="empty"><div class="art">' + HS.icon('lock', 'lg') + '</div><h3>' + HS.esc(HS.t('auth.setup.title')) + '</h3><p>' + HS.esc(HS.t('auth.remote')) + '</p></div>';
       } else if (setup) {
@@ -32,9 +34,12 @@
           field('full_name', HS.t('auth.fullname'), 'text', 'autofocus required') + field('username', HS.t('auth.username'), 'text', 'required autocapitalize="off" spellcheck="false" dir="ltr"') +
           field('password', HS.t('auth.password'), 'password', 'required dir="ltr"') + '<p class="faint" style="font-size:.85rem">' + HS.esc(HS.t('auth.pw.hint')) + '</p>' +
           '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div>' +
-          '<button class="btn primary" type="submit">' + HS.esc(HS.t('auth.setup.btn')) + '</button></form>';
+          '<button class="btn primary" type="submit">' + HS.esc(HS.t('auth.setup.btn')) + '</button>' +
+          (HS.joinFlow ? '<button class="btn ghost" type="button" data-back>' + HS.icon('left', 'sm mirror') + HS.esc(HS.t('common.back')) + '</button>' : '') + '</form>';
       } else {
+        var notice = HS.joinFlow ? HS.joinFlow.takeNotice() : '';
         body = '<form id="auth-form"><div><h2>' + HS.esc(HS.t('auth.login.title')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('auth.login.sub')) + '</p></div>' +
+          (notice ? '<div class="tip ok" role="status">' + HS.icon('check') + '<span>' + HS.esc(notice) + '</span></div>' : '') +
           field('username', HS.t('auth.username'), 'text', 'autofocus required autocapitalize="off" spellcheck="false" dir="ltr" autocomplete="username"') +
           field('password', HS.t('auth.password'), 'password', 'required dir="ltr" autocomplete="current-password"') +
           '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div>' +
@@ -44,6 +49,8 @@
       bindLang(root);
       var form = HS.$('#auth-form', root);
       if (!form) return;
+      var back = form.querySelector('[data-back]');
+      if (back) back.addEventListener('click', function () { HS.joinFlow.mode = 'choose'; HS.emit('auth-rerender'); });
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var d = {}; new FormData(form).forEach(function (v, k) { d[k] = String(v).trim(); });

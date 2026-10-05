@@ -112,7 +112,7 @@ Every row also has engine columns: `id, ver, created_at/by, updated_at/by, delet
 | `rooms` | rooms | name, capacity, costPerHour, active, notes | shared |
 | `teachers` | teachers | name, nameKey, mobile, subjectIds[], gradeCodes[], settleModel, rentMonth, rentSession, rentStudent, centerPct, color, bio, slug, active, notes | its own id |
 | `students` | students | code, name, nameKey, gradeCode, system, track, school, gender, mobile, parentName, parentMobile, parentMobile2, familyKey, discountPct, discountReason, exempt, consent, consentAt, joinedAt, active, notes, portalHash, portalNonce, importKey | visible if enrolled with an allowed teacher |
-| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, **feeHistory[{to, fee, type}] (server-written)**, startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
+| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, **feeHistory[{to, fee, type}] (server-written)**, **tempSlots{from, to, slots[]}** (one temporary timetable, e.g. Ramadan; replaces `slots` between the two days), startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
 | `enrollments` | enrollments | studentId, groupId, teacherId, from, to, status(active/moved/left), fee (special fee), note, **billFrom** (first billed day of a month group) | teacherId |
 | `sessions` | sessions | groupId, teacherId, date, start, end, roomId, status(planned/held/cancelled), kind, topic, note | teacherId |
 | `attendance` | attendance | sessionId, studentId, groupId (**the student's home group**), teacherId, date, status(present/late/absent/excused), at, via, makeup, by | teacherId |
@@ -127,6 +127,9 @@ Every row also has engine columns: `id, ver, created_at/by, updated_at/by, delet
 
 Merge rules: `materials.stock` is a **counter** (two PCs selling at once both count); `shifts.status` rank open<closed;
 `sessions.status` rank planned<cancelled<held. Everything else: last writer wins, surfaced in Devices & Sync.
+Derived fields **follow** their source (`store.RESOLVERS` `follow:<field>`): `nameKey`→`name`, `consentAt`→`consent`, `portalHash`→`portalNonce`,
+`feeHistory`→`fee`, `sessions.note`→`status`. They take the winner of their source and are never shown as a conflict of their own
+(`replica.flags(followers=)`); resolving a name conflict recomputes `nameKey` (`/api/conflicts/resolve`).
 
 ### C4. Deterministic ids (two PCs doing the same thing must produce the same id)
 - session: `se-<groupId>-<YYYY-MM-DD>-<HHMM>` (`domain.session_id`) — a planned ("virtual") session becomes real at the first check-in
@@ -149,6 +152,9 @@ plus to add: `receiptFooter`, `waTemplates` {absence, payment, report, exam, wel
 Engine: `/api/auth/*`, `/api/state[?all=1]`, `/api/version`, `/api/commit`, `/api/users*`, `/api/profiles/*`,
 `/api/backups*`, `/api/trash*`, `/api/audit`, `/api/activity`, `/api/security`, `/api/devices*`, `/api/conflicts*`,
 `/api/export.xlsx`, `/api/xlsx`, `/api/upload`, `/api/gateway*`, `/files/*`.
+Added with the admin work (2026-10-05): `/api/join/{discover,probe,status,cancel}` + `/api/join` (first-start screens, this PC only),
+`/api/devices/adding-open|adding-close` (the 15-minute window), `/api/data-safety` + `/api/data-safety/check` (`backups.manage|restore`),
+`/api/audit?entity=&id=` (history of one record), `GET /api/c/status` (what this user may act on: backup, sync, gateway).
 
 New (center) — GET `/api/c/<action>`:
 | action | params | permission (any) | returns |
@@ -172,7 +178,7 @@ New (center) — GET `/api/c/<action>`:
 | `advice` | – | overview.view | ranked advisor items `[{id, level bad/warn/info/ok, page, icon, vars}]`; texts `adv.<id>.t/.b/.go` |
 
 POST `/api/c/<action>` (JSON body): `checkin {studentId, sessionId, status?, via?}`, `roll {sessionId, marks:{studentId:status}}`,
-`session {sessionId, status, topic?}`, `dayoff {date, reason}` (cancels every session of a day without attendance), `enroll {studentId, groupId, from?, fee?, billFrom?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
+`session {sessionId, status, topic?}`, `session/add {groupId, date, start, end, topic?}` (extra session, kind `extra`, refused on teacher/room clash), `dayoff {date, reason}`, `pay/many {items[{studentId, groupId, amount}], method, ref?}` (family payment, one commit), `credit/move {studentId, from, to, amount?}` (cancels every session of a day without attendance), `enroll {studentId, groupId, from?, fee?, billFrom?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
 `leave {enrollmentId, to?, reason?}`, `shift/open {opening}`, `shift/close {shiftId, counted, reason?}`,
 `pay {studentId?, groupId?, kind, amount, method, ref?, period?, sessions?, materialId?, qty?, note?}`, `void {id, reason}`,
 `expense {category, amount, method, teacherId?, groupId?, note?, date?}`, `expense/void {id, reason}`,
@@ -231,9 +237,9 @@ Grades: الصف الأول الابتدائي … السادس الابتدائ
 
 ### Phase P1 — Make the fork run again (the shell, no trip traces)
 **P1.1 index.html.** Script list exactly: `lib/qrcode.min.js, js/core.js, js/i18n.js, js/i18n/en.js, js/i18n/ar.js, js/prefs.js,
-js/shell.js, js/data.js, js/ui.js, js/views/auth.js, js/views/overview.js, js/views/door.js, js/views/students.js,
+js/shell.js, js/data.js, js/ui.js, js/views/join.js, js/views/auth.js, js/views/overview.js, js/views/door.js, js/views/students.js,
 js/views/groups.js, js/views/money.js, js/views/exams.js, js/views/followup.js, js/views/settlements.js, js/views/reports.js,
-js/views/lists.js, js/views/importx.js, js/views/print.js, js/views/activity.js, js/views/access.js, js/views/datatab.js,
+js/views/lists.js, js/views/importx.js, js/views/print.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
 js/views/mailbox.js, js/views/soon.js, js/views/settings.js, js/views/help.js, js/app.js`. `<title>Hessa</title>`,
 noscript text "Hessa needs JavaScript. يحتاج نظام حصة إلى تفعيل جافاسكريبت." New favicon (amber square + cap).
 Create each new view file as a minimal `HS.views.<id> = HS.withData({render, mount})` first (skeleton), then fill it in its task.
@@ -585,6 +591,9 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
   balance from one enrolment alone, and never drop ended enrolments with money still open from debt lists (`center.open_accounts`).
 - Prices are dated: a group's fee change keeps the old price in `feeHistory` from the day before `feeFrom` (sent on the
   generic-commit op, default today). Only the server writes `feeHistory`. Each visit/month is priced on its own day.
+- A temporary timetable is expanded by `domain.expand_temp` for clash checks (regular before, temporary during, regular after, same group id) and
+  read by `domain.slots_on`; never read `group.slots` directly to know what meets on a day.
+- Free trial rows (`attendance.trial`) are free only if they are the earliest trial of that student in that group (`FREE_TRIAL_ONLY_FIRST`).
 - Inside RTL, `inset-inline-start: 50%` + `translateX(-50%)` pushes the element off screen — centre with `inset-inline` + grid.
 - A scoped teacher user must never receive other teachers' rows — filter on the server (`store._filter`), not in the page.
 - Parent numbers: never in the parent card, never in logs, only with `contacts.view`.
@@ -592,6 +601,18 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 - Lock order: `store.lock` → `journal.lock`, never the reverse.
 - RTL: never `left/right`; mirror arrows; numbers/codes LTR inside Arabic text.
 - This repository is public: never commit real student names, phone numbers, the owner's files or secrets.
+- Every `HS.x()`, `U.x()` or `D.x()` a page calls must exist: the Activity log called `HS.pageHead` and crashed on open for months
+  (`test_design.HelperCallsTest` now checks it). Every page needs a browser test that opens it.
+- Anything that shows history values (`before/after/changes`) goes through `store.mask_audit_row`: phone fields are hidden without
+  `contacts.view`, parent-link secrets for everybody; a typed phone number never searches those columns for such users.
+- Spreadsheets are written with `U.csv` + `U.download` (BOM for Excel, a leading `= + - @` is neutralised so a typed name never runs as a formula).
+- Grid/flex children need `min-width: 0` (`.stack > *`): one wide table otherwise stretches the whole page on a phone.
+- A PC can join only while the owner has opened the adding window (`/api/devices/adding-open`); tests must open it before `/api/join`.
+- `upgrade.py` runs before the databases are opened and writes `program.json`; a new `SCHEMA` needs an entry in its migrations, and
+  the list of files it copies is `DB_FILES`. Data from a newer schema is refused, never touched.
+- The page CSP forbids `eval`: Playwright `wait_for_function("...")` with a string fails - poll from Python (`wait_until`).
+- Undo of a change is a normal permission-checked save of the earlier values (`HS.audit.undo`), limited to plain fields; money,
+  fee history, timetables and codes keep their own screens and rules.
 
 ## Part I — Owner decisions log
 | Date | Question | Answer |
@@ -602,6 +623,7 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | 2026-10-04 | Who continues | Plan written for other agents (Sonnet 5.5, ChatGPT) to complete |
 | 2026-10-04 | GitHub integration | Owner explicitly authorized push, merge and main synchronization for this iteration; preserve remote work and local private files |
 | 2026-10-05 | Usability | **All main control in the dashboard**, a guide and an advisor; web app usable on Android and iOS phones (home-screen manifest, tab bar); design and richness of Yousef-Transportation + Mr.Ayman-HR |
+| 2026-10-05 | Learn from Mr.Ayman-HR: admin system, never-deleted database, connection abilities, advanced features; add what Hessa lacks | Ported and extended (TASKS A1–A13). Not ported: BAMS office mode (a browser on the centre PC's address does the same); join stays closed until the owner opens it |
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |

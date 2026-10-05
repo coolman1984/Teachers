@@ -2,6 +2,65 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Admin system and data safety, learned from Mr.Ayman-HR (2026-10-05)
+
+**Why:** the owner asked to learn from his other system (BAMS) - its administrator tools, never-lose-data database, the ability to
+connect several PCs and its advanced features - and to add what Hessa still lacked. Hessa already shared the engine (signed history,
+offline-first sync, soft delete) but almost none of it was reachable from the screens: no way to join a second PC, no Devices page,
+no light, a one-table activity log, backups without a second disk, and nothing that told the owner when something was wrong.
+**What:** (1) *Devices & Sync* page and a light in the top bar (PCs, decisions, warnings, record check, administrator key, backup
+administrator PC) and the first-start screens to **join** the centre PC (find or type the address, live check, first copy, "same PC
+or a new one?" for a copied data folder). (2) Joining is closed until the owner presses "Add a PC": a 15-minute window for ONE
+PC - stricter than BAMS, whose door stays open - because this system holds children's data. (3) `server/upgrade.py`: a verified
+snapshot before every program update, refusal (and no change at all) of data written by a newer program, a plain startup-problem
+note; SCHEMA 4. (4) Activity log with *Changes* and *Logins & security*, filters, spreadsheet export and readable before -> after
+through one shared `HS.audit`. (5) Settings -> Data: second backup folder, "Check my data now", the five promises, update history.
+(6) Overview card "Is everything safe?" (`/api/c/status`) and administrator advisor items (no/old/failed backup, one disk only,
+sharing problems, decisions waiting, key not saved, check failed). (7) History of one record and "Undo this change" in the student
+file (the undo is a new, permission-checked change: nothing is removed). (8) Merge: derived fields `follow:` their source so the owner
+never sees "nameKey" as a four-button decision. (9) Help topics and the administrator guide, both languages.
+**Decision:** BAMS "office mode" (a thin PC that only opens the administrator PC) is not ported: a browser on the centre PC's address
+is exactly that and needs no installation; the Add-a-PC dialog now explains "join" versus "just open the address".
+**Mistakes (found by the new tests, not by users):** the existing *Activity log page crashed on open* - it called `HS.pageHead`, a helper
+that never existed; the existing change log showed **parents' phone numbers** in before/after to anyone with `logs.view`; `_archive_copy`
+(used when a data folder is set up as a new PC) left `center.db` behind because it matched the wrong file name; the first join
+refusal was swallowed by the port fallback and shown as "not the administrator PC"; I escaped values twice (`&amp;amp;`) in the first
+Devices page; a wide backups table stretched the whole Settings page to 431 px on a 390 px phone; a CSV of typed names could run
+`=HYPERLINK(...)` in Excel; Playwright `wait_for_function` is blocked by the page's CSP (no `eval`).
+**Lessons:** open every page in a real browser at least once (a static check now also fails when a page calls a helper that does not
+exist); anything that displays history values must go through one masking function; a security default of BAMS (open join door) is not
+automatically right for another product - decide per product; screenshots at 390 px in Arabic found three layout problems no assertion would.
+**Evidence:** new tests - safety (update copy, newer-data refusal, archive copy, history privacy, Data tab in a browser, status and advisor
+over the real backup state, record history and undo in a browser), join (API and browser), Devices page (two real PCs, a real conflict decided
+from the screen, record check, add and remove a PC, the Activity log with filters, export and a phone), design (helper calls exist), frontend
+(readable history, CSV safety, activity log, status card). Failing-before/passing-after was shown for the history privacy fix, the archive
+copy and the missing helper. Screenshots checked in Arabic/night 390 px and English/daylight 1280 px.
+**Limits:** the history button exists in the student file and as a link from the Activity log (the API serves any record); undo covers plain
+fields only (money, fee history, timetables and codes keep their own screens); the detail sentences of the security list are English
+from the server; the backups table scrolls sideways on a phone.
+
+## The last edge cases: sibling payment, Ramadan timetable, extra session (2026-10-05)
+
+**Why:** the owner asked for all the remaining steps in one go.
+**What:** (1) The door card's "Pay for brothers and sisters" opens one dialog listing every child and group of the family
+with what each owes; the lines are saved by `pay/many` in one commit with consecutive receipt numbers and one printed
+sheet; cash change and the repeated-reference check work there too. (2) A group can have one temporary timetable (Ramadan,
+exam weeks): between two days it replaces the weekly times, the sessions of those days follow it, and the clash check sees
+the regular times before it, the temporary ones during it and the regular ones after it; the timetable grid shows what is in
+force today. (3) "Extra session" on the group panel adds a one-off session (`kind extra`, deterministic id like any other)
+and refuses a teacher or room that is already busy; a cancelled one at the same time is brought back. (4) The school name
+appears in the door search results, and extra sessions are marked in the day strips. `domain.clashes` now lists a clash
+once even when a split group meets the same group on both sides of its temporary period.
+**Mistakes:** the first test of the temporary timetable expected one clash but a split group produced two for the same
+pair (before and after the period) - the function now deduplicates; my browser scenario clicked through the group panel I
+had left open (the scrim intercepted the click - a test problem, closed the panel like a user would).
+**Evidence:** new tests - domain (temporary timetable and its clashes), API (extra session, temporary timetable saved and
+driving sessions, family lines without contact details) and a Chromium scenario (school in search, family dialog with change,
+saved receipts of one batch, extra session, temporary period incl. the half-filled refusal); screenshots checked in Arabic/night
+at 390 px and English/daylight at 1360 px, no console errors.
+**Limits:** one temporary period per group; the sibling dialog pays groups the children are enrolled in (no handouts or
+wallet); wallet top-up and handout sale on the door card are still open.
+
 ## Review findings on the trial, day-off and reference features (2026-10-05)
 
 **Why:** an automated review (Codex) of the merged PR raised four findings; each was checked against the code and was right.

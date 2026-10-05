@@ -323,6 +323,70 @@ class DoorTest(BrowserBase):
         self.assertEqual([e for e in self.errors if 'status of 400' not in e], [])
         self.assertEqual(len(self.errors), 2)
 
+    def test_family_payment_extra_session_temporary_times_and_school_name(self):
+        from datetime import timedelta
+        today, tomorrow = date.today(), date.today() + timedelta(days=1)
+        self.c.post('/api/commit', {'label': 'E2E family', 'ops': [{'e': 'students', 'id': f'e2e-fam{i}', 'op': 'put', 'row': {
+            'code': str(41960 + i), 'name': f'Synthetic Fam Child {i}', 'gradeCode': 'S1', 'system': 'thanaweya', 'school': 'Synthetic Nile School',
+            'familyKey': 'fam-e2e', 'consent': True, 'active': True}} for i in (1, 2)]})
+        sess = D.session_id('e2e-g', today.isoformat(), '00:00')
+        for i in (1, 2):
+            self.c.post('/api/c/enroll', {'studentId': f'e2e-fam{i}', 'groupId': 'e2e-g'})
+            self.c.post('/api/c/checkin', {'studentId': f'e2e-fam{i}', 'sessionId': sess, 'status': 'present'})
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/door')
+        # two children with the same first names are told apart by the school in the search results
+        pg.wait_for_selector('#door-q').type('Synthetic Fam Child', delay=5)
+        pg.wait_for_selector('[data-results] li[data-i]')
+        self.assertIn('Synthetic Nile School', pg.inner_text('[data-results]'))
+        pg.keyboard.press('Enter')
+        pg.wait_for_selector('[data-card] [data-family]')
+        pg.click('[data-card] [data-family]')
+        if pg.wait_for_selector('#sh-o, .fam-lines').get_attribute('id') == 'sh-o':
+            pg.fill('#sh-o', '100')
+            pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.fam-lines')
+        self.assertEqual(pg.locator('.fam-line').count(), 2)
+        self.assertIn('120', pg.inner_text('[data-total]'))            # both children owe one session (60) each
+        pg.fill('#fam-g', '200')
+        self.assertIn('Give back 80', pg.inner_text('.dialog [data-change]'))
+        pg.click('.dialog [data-m="instapay"]')
+        pg.fill('#fam-r', 'FAM-1')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-printfam]')
+        paid = [x for x in self.c.get('/api/state')['payments'] if x['ref'] == 'FAM-1']
+        self.assertEqual(sorted((x['studentId'], x['amount']) for x in paid), [('e2e-fam1', 60), ('e2e-fam2', 60)])
+        self.assertEqual(len({x['batch'] for x in paid}), 1)
+        # an extra session of the group, from the group panel
+        pg.goto(self.S.base + '/#/groups?tab=list')
+        pg.click('tr[data-id="e2e-g"]')
+        pg.click('.drawer [data-extra]')
+        pg.fill('#xs-d', tomorrow.isoformat())
+        pg.fill('#xs-a', '18:00')
+        pg.fill('#xs-b', '19:00')
+        pg.fill('#xs-t', 'Revision')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.toast')
+        day = {x['id']: x for x in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
+        self.assertEqual(day[D.session_id('e2e-g', tomorrow.isoformat(), '18:00')]['kind'], 'extra')
+        # a temporary timetable (Ramadan) saved from the group form, in a period that does not touch today
+        pg.click('.drawer [data-pclose]')                             # the group panel is still open after the dialog
+        pg.wait_for_selector('.drawer', state='detached')
+        pg.click('tr[data-id="e2e-g"]')
+        pg.click('.drawer [data-edit]')
+        pg.wait_for_selector('[data-gform]')
+        pg.fill('[data-gform] [name=tempFrom]', (today + timedelta(days=10)).isoformat())
+        pg.click('[data-addtslot]')
+        pg.click('.drawer:last-of-type [data-save]')                 # a half-filled period is refused, not saved
+        pg.wait_for_selector('.drawer [data-err]:not([hidden])')
+        self.assertIn('Write both days', pg.inner_text('.drawer [data-err]'))
+        pg.fill('[data-gform] [name=tempTo]', (today + timedelta(days=30)).isoformat())
+        pg.click('.drawer:last-of-type [data-save]')
+        pg.wait_for_selector('[data-gform]', state='detached')
+        g = next(g for g in self.c.get('/api/state')['groups'] if g['id'] == 'e2e-g')
+        self.assertEqual((g['tempSlots']['from'], len(g['tempSlots']['slots'])), ((today + timedelta(days=10)).isoformat(), 1))
+        self.assertEqual([x for x in self.errors if 'status of 400' not in x and 'status of 409' not in x], [])
+
     def test_zz_settlement_approve_payout_and_reports(self):
         # runs last (zz): a fee of the fixture group is collected, then the teacher is settled and paid
         mine = self.c.get('/api/c/shift')

@@ -169,6 +169,8 @@ def normalize_ops(store, ops, pc_index=0):
         if e == 'groups':
             _price_history(store, op, row)
             row['slots'] = D.clean_slots(row.get('slots'))
+            if 'tempSlots' in row:
+                row['tempSlots'] = D.clean_temp(row.get('tempSlots'))
             if row.get('gradeCode') and not D.valid_grade(row['gradeCode']):
                 raise Problem('err.grade', 'Choose the grade.')
             if row.get('feeType') and row['feeType'] not in D.FEE_TYPES:
@@ -386,6 +388,22 @@ def find_students(store, q, scopes=None, limit=12):
     return out[:limit]
 
 
+def _family_lines(store, st, d, groups, scopes):
+    """The brothers and sisters of the student (same family key) with what each owes per group, so one parent can pay for
+    all of them at once. Only name, code and money - never contact details."""
+    if not st.get('familyKey'):
+        return []
+    out = []
+    for sib in store.rows('students', 'family_key=? AND id<>? AND (active=1 OR active IS NULL)', (st['familyKey'], st['id']), scopes):
+        ens = [e for e in active_enrollments(store, sib['id'], d) if scopes is None or e.get('teacherId') in scopes]
+        bals = balances(store, ens, d, groups, {sib['id']: sib})
+        lines = [{'enrollmentId': e['id'], 'groupId': e['groupId'], 'balance': bals[e['id']]['balance'], 'due': bals[e['id']]['due'],
+                  'unit': bals[e['id']]['unit'], 'feeType': bals[e['id']]['feeType']} for e in ens if e['id'] in bals]
+        if lines:
+            out.append({'id': sib['id'], 'name': sib['name'], 'code': sib.get('code'), 'lines': lines})
+    return out
+
+
 def door_card(store, student_id, now=None, scopes=None):
     """What the front desk sees after recognising a student: who, which session now, money, warnings."""
     now = now or datetime.now()
@@ -428,7 +446,8 @@ def door_card(store, student_id, now=None, scopes=None):
             latest[e['groupId']] = e
     old = balances(store, list(latest.values()), d, groups, {student_id: st})
     left = [{**e, 'money': old[e['id']], 'left': True} for e in latest.values() if e['id'] in old and abs(old[e['id']]['balance']) >= 0.01]
-    return {'student': st, 'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens] + left, 'wallet': wallet(store, student_id) if scopes is None else 0,
+    return {'student': st, 'family': _family_lines(store, st, d, groups, scopes),
+            'enrollments': [{**e, 'money': bals.get(e['id'])} for e in ens] + left, 'wallet': wallet(store, student_id) if scopes is None else 0,
             'candidates': candidates[:8], 'suggested': best['session']['id'] if best else None, 'risk': r,
             'today': [a for a in att.values()]}
 
@@ -614,6 +633,43 @@ def roster(store, session_id, scopes=None):
     rows = [r for r in rows if r['student']]
     rows.sort(key=lambda r: D.key_text(r['student'].get('name')))
     return {'session': sess, 'group': group, 'rows': rows}
+
+
+@atomic_operation
+def add_session(ctx, group_id, day, start, end, topic=''):
+    """An extra session outside the weekly timetable: a make-up for a cancelled day, a revision session before an exam.
+    It gets the usual deterministic id (so the door and the roll call treat it like any session) and kind 'extra'.
+    A teacher or a room cannot be in two places: clashes with the other sessions of that day are refused."""
+    ctx.need('groups.manage', 'attendance.mark')
+    g = ctx.store.row('groups', group_id)
+    if not g:
+        raise Problem('err.noGroup', 'The group of this session does not exist any more.')
+    ctx.need_teacher(g.get('teacherId'))
+    d = D.as_date(day)
+    a, b = D.hm(start), D.hm(end)
+    if not d or a is None or b is None or b <= a:
+        raise Problem('err.sessionTime', 'Choose the day and a start time before the end time.')
+    if d < _today() and not ctx.can('attendance.edit'):
+        raise Problem('err.pastDay', 'Changing attendance of another day needs the permission to edit attendance.')
+    start, end = D.fmt_hm(a), D.fmt_hm(b)
+    sid = D.session_id(g['id'], d, start)
+    room = g.get('roomId') or ''
+    for other in sessions_on(ctx.store, d):
+        if other.get('status') == 'cancelled':
+            continue
+        if other['id'] == sid:
+            raise Problem('err.sessionExists', 'This group already has a session at this time.')
+        o_a, o_b = D.hm(other.get('start')), D.hm(other.get('end'))
+        if o_a is None or o_b is None or not (a < o_b and o_a < b):
+            continue
+        og = ctx.store.row('groups', other['groupId']) or {}
+        if (g.get('teacherId') and g.get('teacherId') == other.get('teacherId')) or (room and room == (other.get('roomId') or og.get('roomId'))):
+            raise Problem('err.sessionClash', 'The teacher or the room already has a session at this time.', name=og.get('name') or '')
+    cur = ctx.store.row('sessions', sid)    # a cancelled session of the same time is simply brought back
+    row = {'groupId': g['id'], 'teacherId': g.get('teacherId'), 'date': d.isoformat(), 'start': start, 'end': end, 'roomId': room,
+           'status': 'planned', 'kind': 'extra', 'topic': D.norm_text(topic)[:200]}
+    ctx.commit(f'Extra session {d.isoformat()} {start} for {g["name"]}', [{'e': 'sessions', 'id': sid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row}])
+    return {'id': sid}
 
 
 @atomic_operation
@@ -1546,10 +1602,21 @@ def student_balances(store, scopes=None, d=None):
 ADVICE_ORDER = {'bad': 0, 'warn': 1, 'info': 2, 'ok': 3}
 
 
-def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id=None):
+BACKUP_STALE_HOURS = 72     # a PC that is switched off for the weekend is normal; three days without a backup is not
+
+
+def _stamp(text):
+    try:
+        return datetime.fromisoformat(text) if text else None
+    except (TypeError, ValueError):
+        return None
+
+
+def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id=None, system=None):
     """The advisor on the overview: the few things that need a person today, most urgent first, each with the page
     that fixes it. Only advice the user may act on or see is returned (money advice needs a money permission), and
-    a teacher-scoped user only hears about his own groups. Pure reads: a GET must never change anything."""
+    a teacher-scoped user only hears about his own groups. `system` (what the server knows about backups and sharing between
+    PCs) adds the items only an administrator can act on. Pure reads: a GET must never change anything."""
     can = set(perms or ()).intersection
     d = d or _today()
     now = now or datetime.now()
@@ -1559,6 +1626,30 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
     def add(id_, level, page, icon, **vars_):
         out.append({'id': id_, 'level': level, 'page': page, 'icon': icon, 'vars': vars_})
 
+    # 0. the system itself, for the people who can fix it: backups, sharing between PCs, the record check
+    if system:
+        bk = system.get('backup')
+        if bk is not None and can({'backups.manage'}):
+            last = _stamp(bk.get('last'))
+            if bk.get('error'):
+                add('backupFailed', 'bad', 'settings?tab=data', 'lock', e=str(bk['error'])[:160])
+            if bk.get('has_data'):       # an empty centre has nothing to protect yet and is not nagged
+                if not last:
+                    add('backupNone', 'bad', 'settings?tab=data', 'lock')
+                elif bk.get('unsaved') and now - last > timedelta(hours=BACKUP_STALE_HOURS):   # data changed since, and no backup for days
+                    add('backupOld', 'warn', 'settings?tab=data', 'lock', n=(now - last).days)
+                if not bk.get('folders'):
+                    add('backupSingleDisk', 'info', 'settings?tab=data', 'shield')
+        sy = system.get('sync')
+        if sy and can({'users.manage'}):
+            if sy.get('problems'):
+                add('syncProblem', 'bad', 'devices?tab=warnings', 'sync', n=int(sy['problems']))
+            if sy.get('conflicts'):
+                add('conflictsWaiting', 'warn', 'devices?tab=conflicts', 'merge', n=int(sy['conflicts']))
+            if sy.get('multi') and sy.get('authority') and not sy.get('key_saved'):
+                add('keyUnsaved', 'warn', 'devices', 'lock')
+            if sy.get('verify_ok') is False:
+                add('dataCheckBad', 'bad', 'settings?tab=data', 'shield')
     groups = [g for g in store.rows('groups', 'active=1 OR active IS NULL', (), scopes)]
     # 1. setting up an empty centre, in the order the work is done
     if scopes is None:

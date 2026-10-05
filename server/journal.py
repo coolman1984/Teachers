@@ -21,6 +21,7 @@ the same changeset any number of times has no effect.
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -31,7 +32,7 @@ import ed25519
 
 ZERO = '0' * 64
 VERSION = 1   # envelope format
-SCHEMA = 3    # data model (3: personal links, profiles); a change made by a newer program version waits until this PC is updated
+SCHEMA = 4    # data model (3: personal links, profiles; 4: price history, temporary times, free trials, payment batches, billing start); a change made by a newer program version waits until this PC is updated
 DATA_KINDS = ('data', 'restore', 'bootstrap')
 KINDS = DATA_KINDS + ('admin', 'account', 'log')
 PRIORITY = {'restore': 0, 'data': 1, 'bootstrap': 1, 'account': 2, 'admin': 3}
@@ -754,9 +755,11 @@ class Journal:
         return out
 
     # ------------------------------------------------------------ log queries (monitoring)
-    def query(self, table, q='', user='', typ='', scope='', frm='', to='', node='', limit=200, offset=0, scopes=None, business_only=False):
+    def query(self, table, q='', user='', typ='', scope='', frm='', to='', node='', limit=200, offset=0, scopes=None, business_only=False, phones_hidden=False, entity='', rid=''):
         cols = {'audit': ['label', 'entity', 'entity_id', 'changes', 'before', 'after'], 'activity': ['action', 'target', 'page', 'detail'],
                 'security': ['target', 'detail', 'user']}[table]
+        if phones_hidden and table == 'audit' and re.match(r'^\+?[\d\s-]{8,}$', q or ''):   # a number typed into the search must not reveal whose phone it is
+            cols = ['label', 'entity', 'entity_id']
         where, args = [], []
         if business_only and table == 'audit':  # user accounts and PCs are for administrators only
             where.append("entity NOT IN ('users', 'nodes', 'userCommands', 'profiles')")
@@ -772,6 +775,10 @@ class Journal:
             where.append({'audit': 'op', 'activity': 'type', 'security': 'event'}[table] + '=?'); args.append(typ)
         if scope and table == 'audit':
             where.append('scope_id=?'); args.append(scope)
+        if entity and table == 'audit':       # the history of one record
+            where.append('entity=?'); args.append(entity)
+            if rid:
+                where.append('entity_id=?'); args.append(rid)
         if node:
             where.append('node=?'); args.append(node)
         if frm:
