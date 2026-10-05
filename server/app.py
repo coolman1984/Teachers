@@ -995,7 +995,7 @@ class Handler(BaseHTTPRequestHandler):
             values = {'student': st['name'], 'group': ', '.join([STORE.row('groups', e['groupId'])['name'] for e in file['enrollments'] if STORE.row('groups', e['groupId'])]),
                       'date': center.date.today().isoformat(), 'amount': qs.get('amount', ''),
                       'balance': str(round(sum((e.get('money') or {}).get('balance', 0) for e in file['enrollments']), 2)),
-                      'center': str(cfg.get('systemName') or 'Hessa'), 'link': SECRETS.url + '/app/#' + token if token else ''}
+                      'center': str(cfg.get('systemName') or 'Hessa'), 'link': SECRETS.url + '/t/' + token if token else ''}
             for key, value in values.items():
                 text = text.replace('{' + key + '}', value)
             return self.send(200, {'to': center.D.wa_number(st.get('parentMobile')), 'text': text})
@@ -1128,7 +1128,7 @@ class Handler(BaseHTTPRequestHandler):
                     c.commit('Parent link replaced' if d.get('replace') else 'Parent link created',
                              [{'e': 'students', 'id': sid, 'op': 'put', 'ver': st['ver'], 'row': row}])
             GATE.kick()
-            url = SECRETS.url + '/app/#' + token
+            url = SECRETS.url + '/t/' + token   # the page the gateway serves; a #fragment never reaches the server
             phone = center.D.wa_number(st.get('parentMobile')) if self.can('contacts.view') else ''
             return self.send(200, {'url': url, 'waUrl': 'https://wa.me/' + phone + '?text=' + quote(url) if phone else ''})
         if action == 'checkin':

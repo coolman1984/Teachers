@@ -202,6 +202,10 @@ class GatewaySync:
         self.lock = threading.Lock()
         self.wake = threading.Event()
         self.pushed = {}            # token hash -> signature of the card the gateway has
+        # every link hash the gateway may hold a card for, kept on THIS PC (hashes only, no secrets) so that a link replaced or a student
+        # removed is still revoked after an internet outage or a restart
+        self.known_path = os.path.join(os.path.dirname(secrets.path), 'gateway-cards.json')
+        self.known = self._load_known()
         self._pushed_version, self._pushed_at = None, 0
         self.stat = {'lastOk': None, 'lastError': None, 'lastTry': None, 'waiting': 0, 'oldestSeconds': 0, 'applied': 0}
         self._stop = False
@@ -259,6 +263,19 @@ class GatewaySync:
             self.stat['lastOk'] = _now()
             self.stat['lastError'] = None
 
+    def _load_known(self):
+        try:
+            with open(self.known_path, encoding='utf-8') as f:
+                return {str(h) for h in json.load(f)}
+        except (OSError, ValueError, TypeError):
+            return set()
+
+    def _save_known(self):
+        tmp = self.known_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(sorted(self.known), f)
+        os.replace(tmp, self.known_path)
+
     def push_cards(self):
         """Cards of the students with a parent link; only the ones whose content changed are sent."""
         v = self.store.version()
@@ -278,11 +295,20 @@ class GatewaySync:
                 continue
             sigs[h] = sig
             cards.append({'tokenHash': h, 'tripId': st['id'], 'body': body, 'cancelled': cancelled, 'expiresAt': exp})
-        if cards:
+        current = {r['portalHash'] for r in self.store.rows('students', "portal_hash IS NOT NULL AND portal_hash<>''")}
+        stale = sorted(self.known - current)          # an old link (replaced, or the student was removed): the gateway must forget it
+        if cards or stale:
             cl = self.client()
             for i in range(0, len(cards), 100):
                 cl.put_cards(cards[i:i + 100])
             self.pushed.update(sigs)
+            self.known |= {c['tokenHash'] for c in cards}
+            for i in range(0, len(stale), 100):
+                cl.put_cards([], remove=stale[i:i + 100])
+                for h in stale[i:i + 100]:
+                    self.known.discard(h)
+                    self.pushed.pop(h, None)
+            self._save_known()
         self._pushed_version, self._pushed_at = v, time.time()
 
     def pull(self):

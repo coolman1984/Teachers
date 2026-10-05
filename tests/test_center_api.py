@@ -379,7 +379,9 @@ class CenterApiTest(CenterFixture):
             first = self.c.post('/api/c/portal', {'studentId': self.student})
             again = self.c.post('/api/c/portal', {'studentId': self.student})
             self.assertEqual(first['url'], again['url'])
-            token = first['url'].split('#')[1]
+            self.assertTrue(first['url'].startswith('http://127.0.0.1:1/t/'), first['url'])   # the path the gateway serves (a #fragment never reaches it)
+            self.assertNotIn('#', first['url'])
+            token = first['url'].rsplit('/', 1)[1]
             row = next(s for s in self.c.get('/api/state')['students'] if s['id'] == self.student)
             self.assertEqual(row['portalHash'], gwc.token_hash(token))
             replacement = self.c.post('/api/c/portal', {'studentId': self.student, 'replace': True})

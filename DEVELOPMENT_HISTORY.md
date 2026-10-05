@@ -2,6 +2,20 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Parent link: the right address, and old links really revoked (2026-10-05)
+
+**Why:** the completion review (A01, A02) found that the link sent to parents could not open their child's page, and that replacing a
+link only changed the hash on the centre PC - the gateway kept the old card, so a link sent to the wrong number kept working.
+**What:** the link is `<gateway>/t/<token>` (the path the gateway serves; a `#token` is never sent to a server). The sender now keeps,
+on this PC only, the hashes of the cards the gateway may hold; every round it asks the gateway to delete the ones no student carries
+any more (link replaced, student removed). The list is written after each success, so an outage or a restart in between does not lose
+the revoke.
+**Mistakes:** the earlier test read the token after `#` and so confirmed the broken address instead of catching it.
+**Evidence:** `tests/test_center_gateway.py` (a fake gateway in the test: right address, replace, outage + restart, removed student) -
+all three fail on the code before and pass after; `test_center_api` test 18 checks the address and the message text.
+**Limits:** a link replaced before this version (the hash was never recorded) is not revoked automatically - replace it once more; a
+copy already saved on a parent's phone without internet cannot be wiped remotely. The parent page itself is still the inherited one (C02).
+
 ## Admin system and data safety, learned from Mr.Ayman-HR (2026-10-05)
 
 **Why:** the owner asked to learn from his other system (BAMS) - its administrator tools, never-lose-data database, the ability to
