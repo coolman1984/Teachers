@@ -2,6 +2,25 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Daily work: history buttons, readable security log, month in Excel, school statement, receipt paper (review B04-B08 - 2026-10-05)
+
+**Why:** the review listed what the desk and the owner still did by hand or could not read: no history in the group panel or the
+lists, the security log in English inside the Arabic screen, no spreadsheet of the month, no statement for school support groups, and
+receipts only on an 80 mm roll.
+**What:** (1) "History" in the group panel and every list editor opens the existing history-of-one-record dialog (undo included). (2)
+`HS.audit.securityDetail` turns each fixed English sentence the server logs into a dictionary text with its values; a change list
+("Role: a -> b; Permissions added: …") is translated part by part, permission ids become their names. The stored log is evidence and
+stays as written. (3) Reports → Excel: 8 sheets through the existing `/api/xlsx`, built from the same scoped `/api/c/reports` answer
+the screen shows. (4) `GET /api/c/school?groupId&ym` and its dialog/print/Excel. (5) Receipt paper per PC with a test print.
+**Mistakes found:** `@page receipt { size: 80mm auto }` is not valid CSS, so Chromium silently printed every receipt on an A4 page -
+found only because the new test reads the paper width back from a real PDF. The page is now measured and sized in mm at print time.
+**Lessons:** print CSS must be tested by printing (PDF), not by reading the CSS. A translation table for log sentences needs a test
+that scans the server for every sentence, or the next new sentence silently stays English.
+**Evidence:** `tests/test_center_review.py` - `SchoolStatementTest` (split 15%/80% with a reversed receipt), `SecurityWordsTest`
+(every literal log sentence in auth/app/sync/nodectl matches a pattern; every key in both dictionaries), browser tests for history
+buttons + Arabic security log, the Excel workbook's sheet names, the school statement dialog, and the PDF paper width of 80/58/A5.
+**Limits:** real thermal printers at the centre are still to be tried (B04 sub-task).
+
 ## The desk sees what the centre PC really saved (review A04-A07, B01, B02 - 2026-10-05)
 
 **Why:** the completion review found four places where the screen and the truth could differ: the door read its sound and

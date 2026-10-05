@@ -2,9 +2,11 @@
 the centre PC really saved - door switches that work, a lost connection that stops saving, a payment pressed twice that is
 taken once, a handout never sold beyond the shelf, and a WhatsApp message counted only when the person says it went."""
 import os
+import re
 import sys
 import time
 import unittest
+from pathlib import Path
 from datetime import date
 
 from test_center_api import CenterFixture
@@ -61,6 +63,62 @@ class MoneyOnceTest(CenterFixture):
         self.pay(40, kind='material', materialId=material, qty=2)
         self.error('/api/c/pay', {'studentId': self.student, 'kind': 'material', 'materialId': material, 'qty': 1, 'amount': 20, 'method': 'cash'}, 'err.noStock')
         self.error('/api/c/pay', {'studentId': self.student, 'kind': 'material', 'materialId': material, 'qty': 'x', 'amount': 20, 'method': 'cash'}, 'err.amount')
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class SchoolStatementTest(CenterFixture):
+    """B06: the month of a school support group, split by the centre's rules, computed from attendance and receipts."""
+
+    def test_statement_splits_the_month_and_counts_reversals(self):
+        school = self.p + '-school'
+        self.put([('groups', school, {'name': 'School Group ' + self.p, 'teacherId': self.teacher, 'subjectId': self.p + '-subject', 'gradeCode': 'S1',
+                                      'feeType': 'session', 'fee': 60, 'capacity': 25, 'kind': 'school', 'active': True,
+                                      'slots': [{'day': D.weekday(date.today()), 'start': '00:00', 'end': '23:59'}]})])
+        self.c.post('/api/c/enroll', {'studentId': self.student, 'groupId': school})
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': D.session_id(school, self.day, '00:00')})
+        self.open_shift()
+        self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': school, 'kind': 'fee', 'amount': 60, 'method': 'cash'})
+        wrong = self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': school, 'kind': 'fee', 'amount': 40, 'method': 'cash'})
+        self.c.post('/api/c/void', {'id': wrong['id'], 'reason': 'Typed twice'})
+        ym = self.day[:7]
+        r = self.c.get(f'/api/c/school?groupId={school}&ym={ym}')
+        self.assertEqual(r['collected'], 60)                               # the reversed receipt cancels itself
+        self.assertEqual(r['split'], {'treasury': 9.0, 'teacher': 40.8, 'school': 10.2})   # 15% first, then 80% of the rest
+        self.assertEqual([(x['code'], x['visits'], x['paid']) for x in r['students']], [(str(10000 + type(self).serial * 500), 1, 60)])
+        self.assertEqual(r['held'], 1)
+        self.assertTrue(r['checks']['fee'] and r['checks']['students'])
+        with self.assertRaises(Exception) as e:
+            self.c.get(f'/api/c/school?groupId={self.group}&ym={ym}')      # an ordinary centre group has no school statement
+        self.assertEqual(e.exception.data.get('key'), 'err.notSchool')
+
+
+class SecurityWordsTest(unittest.TestCase):
+    """B08: every fixed sentence the server writes in the Logins & security log has a translation in the page."""
+
+    def test_every_fixed_server_sentence_is_translated(self):
+        js = (ROOT / 'js' / 'views' / 'activity.js').read_text(encoding='utf-8')
+        patterns = [re.compile(p.replace('\\/', '/')) for p in re.findall(r"\[/(\^.*?\$)/, '", js)]
+        self.assertGreater(len(patterns), 30)
+        sentences = []
+        for f in ('auth.py', 'app.py', 'sync.py', 'nodectl.py'):
+            src = (ROOT / 'server' / f).read_text(encoding='utf-8')
+            # log(..., 'event', target, 'Fixed sentence')  - plain literals only (sentences with values are covered by their pattern below)
+            sentences += re.findall(r"log\([^\n]*?, '[a-z-]+', [^\n]*?, '([A-Z][^'{}]+)'\)", src)
+        sentences += ['Wrong password (attempt 2 of 5)', 'Locked for 15 minutes after 5 wrong passwords', 'Account is locked until 2026-10-05 10:00',
+                      'Changed own password; 1 other session(s) logged out', '3 permission(s); updated for 2 person(s)',
+                      'Logged out automatically after 30 minutes without activity', 'Sessions ended by the administrator on PC-A (2 here)',
+                      'PC Desk (192.168.1.5) asks to join; confirmation number 123456', '4 records changed back; safety backup: b.zip',
+                      'Role: Front desk; active: True; teachers: all; permissions: door.use, students.view']
+        self.assertGreater(len(sentences), 25)
+        missing = [x for x in sentences if not any(p.match(x) for p in patterns)]
+        self.assertEqual(missing, [])
+        en = (ROOT / 'js' / 'i18n' / 'en.js').read_text(encoding='utf-8')
+        ar = (ROOT / 'js' / 'i18n' / 'ar.js').read_text(encoding='utf-8')
+        table = js.split('var DETAIL = [', 1)[1].split('var PART = [', 1)[0]
+        keys = set(re.findall(r"\$/, '([A-Za-z]+)'\]", table))
+        self.assertEqual([k for k in keys if "'sec.d." + k + "'" not in en or "'sec.d." + k + "'" not in ar], [])
 
 
 @SKIP
@@ -178,6 +236,83 @@ class DoorReviewTest(BrowserBase):
         pg.click('.dialog [data-ok]')
         pg.wait_for_selector('[data-card]:has-text("150")')
         self.assertEqual(self.c.get('/api/c/card?id=rv-s4')['wallet'], 150)
+        self.assertEqual(self.errors, [])
+
+    def test_b07_b08_history_buttons_and_security_log_in_arabic(self):
+        bad = self.S.client()
+        try:
+            bad.login('boss', 'not-the-password')
+        except Exception:
+            pass
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/activity')
+        pg.wait_for_selector('[data-tab="security"]')
+        pg.click('[data-tab="security"]')
+        pg.wait_for_selector('.log-row .log-sum')
+        text = pg.inner_text('#view')
+        self.assertIn('كلمة مرور خاطئة (المحاولة', text)
+        self.assertNotIn('Wrong password (attempt', text)
+        # the group panel and a list editor open the history of that one record
+        pg.goto(self.S.base + '/#/groups')
+        pg.wait_for_selector('[data-open-group], tr[data-id]')
+        pg.evaluate("HS.openGroup('rv-g')")
+        pg.wait_for_selector('.drawer [data-ghist]')
+        pg.click('.drawer [data-ghist]')
+        pg.wait_for_selector('.dialog [data-hist-host] li, .dialog [data-hist-host] .empty')
+        self.assertIn('Synthetic Review Group', pg.inner_text('.dialog'))
+        pg.click('.dialog [data-close]')
+        pg.evaluate("HS.lists.edit('teachers', 'rv-t')")
+        pg.wait_for_selector('.drawer [data-lhist]')
+        pg.click('.drawer [data-lhist]')
+        pg.wait_for_selector('.dialog [data-hist-host] li, .dialog [data-hist-host] .empty')
+        self.assertEqual(self.errors, [])
+
+    def test_b05_b06_month_report_to_excel_and_school_statement(self):
+        import io
+        import zipfile
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/reports')
+        pg.wait_for_selector('[data-xlsx]')
+        pg.wait_for_selector('.rep-kpis')
+        with pg.expect_download() as dl:
+            pg.click('[data-xlsx]')
+        with open(dl.value.path(), 'rb') as f:
+            z = zipfile.ZipFile(io.BytesIO(f.read()))
+        book = z.read('xl/workbook.xml').decode('utf-8')
+        for name in ('الملخص', 'ربحية', 'فروق'):                                 # one sheet per section, in the reader's language
+            self.assertIn(name, book)
+        self.assertGreaterEqual(book.count('<sheet '), 8)
+        # a school support group has its statement in the group panel
+        self.c.post('/api/commit', {'label': 'School group', 'ops': [{'e': 'groups', 'id': 'rv-school', 'op': 'put', 'row': {
+            'name': 'Synthetic School Group', 'teacherId': 'rv-t', 'subjectId': 'rv-sub', 'gradeCode': 'S1', 'feeType': 'session', 'fee': 50,
+            'capacity': 25, 'kind': 'school', 'active': True, 'slots': [{'day': D.weekday(date.today()), 'start': '00:00', 'end': '23:59'}]}}]})
+        pg.goto(self.S.base + '/#/groups'); pg.reload()
+        pg.wait_for_selector('#view')
+        pg.evaluate("HS.data.load().then(() => HS.openGroup('rv-school'))")
+        pg.wait_for_selector('.drawer [data-school]')
+        pg.click('.drawer [data-school]')
+        pg.wait_for_selector('.dialog [data-sch-body] .empty, .dialog .print-preview')
+        self.assertIn('كشف مجموعة التقوية', pg.inner_text('.dialog'))
+        self.assertEqual(self.errors, [])
+
+    def test_b04_receipt_paper_sizes_render_at_their_width(self):
+        """The receipt is rendered to PDF by Chromium with the page size the CSS asks for; the paper width is read back
+        from the PDF. A real printer is still to be tried at the centre (TASKS B04)."""
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/settings?tab=appearance')
+        pg.wait_for_selector('[data-pref="receiptPaper"]')
+        pg.evaluate("window.print = () => {}")
+        widths = {}
+        for paper, mm in (('80', 80), ('58', 58), ('a5', 148)):
+            pg.click(f'[data-pref="receiptPaper"][data-v="{paper}"]')
+            pg.evaluate("document.querySelectorAll('#print-sheet').forEach(e => e.remove())")
+            pg.click('[data-testprint]')
+            pg.wait_for_selector('#print-sheet .ps-receipt', state='attached')
+            self.assertEqual(pg.evaluate("document.querySelector('#print-sheet').className"), 'paper-' + paper)
+            pdf = pg.pdf(prefer_css_page_size=True, print_background=True)
+            box = re.search(rb'/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)', pdf)
+            widths[paper] = round(float(box.group(1)) / 72 * 25.4)
+            self.assertAlmostEqual(widths[paper], mm, delta=1, msg=widths)
         self.assertEqual(self.errors, [])
 
 

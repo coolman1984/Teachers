@@ -458,6 +458,15 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 .log-diff .now { font-weight: 600; }
 .log-ver { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 @media (max-width: 560px) { .sync-pill { padding: .3rem .5rem; } }
+/* an A4 sheet shown inside a dialog before printing (school statement): readable on screen, same order as on paper */
+.print-preview { display: grid; gap: .8rem; }
+.print-preview .ps-head h1 { margin: .2rem 0; font-size: 1.15rem; }
+.print-preview .ps-org { color: var(--ink-3); font-weight: 650; }
+.print-preview table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.print-preview th, .print-preview td { border: 1px solid var(--line); padding: .45rem .6rem; text-align: start; }
+.print-preview .ps-table th { width: 40%; background: var(--surface-2); font-weight: 650; }
+.print-preview .ps-list thead th { background: var(--surface-2); }
+.print-preview .ps-legal { color: var(--ink-3); font-size: .85rem; overflow-wrap: anywhere; }
 /* the centre PC cannot be reached: one plain sentence above every page, and the save buttons look unavailable (a click
    still explains why - js/core.js refuses the write instead of keeping it in the browser) */
 .offline-bar { display: none; align-items: center; gap: .6rem; padding: .7rem 1rem; background: var(--bad-soft); color: var(--bad); border-bottom: 1px solid var(--bad); }
@@ -741,6 +750,31 @@ button.chip { cursor: pointer; }
 .art.ok { color: var(--ok); background: var(--ok-soft); }
 
 #print-sheet { display: none; }
+/* receipts (80 mm roll by default; 58 mm roll and A5 by Settings → Appearance → Printing, per PC). These rules apply on the
+   screen too so js/views/print.js can measure the receipt and give the printer a page exactly as long as it (a thermal roll
+   then cuts right after the text; "size: 80mm auto" is not valid CSS and printed on A4). */
+.ps-receipt { width: 74mm; font-size: 10pt; display: grid; gap: 2mm; }
+.ps-receipt .r-head { display: grid; text-align: center; }
+.ps-receipt .r-head b { font-size: 13pt; }
+.ps-receipt .r-no { text-align: center; font-weight: 700; font-size: 12pt; letter-spacing: .05em; border-block: 1px dashed currentColor; padding-block: 1mm; }
+.ps-receipt table { width: 100%; border-collapse: collapse; }
+.ps-receipt th { text-align: start; font-weight: 600; padding: .6mm 0; width: 28%; vertical-align: top; }
+.ps-receipt td { padding: .6mm 0; }
+.ps-receipt .r-total { text-align: center; font-size: 18pt; font-weight: 800; border-block: 2px solid currentColor; padding-block: 1.5mm; }
+.ps-receipt .r-qr { width: 22mm; height: 22mm; margin-inline: auto; }
+.ps-receipt .r-qr svg { width: 100%; height: 100%; }
+.ps-receipt .r-foot { text-align: center; font-size: 8.5pt; }
+.ps-receipt th, .ps-receipt td { overflow-wrap: anywhere; }            /* a long Arabic name wraps instead of being cut */
+.paper-58 .ps-receipt { width: 54mm; font-size: 8.5pt; gap: 1.5mm; }
+.paper-58 .ps-receipt .r-head b { font-size: 11pt; }
+.paper-58 .ps-receipt .r-no { font-size: 10pt; letter-spacing: 0; }
+.paper-58 .ps-receipt th { width: 34%; }
+.paper-58 .ps-receipt .r-total { font-size: 14pt; }
+.paper-58 .ps-receipt .r-qr { width: 17mm; height: 17mm; }
+.paper-a5 .ps-receipt { width: 128mm; font-size: 12pt; gap: 3mm; }
+.paper-a5 .ps-receipt .r-total { font-size: 22pt; }
+.paper-a5 .ps-receipt .r-qr { width: 28mm; height: 28mm; }
+
 /* ---- Reports ---- */
 .bars { display: grid; gap: .55rem; }
 .bar-row { display: grid; grid-template-columns: minmax(6rem, 12rem) 1fr auto; gap: .7rem; align-items: center; }
@@ -772,18 +806,6 @@ button.chip { cursor: pointer; }
   .ps-table th { width: 22%; background: rgb(0 0 0 / .08); font-weight: 700; }
   .ps-legal { margin-block-start: .6cm; font-size: 9pt; font-style: italic; }
   @page { size: A4; margin: 1.5cm; }
-  @page receipt { size: 80mm auto; margin: 3mm; }
-  .ps-receipt { page: receipt; width: 74mm; font-size: 10pt; display: grid; gap: 2mm; }
-  .ps-receipt .r-head { display: grid; text-align: center; }
-  .ps-receipt .r-head b { font-size: 13pt; }
-  .ps-receipt .r-no { text-align: center; font-weight: 700; font-size: 12pt; letter-spacing: .05em; border-block: 1px dashed #000; padding-block: 1mm; }
-  .ps-receipt table { width: 100%; border-collapse: collapse; }
-  .ps-receipt th { text-align: start; font-weight: 600; padding: .6mm 0; width: 28%; vertical-align: top; }
-  .ps-receipt td { padding: .6mm 0; }
-  .ps-receipt .r-total { text-align: center; font-size: 18pt; font-weight: 800; border-block: 2px solid #000; padding-block: 1.5mm; }
-  .ps-receipt .r-qr { width: 22mm; height: 22mm; margin-inline: auto; }
-  .ps-receipt .r-qr svg { width: 100%; height: 100%; }
-  .ps-receipt .r-foot { text-align: center; font-size: 8.5pt; }
   .ps-list { width: 100%; border-collapse: collapse; font-size: 10pt; }
   .ps-list th, .ps-list td { border: 1px solid #000; padding: 1.4mm 2mm; text-align: start; }
   .ps-list .box { width: 9mm; }

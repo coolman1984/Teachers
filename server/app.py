@@ -1057,6 +1057,9 @@ class Handler(BaseHTTPRequestHandler):
         if action == 'settlements':
             self.need('settlements.view')
             return self.send(200, center.settlements(STORE, qs.get('ym', ''), sc))
+        if action == 'school':
+            self.need('reports.view', 'settlements.view')
+            return self.send(200, center.school_statement(STORE, qs.get('groupId', ''), qs.get('ym', ''), sc))
         if action == 'reports':
             self.need('reports.view')
             return self.send(200, center.reports(STORE, qs.get('ym', ''), sc))

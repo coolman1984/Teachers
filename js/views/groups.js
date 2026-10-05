@@ -277,6 +277,58 @@
   }
 
   /* ---------- the group panel ---------- */
+  /* ---------- school support group: the month statement for the school administration (B06) ---------- */
+  function schoolSheet(r) {
+    var p = function (h) { return String(h).replace(/<[^>]+>/g, ''); }, sys = ((D.state || {}).settings || {}).systemName || HS.t('app.name');
+    var row = function (k, v) { return '<tr><th>' + HS.esc(HS.t(k)) + '</th><td>' + v + '</td></tr>'; };
+    return '<div class="ps-head"><div><div class="ps-org">' + HS.esc(sys) + '</div><h1>' + HS.esc(HS.t('sch.title')) + '</h1><div>' +
+        HS.esc(r.group.name + ' · ' + r.group.teacher + ' · ' + HS.monthName(r.period)) + '</div></div></div>' +
+      '<table class="ps-table">' + row('sch.students', String(r.students.length) + (r.checks.students ? '' : ' ⚠ ' + HS.esc(HS.t('sch.overMax', { n: r.rules.maxStudents })))) +
+        row('sch.held', String(r.held)) + row('sch.collected', '<b>' + p(U.money(r.collected)) + '</b>') +
+        row('sch.treasury', p(U.money(r.split.treasury)) + ' <small>(' + r.rules.treasuryPct + '%)</small>') +
+        row('sch.teacher', p(U.money(r.split.teacher)) + ' <small>(' + HS.esc(HS.t('sch.teacherRule', { p: r.rules.teacherPct })) + ')</small>') +
+        row('sch.school', '<b>' + p(U.money(r.split.school)) + '</b>') + '</table>' +
+      '<table class="ps-list" style="margin-top:6mm"><thead><tr><th>#</th><th>' + HS.esc(HS.t('f.code')) + '</th><th>' + HS.esc(HS.t('f.name')) + '</th><th>' + HS.esc(HS.t('sch.visits')) + '</th><th>' + HS.esc(HS.t('sch.paid')) + '</th></tr></thead><tbody>' +
+        r.students.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td><td>' + U.bdi(x.code) + '</td><td>' + HS.esc(x.name) + '</td><td>' + x.visits + '</td><td>' + p(U.money(x.paid)) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<p class="ps-legal" style="margin-top:14mm">' + HS.esc(HS.t('sch.signatures')) + '</p>';
+  }
+  HS.schoolStatement = function (groupId) {
+    var ym = HS.thisMonth(), data = null;
+    var el = HS.dialog({ title: HS.t('sch.title'), wide: true, body: '<div class="row" data-sch-month></div><div data-sch-body><div class="skeleton" style="height:10rem"></div></div>',
+      footer: '<span class="grow"></span>' + (HS.can('excel.export') ? '<button class="btn" data-sch-x disabled>' + HS.icon('download', 'sm') + HS.esc(HS.t('rep.x.btn')) + '</button>' : '') +
+        '<button class="btn primary" data-sch-print disabled>' + HS.icon('printer', 'sm') + HS.esc(HS.t('rep.print')) + '</button>' });
+    var box = el.querySelector('[data-sch-body]');
+    function load() {
+      el.querySelector('[data-sch-month]').innerHTML = HS.monthPicker(ym);
+      box.innerHTML = '<div class="skeleton" style="height:10rem"></div>';
+      el.querySelectorAll('[data-sch-print],[data-sch-x]').forEach(function (b) { b.disabled = true; });
+      HS.get('/api/c/school?groupId=' + encodeURIComponent(groupId) + '&ym=' + ym).then(function (r) {
+        data = r;
+        box.innerHTML = (r.checks.fee ? '' : '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(HS.t('sch.overFee', { a: HS.fmt.num(r.rules.maxFee) })) + '</span></div>') +
+          (r.students.length || r.sessions.length ? '<div class="print-preview">' + schoolSheet(r) + '</div>' : U.empty('doc', HS.t('sch.empty'), HS.t('sch.empty.b')));
+        el.querySelectorAll('[data-sch-print],[data-sch-x]').forEach(function (b) { b.disabled = false; });
+      }, function (e) { data = null; box.innerHTML = U.empty('alert', U.errorText(e)); });
+    }
+    el.addEventListener('click', function (e) {
+      var m = e.target.closest('[data-month]'); if (m) { ym = HS.monthShift(ym, Number(m.dataset.month)); load(); return; }
+      if (e.target.closest('[data-sch-print]') && data) { HS.printHTML(schoolSheet(data)); return; }
+      var x = e.target.closest('[data-sch-x]');
+      if (x && data) {
+        var t = HS.t, r = data;
+        x.disabled = true;
+        HS.api('POST', '/api/xlsx', { filename: 'Hessa school ' + r.period, sheets: [
+          { name: t('sch.title'), head: [t('rep.x.item'), t('rep.x.value')], rows: [[t('f.group'), r.group.name], [t('f.teacherId'), r.group.teacher], [t('rep.x.month'), r.period],
+            [t('sch.students'), r.students.length], [t('sch.held'), r.held], [t('sch.collected'), r.collected], [t('sch.treasury'), r.split.treasury], [t('sch.teacher'), r.split.teacher], [t('sch.school'), r.split.school]] },
+          { name: t('sch.students'), head: [t('f.code'), t('f.name'), t('sch.visits'), t('sch.paid')], rows: r.students.map(function (s) { return [s.code, s.name, s.visits, s.paid]; }) },
+          { name: t('sch.sessions'), head: [t('f.date'), t('sch.from'), t('sch.to'), t('sch.status')], rows: r.sessions.map(function (s) { return [s.date, s.start, s.end, t('sess.status.' + s.status)]; }) }
+        ] }, { blob: true }).then(function (blob) {
+          U.download(t('sch.title') + ' ' + r.period + '.xlsx', blob, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); HS.toast(t('rep.x.done'));
+        }, function (er) { HS.toast(U.errorText(er), 'bad', 5000); }).then(function () { x.disabled = false; });
+      }
+    });
+    load();
+  };
+
   function openGroup(id) {
     var g = D.get('groups', id); if (!g) return;
     var bal = null;
@@ -299,7 +351,9 @@
     }
     HS.panel.open({ title: g.name, body: '<div class="stack" data-gbody>' + body() + '</div>',
       footer: (HS.can(['groups.manage', 'attendance.mark']) ? '<button class="btn" data-extra>' + HS.icon('plus', 'sm') + HS.esc(HS.t('sess.add')) + '</button>' : '') + (HS.can('groups.manage') ? '<button class="btn" data-edit>' + HS.icon('settings', 'sm') + HS.esc(HS.t('grp.edit')) + '</button>' : '') +
-        '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('grp.printList')) + '</button>',
+        '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('grp.printList')) + '</button>' +
+        (g.kind === 'school' && HS.can(['reports.view', 'settlements.view']) ? '<button class="btn" data-school>' + HS.icon('doc', 'sm') + HS.esc(HS.t('sch.btn')) + '</button>' : '') +
+        (HS.can('logs.view') ? '<button class="btn ghost" data-ghist>' + HS.icon('activity', 'sm') + HS.esc(HS.t('stu.tab.history')) + '</button>' : ''),
       mount: function (p) {
         if (HS.can(['money.view', 'money.collect'])) HS.get('/api/c/balances').then(function (r) { bal = r; p.querySelector('[data-gbody]').innerHTML = body(); }, function () {});
         p.addEventListener('click', function (e) {
@@ -307,6 +361,8 @@
           if (e.target.closest('[data-edit]')) { editGroup(id); return; }
           if (e.target.closest('[data-extra]')) { extraSession(g); return; }
           if (e.target.closest('[data-print]')) { HS.printGroupList(g); return; }
+          if (e.target.closest('[data-school]')) { HS.schoolStatement(id); return; }
+          if (e.target.closest('[data-ghist]')) { HS.audit.historyDialog('groups', id); return; }   // who changed the fee, times or teacher, and undo
           if (e.target.closest('[data-bulk]')) bulkEnrol(g, function () { p.querySelector('[data-gbody]').innerHTML = body(); });
         });
       } });

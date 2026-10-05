@@ -85,14 +85,37 @@
       (setting('receiptFooter') ? '<p class="r-foot">' + HS.esc(setting('receiptFooter')) + '</p>' : '') +
       '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>');
   };
-  HS.printHTML = function (html) { printSheet(html); };   // any page's own A4 sheet (settlement statements, reports)
+  HS.printHTML = function (html) { printSheet(html); };
+  /* a sample receipt to set up the printer: nothing is saved, the number says it is a test */
+  HS.printTestReceipt = function () {
+    printSheet(receipt({ no: HS.t('print.testNo'), date: U.today(), at: new Date().toTimeString().slice(0, 5), studentId: '', amount: 1250, method: 'cash', by: (HS.me || {}).full_name || '' })
+      .replace('<table>', '<table><tr><th>' + HS.esc(HS.t('f.name')) + '</th><td>' + HS.esc(HS.t('print.testName')) + '</td></tr>'));
+  };   // any page's own A4 sheet (settlement statements, reports)
+  var PAPER = { '80': { w: 80, m: 3 }, '58': { w: 58, m: 2 }, a5: { w: 148, h: 210, m: 10 } };
+  /* A receipt gets a page as wide as the paper of this PC and exactly as long as the receipt (measured once off screen), so a
+     thermal roll stops right after the text; every other sheet keeps the A4 page of css/base.css. */
+  function receiptPage(el) {
+    var paper = PAPER[HS.prefs.data.receiptPaper] || PAPER['80'], r = el.querySelector('.ps-receipt');
+    if (!r) return null;
+    el.style.cssText = 'display:block;position:fixed;top:0;inset-inline-start:-10000px;visibility:hidden;font-size:12pt';
+    var mm = r.getBoundingClientRect().height * 25.4 / 96;
+    el.style.cssText = '';
+    var style = document.createElement('style');
+    style.id = 'print-page';
+    style.textContent = '@page { size: ' + paper.w + 'mm ' + (paper.h || Math.ceil(mm + 2 * paper.m + 4)) + 'mm; margin: ' + paper.m + 'mm; }';
+    document.head.appendChild(style);
+    return style;
+  }
   function printSheet(html) {
     var el = document.createElement('div');
     el.id = 'print-sheet';
+    el.className = 'paper-' + (PAPER[HS.prefs.data.receiptPaper] ? HS.prefs.data.receiptPaper : '80');   // only receipts change with it
     el.innerHTML = html;
     document.body.appendChild(el);
+    var old = document.getElementById('print-page'); if (old) old.remove();
+    var page = receiptPage(el);
     document.body.classList.add('printing');
-    var done = function () { document.body.classList.remove('printing'); el.remove(); window.removeEventListener('afterprint', done); };
+    var done = function () { document.body.classList.remove('printing'); el.remove(); if (page) page.remove(); window.removeEventListener('afterprint', done); };
     window.addEventListener('afterprint', done);
     setTimeout(function () { window.print(); }, 60);
   }

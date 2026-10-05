@@ -93,6 +93,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A04 Door sound / automatic check-in are centre settings (Settings → Rules) and the door obeys them on every PC
 - [x] A05 Opening WhatsApp/SMS is not "sent": the person confirms, only then a follow-up is logged and counted; a failed save shows and can be retried (door and student file use the same sender)
 - [x] A06 `docs/GATEWAY_SETUP.md` (Egyptian Arabic) and `docs/RELEASE_NOTES.md` written; `build_windows.py --check` fails in seconds on any missing shipped file and runs on every push
+- [x] B04 Receipt paper per PC (80 mm, 58 mm, A5) + automatic printing switch + test print in Settings → Appearance; the page is measured so a roll stops after the text (`size: 80mm auto` was invalid CSS and printed on A4). PDF width checked in Chromium for all three
+  - [ ] Try the three sizes on the centre's real printers (needs the printers)
 - [x] A07 Lost connection to the centre PC: a bar on every page, save buttons dimmed, writes refused in the browser (no hidden queue); a payment saved again after a lost answer returns the same receipt (one key per dialog, `pk<key>` ids)
 
 ## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)
@@ -109,8 +111,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A11 Spreadsheet formula protection and one download helper (`U.csv`, `U.download`); phone overflow of wide tables fixed (`.stack > *`)
 - [x] A12 Help topics "Several PCs and sharing" and the new safety answers (EN + Formal Arabic); administrator guide
 - [x] A13 Decision: BAMS "office mode" (thin PC) is **not** ported - a browser on the centre PC's address already is that; the Add-a-PC dialog explains the choice
-- [ ] A14 History button in the group panel and Settings lists (API `GET /api/audit?entity=&id=` is ready)
-- [ ] A15 The detail sentences of the Logins & security list come from the server in English (the event names are translated)
+- [x] A14 History button in the group panel and every Settings list editor (`logs.view`; review B07)
+- [x] A15 Logins & security details read in the reader's language: every fixed server sentence has a pattern + dictionary text (old entries too; the stored log is never rewritten; `SecurityWordsTest` checks every sentence in the server code; review B08)
 
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)
@@ -118,8 +120,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P6.3 Teacher settlements (formula in words, approve / changed-after-approval, prefilled payout, printed statement)
 - [ ] P6.4 Reports + profitability + presentation
   - [x] Month figures, daily charts, breakdowns, profitability with one decision per group, drawer differences, 4-slide presentation, print
-  - [ ] Excel export of the report (sheets per section)
-- [ ] P6.5 School support groups statement
+  - [x] Excel export of the report: 8 sheets (summary, per teacher, per method, expenses, attendance per day, money per day, profitability, drawer differences) in the reader's language, same scoped numbers as the screen (review B05)
+- [x] P6.5 School support groups statement (`GET /api/c/school`: students, visits, paid incl. reversals, sessions, treasury → teacher → school split, limit checks; screen + A4 print + Excel from the group panel; review B06)
 
 ## Phase P7 – Parent link
 - [ ] P7.1 Worker routes

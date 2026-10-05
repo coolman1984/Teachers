@@ -98,7 +98,7 @@
         var body = { kind: k, studentId: el.querySelector('[data-sid]').value || '', amount: el.querySelector('#in-a').value, method: segValue(el, 'method'), note: el.querySelector('#in-n').value, key: payKey };
         if (k === 'material') { body.materialId = el.querySelector('#in-m').value; body.qty = el.querySelector('#in-q').value; }
         var btn = ev.currentTarget; btn.disabled = true;
-        HS.post('/api/c/pay', body).then(function (r) { HS.overlay.close(); HS.toast(HS.t('pay.done', { no: r.no })); if (who && HS.printReceipt && HS.prefs.data.autoReceipt) HS.printReceipt(r); done(r); },
+        HS.post('/api/c/pay', body).then(function (r) { HS.overlay.close(); HS.toast(HS.t('pay.done', { no: r.no })); if (who && HS.printReceipt && HS.prefs.data.autoReceipt === 'on') HS.printReceipt(r); done(r); },
           function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); });
       });
     }, function () {});

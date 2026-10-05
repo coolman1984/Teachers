@@ -3,7 +3,8 @@
 (function () {
   'use strict';
   var HS = window.HS;
-  var DEFAULTS = { lang: 'ar', theme: 'auto', font: 'plex', size: 'm', density: 'comfortable', motion: 'auto', collapsed: false, tours: {}, welcomed: false };
+  var DEFAULTS = { lang: 'ar', theme: 'auto', font: 'plex', size: 'm', density: 'comfortable', motion: 'auto', collapsed: false, tours: {}, welcomed: false,
+    receiptPaper: '80', autoReceipt: 'off' };   // printing belongs to the PC its printer is plugged into
   var KEY = 'hs.prefs';
   var P = HS.prefs = { data: {} };
 
@@ -37,7 +38,7 @@
     P.apply();
   };
   P.reset = function () {
-    var keep = { tours: P.data.tours, welcomed: P.data.welcomed, collapsed: P.data.collapsed };
+    var keep = { tours: P.data.tours, welcomed: P.data.welcomed, collapsed: P.data.collapsed, receiptPaper: P.data.receiptPaper, autoReceipt: P.data.autoReceipt };
     P.data = Object.assign({}, DEFAULTS, keep);
     P.save();
     P.apply();

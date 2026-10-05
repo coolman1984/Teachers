@@ -33,6 +33,9 @@
       block(HS.t('ap.size'), HS.t('ap.size.d'), seg('size', ['s', 'm', 'l', 'xl'], 'ap.size.', d.size)) +
       block(HS.t('ap.density'), HS.t('ap.density.d'), seg('density', ['comfortable', 'compact'], 'ap.density.', d.density)) +
       block(HS.t('ap.motion'), HS.t('ap.motion.d'), seg('motion', ['auto', 'on', 'off'], 'ap.motion.', d.motion)) +
+      block(HS.t('ap.paper'), HS.t('ap.paper.d'), seg('receiptPaper', ['80', '58', 'a5'], 'ap.paper.', d.receiptPaper) +
+        '<div class="row wrap" style="margin-top:.6rem;gap:.6rem">' + seg('autoReceipt', ['off', 'on'], 'ap.auto.', d.autoReceipt) +
+        '<button type="button" class="btn sm" data-testprint>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ap.testPrint')) + '</button></div>') +
       '<div class="row" style="padding-top:1rem"><button class="btn" data-reset>' + HS.icon('refresh', 'sm') + HS.esc(HS.t('ap.reset')) + '</button><span class="faint">' + HS.esc(HS.t('ap.saved.local')) + '</span></div>';
   }
   function preview() {
@@ -126,6 +129,7 @@
         var t = e.target.closest('[data-tab]');
         if (t) { HS.go('settings?tab=' + t.dataset.tab); return; }
         if (e.target.closest('[data-reset]')) { HS.prefs.reset(); HS.rerender(); }
+        if (e.target.closest('[data-testprint]') && HS.printTestReceipt) HS.printTestReceipt();
       });
     }
   });

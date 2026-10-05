@@ -1424,6 +1424,53 @@ def _month_facts(store, ym):
     return {'rev': rev, 'mat': mat, 'held': held, 'visits': visits, 'exp': exp, 'first': first, 'last': last}
 
 
+def school_statement(store, group_id, ym, scopes=None):
+    """B06 - the month of one school support group for the school administration: each student's visits and money, the
+    sessions held, and the split by the centre's rules (treasury first, then the teacher's share of the rest, the remainder to
+    the school). Everything is computed from attendance and receipts (reversals included), never stored."""
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
+    g = store.row('groups', group_id)
+    if not g or (scopes is not None and g.get('teacherId') not in scopes):
+        raise Problem('err.notFound', 'Group not found.')
+    if g.get('kind') != 'school':
+        raise Problem('err.notSchool', 'This statement is only for school support groups.')
+    first, last = D.month_bounds(ym)
+    a, b = first.isoformat(), last.isoformat()
+    cfg = settings(store)
+    with store.lock:
+        c = store.conn
+        sessions = [{'date': r[0], 'start': r[1], 'end': r[2], 'status': r[3]} for r in c.execute(
+            "SELECT date, start_time, end_time, status FROM sessions WHERE deleted=0 AND group_id=? AND date>=? AND date<=? ORDER BY date, start_time",
+            (group_id, a, b))]
+        visits = {r[0]: r[1] for r in c.execute(
+            "SELECT student_id, COUNT(*) FROM attendance WHERE deleted=0 AND group_id=? AND status IN ('present','late') AND date>=? AND date<=? "
+            "GROUP BY student_id", (group_id, a, b))}
+        paid = {r[0]: float(r[1] or 0) for r in c.execute(
+            "SELECT student_id, SUM(amount) FROM payments WHERE deleted=0 AND kind='fee' AND group_id=? AND date>=? AND date<=? GROUP BY student_id",
+            (group_id, a, b))}
+        ids = {r[0] for r in c.execute(
+            "SELECT student_id FROM enrollments WHERE deleted=0 AND group_id=? AND (from_date IS NULL OR from_date='' OR from_date<=?) "
+            "AND (to_date IS NULL OR to_date='' OR to_date>=?)", (group_id, b, a))}
+    ids |= set(visits) | set(paid)
+    students = []
+    for sid in ids:
+        st = store.row('students', sid) or {}
+        students.append({'studentId': sid, 'code': st.get('code') or '', 'name': st.get('name') or '', 'visits': visits.get(sid, 0),
+                         'paid': round(paid.get(sid, 0), 2)})
+    students.sort(key=lambda x: (x['name'], x['code']))
+    collected = round(sum(x['paid'] for x in students), 2)
+    split = D.school_split(collected, float(cfg['schoolTreasuryPct']), float(cfg['schoolTeacherPct']))
+    held = [x for x in sessions if x['status'] == 'held']
+    max_students, max_fee = int(cfg['schoolMaxStudents']), float(cfg['schoolMaxFee'])
+    t = store.row('teachers', g.get('teacherId')) or {}
+    return {'group': {'id': g['id'], 'name': g.get('name'), 'teacher': t.get('name') or '', 'subjectId': g.get('subjectId'), 'gradeCode': g.get('gradeCode'),
+                      'fee': g.get('fee'), 'feeType': g.get('feeType')},
+            'period': ym, 'students': students, 'sessions': sessions, 'held': len(held), 'collected': collected, 'split': split,
+            'rules': {'treasuryPct': float(cfg['schoolTreasuryPct']), 'teacherPct': float(cfg['schoolTeacherPct']), 'maxStudents': max_students, 'maxFee': max_fee},
+            'checks': {'students': len(students) <= max_students, 'fee': float(g.get('fee') or 0) <= max_fee}}
+
+
 def settlement(store, teacher_id, ym, facts=None):
     """The month of one teacher: what was collected, the centre's share by the agreed terms, handouts, deductions,
     what was already paid out and what is still due."""

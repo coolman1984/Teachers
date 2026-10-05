@@ -160,7 +160,7 @@
           ref: (el.querySelector('#pay-r') || {}).value || '', period: p ? p.value : '', confirmDuplicate: dupSeen }).then(function (r) {
           HS.overlay.close(); beep('ok');
           HS.toast(HS.t('pay.done', { no: r.no }));
-          if (HS.printReceipt && HS.prefs.data.autoReceipt) HS.printReceipt(r);
+          if (HS.printReceipt && HS.prefs.data.autoReceipt === 'on') HS.printReceipt(r);
           done(r);
         }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       }
@@ -220,7 +220,7 @@
         HS.post('/api/c/pay/many', { method: method, ref: el.querySelector('#fam-r').value, confirmDuplicate: dupSeen, key: payKey,
           items: items.map(function (x) { return { studentId: x.r.p.id, groupId: x.r.l.groupId, amount: x.amount }; }) }).then(function (r) {
           HS.overlay.close(); beep('ok'); HS.toast(HS.t('fam.done', { n: r.receipts.length, a: HS.fmt.num(r.total) }));
-          if (HS.printFamilyReceipt && HS.prefs.data.autoReceipt) HS.printFamilyReceipt(r);
+          if (HS.printFamilyReceipt && HS.prefs.data.autoReceipt === 'on') HS.printFamilyReceipt(r);
           done(r);
         }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       });

@@ -39,7 +39,8 @@
     HS.panel.open({ title: HS.t('list.' + entity), body: '<form data-list-form>' + U.fields(cfg.fields, values) +
       (entity === 'teachers' ? '<p data-terms-preview class="notice" role="status"></p>' : '') + '</form>',
       footer: '<button class="btn primary" data-save>' + HS.esc(HS.t('common.save')) + '</button>' +
-        (cur ? '<button class="btn danger" data-delete>' + HS.esc(HS.t('common.delete')) + '</button>' : ''),
+        (cur ? '<button class="btn danger" data-delete>' + HS.esc(HS.t('common.delete')) + '</button>' : '') +
+        (cur && HS.can('logs.view') ? '<button class="btn ghost" data-lhist>' + HS.icon('activity', 'sm') + HS.esc(HS.t('stu.tab.history')) + '</button>' : ''),
       mount: function (root) {
         function terms() {
           if (entity !== 'teachers') return;
@@ -50,6 +51,8 @@
           root.querySelector('[data-terms-preview]').textContent = HS.t('settle.example', { amount: L.terms(L.normalizeTerms(row)) });
         }
         root.addEventListener('input', terms); root.addEventListener('change', terms); terms();
+        var hist = root.querySelector('[data-lhist]');
+        if (hist) hist.addEventListener('click', function () { HS.audit.historyDialog(entity, id); });
         root.querySelector('[data-save]').addEventListener('click', function (event) {
           var read = U.read(root, cfg.fields);
           if (read.missing.length) { HS.toast(HS.t('form.missing', { f: read.missing.join(', ') }), 'bad'); return; }
