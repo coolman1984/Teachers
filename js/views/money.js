@@ -207,7 +207,7 @@
         .sort(function (a, b) { return String(b.date + (b.at || '')).localeCompare(String(a.date + (a.at || ''))); });
       pane._rows = rows;
       var total = rows.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0);
-      pane.querySelector('[data-led]').innerHTML = '<div class="row wrap" style="margin-bottom:.8rem"><span class="badge">' + HS.esc(HS.t('stu.count')) + ' <b class="num">' + rows.length + '</b></span><span class="badge signal">' + HS.esc(HS.t('ov.chart.total')) + ' ' + U.money(Math.round(total * 100) / 100) + '</span>' + (which === 'receipts' ? byMethod(rows) : '') + '</div>' +
+      pane.querySelector('[data-led]').innerHTML = '<div class="row wrap" style="margin-bottom:.8rem"><span class="badge">' + HS.esc(HS.t(which === 'receipts' ? 'shift.receipts' : 'money.tab.expenses')) + ' <b class="num">' + rows.length + '</b></span><span class="badge signal">' + HS.esc(HS.t('ov.chart.total')) + ' ' + U.money(Math.round(total * 100) / 100) + '</span>' + (which === 'receipts' ? byMethod(rows) : '') + '</div>' +
         (rows.length ? (which === 'receipts' ? receiptsTable(rows, true) : expensesTable(rows)) : U.empty(which === 'receipts' ? 'sheet' : 'doc', HS.t('money.none'), HS.t('money.none.b')));
     }, function (e) { pane.querySelector('[data-led]').innerHTML = U.empty('alert', U.errorText(e)); });
   }
