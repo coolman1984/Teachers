@@ -6,7 +6,7 @@
   'use strict';
   var HS = window.HS, U = HS.ui, A = HS.audit;
   var PAGE = 100;
-  var TONE = { 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
+  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
     'user-unlocked': 'warn', 'forced-logout': 'warn', 'password-reset': 'warn', 'admin-reset': 'warn', 'user-disabled': 'warn', 'user-deleted': 'warn',
     'profile-deleted': 'warn', 'link-created': 'warn', 'node-enrolled': 'warn', 'node-revoked': 'warn', 'pairing-code': 'warn', 'pairing-request': 'warn',
     'pairing-rejected': 'warn', 'pc-adding-open': 'warn', 'authority-exported': 'warn', 'authority-imported': 'warn', 'backup-set': 'warn', 'backup-removed': 'warn',
@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), security: blank() };
@@ -83,7 +83,11 @@
     [/^The administrator key was handed to the backup administrator PC$/, 'keySent'],
     [/^PC (.+) \((.+)\) asks to join; confirmation number (\d+)$/, 'pairing'],
     [/^Office secret shown$/, 'secretShown'],
-    [/^Setup code shown$/, 'codeShown']
+    [/^Setup code shown$/, 'codeShown'],
+    [/^Signed in from outside the centre$/, 'remoteLogin'],
+    [/^Sign-in from outside the centre refused: no permission$/, 'remoteRefused'],
+    [/^Work from outside the centre switched on$/, 'remoteOn'],
+    [/^Work from outside the centre switched off$/, 'remoteOff']
   ];
   var PART = [
     [/^(User name|Name|Job title|Role|Active|Must change password|Notes): (.*) -> (.*)$/, 'field'],

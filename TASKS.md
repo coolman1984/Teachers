@@ -52,7 +52,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Today's sessions strip + roll-call panel (P5.4 basics); live refresh without redrawing the door
   - [x] Browser tests `tests/test_e2e_center.py` (door flow, roll call, phone tab bar) – 3 OK with local Chrome
   - [x] Handout sale (teacher's handouts first, never beyond stock - `err.noStock`) and money in advance from the card; sounds setting obeyed (A04)
-  - [ ] Camera scan verified on HTTPS (B03 - needs a phone and the remote-access address)
+  - [ ] Camera scan verified on HTTPS (B03: the camera button appears in a secure context, which the remote address now gives - to try on a phone)
 - [ ] P5.2 Students + student panel + cards/receipt printing
   - [x] List filters (grade, group, teacher, debt, risk, no parent number) with computed balances (`/api/c/balances`)
   - [x] Student file tabs; grade-system-track form; enrol/move/end with seats; follow-up log; ID cards with QR (10 per A4)
@@ -113,6 +113,17 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A13 Decision: BAMS "office mode" (thin PC) is **not** ported - a browser on the centre PC's address already is that; the Add-a-PC dialog explains the choice
 - [x] A14 History button in the group panel and every Settings list editor (`logs.view`; review B07)
 - [x] A15 Logins & security details read in the reader's language: every fixed server sentence has a pattern + dictionary text (old entries too; the stored log is never rewritten; `SecurityWordsTest` checks every sentence in the server code; review B08)
+
+## Work from outside the centre (owner's request, review D01-D08 - 2026-10-05)
+- [x] D01 Outbound secure tunnel instead of an open port: Tailscale (recommended: free, private, also carries laptop sync) or Cloudflare Tunnel (public address, needs a domain) - `docs/REMOTE_ACCESS.md`; no custom relay to build or host
+- [x] D02 A tunnel request is never "the PC itself" (it came from 127.0.0.1 - it would have opened first start, joining and backup folders to the internet); refused until the administrator switches remote work on at the centre (Settings → Remote work, `config.json` of that PC); only people with the new `remote.use` permission sign in; taking the permission away ends the remote session at the next request; every sign-in and refusal logged with the real address
+- [x] D03 The same screens over HTTPS (Secure cookie, HSTS, Origin checked against the forwarded host); a Tailscale device reaching the program straight (100.64.0.0/10) counts as outside too
+- [x] D04 Writes from outside: one key per payment dialog (A07) - a retry after a lost answer returns the same receipt; success is shown only after the centre PC saved it
+- [x] D05 A laptop at home with its own copy: the existing signed sync over the Tailscale network, joined through the 15-minute adding window (guide)
+- [x] D06 Centre PC off: nobody works from outside, the open pages say so and save nothing (A07); a laptop with its own copy keeps working (documented choice; no hosted copy of the children's data)
+- [x] D07 Conflicts: remote work goes to the same centre server (no second writer); laptop copies use the existing merge rules and money stays append-only
+- [x] D08 Remote switch, last request from outside, allowed people on one page; tunnel secrets live in the tunnel program, never in Hessa's data
+  - [ ] Try both tunnels with the owner's accounts and a phone on 4G (needs the owner's Tailscale/Cloudflare login)
 
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)

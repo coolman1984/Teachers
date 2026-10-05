@@ -344,6 +344,20 @@ class DoorReviewTest(BrowserBase):
         self.assertTrue(wait_until(lambda: next(x for x in self.c.get('/api/state')['exams'] if x['id'] == 'rv-x').get('published') is True))
         self.assertEqual([e for e in self.errors if 'status of 400' not in e], [])          # the refused http:// address is the only 400
 
+    def test_d_remote_work_switch_in_settings(self):
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/settings?tab=remote')
+        pg.wait_for_selector('[data-rm="1"]')
+        self.assertIn('لم يصل أي طلب من الخارج', pg.inner_text('#view'))
+        pg.click('[data-rm="1"]')
+        pg.wait_for_selector('.dialog')
+        pg.click('.dialog .btn.primary, .dialog [data-ok]')
+        self.assertTrue(wait_until(lambda: self.c.get('/api/remote')['on'] is True))
+        pg.wait_for_selector('[data-rm="1"][aria-pressed="true"]')
+        pg.click('[data-rm="0"]')
+        self.assertTrue(wait_until(lambda: self.c.get('/api/remote')['on'] is False))
+        self.assertEqual(self.errors, [])
+
 
 if __name__ == '__main__':
     unittest.main()

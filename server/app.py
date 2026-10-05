@@ -6,9 +6,11 @@ printed in the console window. Everybody must log in; what each user may see and
 do is set by the administrator (Users page) and checked here for every request.
 """
 import hashlib
+import ipaddress
 import html
 
 import json
+import re
 import logging
 import logging.handlers
 import mimetypes
@@ -129,6 +131,23 @@ def set_backup_folder(folder):
     BACKUPS.last_error = ''
 
 
+def write_config(key, value):
+    """One setting of this PC into config.json (never the shared data): kept across restarts and updates."""
+    try:
+        cfg = {}
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, encoding='utf-8') as fh:
+                cfg = json.load(fh)
+        cfg[key] = value
+        tmp = CONFIG_PATH + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            json.dump(cfg, fh, indent=2)
+        os.replace(tmp, CONFIG_PATH)
+    except (OSError, ValueError):
+        raise BadRequest('The setting could not be saved (config.json is damaged or cannot be written).')
+    CFG[key] = value
+
+
 def resolve(p):
     return p if os.path.isabs(p) else os.path.join(HOME, p)
 
@@ -217,6 +236,23 @@ COOKIE = 'hs_sid'
 ABOUT = {'product': PRODUCT, 'version': VERSION, 'developer': DEVELOPER, 'copyright': COPYRIGHT, 'license': LICENSE_NOTE,
          'installed': ASSETS is not None}
 LOCAL_IPS = ('127.0.0.1', '::1', '::ffff:127.0.0.1')
+# A secure tunnel on this PC (Tailscale serve, Cloudflare Tunnel, docs/REMOTE_ACCESS.md) hands requests from the internet to the
+# program from 127.0.0.1. Such a request carries the proxy's headers and must never count as "the PC itself" (first start,
+# joining, backup folders...). It is accepted only while "Work from outside the centre" is on for this PC, and only for people
+# with the remote.use permission.
+PROXY_HEADERS = ('Cf-Connecting-Ip', 'Cf-Ray', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Real-Ip', 'Forwarded',
+                 'Tailscale-User-Login')
+IP_RE = re.compile(r'^[0-9A-Fa-f:.]{3,45}$')
+
+
+def in_tailnet(ip):
+    """Tailscale gives every device an address in 100.64.0.0/10 (and fd7a:115c:a1e0::/48): never a PC of the centre's own network."""
+    try:
+        a = ipaddress.ip_address(ip.split('%')[0].replace('::ffff:', ''))
+    except ValueError:
+        return False
+    return a in ipaddress.ip_network('100.64.0.0/10') or a in ipaddress.ip_network('fd7a:115c:a1e0::/48')
+REMOTE_SEEN = {'at': None, 'ip': '', 'user': ''}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "connect-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 PERM_LABEL = {p: label for _, ps in PERMISSIONS for p, label in ps}
@@ -386,8 +422,49 @@ class Handler(BaseHTTPRequestHandler):
         return '/k/…' if self.path.startswith('/k/') else self.path
 
     @property
+    def via_proxy(self):
+        return self.client_address[0] in LOCAL_IPS and any(self.headers.get(h) for h in PROXY_HEADERS)
+
+    @property
+    def outside(self):
+        """From outside the centre: through a tunnel on this PC, or straight from a Tailscale device (100.64.0.0/10)."""
+        return self.via_proxy or in_tailnet(self.client_address[0])
+
+    @property
     def ip(self):
-        return self.client_address[0]
+        if not self.via_proxy:
+            return self.client_address[0]
+        fwd = (self.headers.get('Cf-Connecting-Ip') or (self.headers.get('X-Forwarded-For') or '').split(',')[-1] or self.headers.get('X-Real-Ip') or '').strip()
+        return fwd if IP_RE.match(fwd) and fwd not in LOCAL_IPS else 'internet'
+
+    @property
+    def https(self):
+        return self.via_proxy and ((self.headers.get('X-Forwarded-Proto') or '').lower() == 'https' or '"https"' in (self.headers.get('Cf-Visitor') or ''))
+
+    def remote_gate(self):
+        """Requests through the tunnel: refused while the owner has not switched remote work on for this PC."""
+        if not self.outside:
+            return True
+        REMOTE_SEEN.update(at=datetime.now().isoformat(timespec='seconds'), ip=self.ip)
+        if CFG.get('remote_access'):
+            return True
+        page = ('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<title>Hessa</title></head><body style="font-family:system-ui,Segoe UI,Tahoma,sans-serif;max-width:30rem;margin:15vh auto;padding:0 16px;text-align:center">'
+                '<h1>العمل من خارج المركز متوقف</h1><p>يفعّله مسؤول المركز من جهاز المركز: الإعدادات ← العمل من الخارج.</p>'
+                '<p dir="ltr" style="color:#5b6675">Working from outside the centre is switched off. The administrator switches it on at the centre PC: '
+                'Settings → Remote work.</p></body></html>')
+        if self.path.startswith('/api/'):
+            self.send(403, {'error': 'Working from outside the centre is switched off on the centre PC.', 'key': 'err.remoteOff'})
+        else:
+            self.send(403, page, 'text/html; charset=utf-8', {'Cache-Control': 'no-store'})
+        return False
+
+    def remote_allowed(self, u):
+        """Signed in through the tunnel: only people the administrator allowed to work from outside."""
+        if self.outside and u and 'remote.use' not in u['perms']:
+            raise Forbidden('You may work only inside the centre. The administrator can allow working from outside (permission "Work from outside the centre").')
+        if self.outside and u:
+            REMOTE_SEEN['user'] = u['display']
 
     @property
     def token(self):
@@ -401,6 +478,7 @@ class Handler(BaseHTTPRequestHandler):
         self.u = AUTH.session(self.token, self.ip, touch)
         if not self.u:
             raise NotLoggedIn()
+        self.remote_allowed(self.u)
         return self.u
 
     def can(self, *perms):
@@ -427,6 +505,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'same-origin')
         if ctype.startswith('text/html'):
             self.send_header('Content-Security-Policy', CSP)
+        if self.https:
+            self.send_header('Strict-Transport-Security', 'max-age=31536000')
         headers = dict(headers or {})
         if self.path.startswith('/api/'):
             headers.setdefault('Cache-Control', 'no-store')
@@ -471,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(200 if ok else 404, page, 'text/html; charset=utf-8', {'Cache-Control': 'no-store'})
 
     def set_session(self, token):
-        return {'Set-Cookie': f'{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict'}
+        return {'Set-Cookie': f'{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict' + ('; Secure' if self.https else '')}
 
     def clear_session(self):
         return {'Set-Cookie': f'{COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'}
@@ -534,11 +614,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.u = None
-        self.handle_safely(self._get)
+        if self.remote_gate():
+            self.handle_safely(self._get)
 
     def do_POST(self):
         self.u, self._read = None, False
-        self.handle_safely(self._post)
+        if self.remote_gate():
+            self.handle_safely(self._post)
 
     def me(self):
         u = self.u
@@ -647,6 +729,11 @@ class Handler(BaseHTTPRequestHandler):
             self.need_admin()
             return self.send(200, AUTH.query_log(qs.get('q', ''), qs.get('user', ''), qs.get('type', ''), qs.get('from', ''), qs.get('to', ''),
                                                  max(1, min(1000, int(qs.get('limit', 200)))), max(0, int(qs.get('offset', 0))), qs.get('node', '')))
+        if p == '/api/remote':
+            self.need_admin()
+            people = [x.get('full_name') or x.get('username') for x in AUTH.list_users() if x.get('active') and 'remote.use' in (x.get('perms') or [])]
+            return self.send(200, {'on': bool(CFG.get('remote_access')), 'here': not self.outside, 'seen': REMOTE_SEEN, 'people': people,
+                                   'secure': bool(self.https) if self.via_proxy else None})
         if p == '/api/devices':
             self.need_admin()
             return self.send(200, SYNC.overview())
@@ -685,7 +772,8 @@ class Handler(BaseHTTPRequestHandler):
         p = urlparse(self.path).path
         qs = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
         origin = self.headers.get('Origin')
-        if origin and urlparse(origin).netloc != self.headers.get('Host'):
+        hosts = {self.headers.get('Host')} | ({self.headers.get('X-Forwarded-Host')} if self.via_proxy else set())
+        if origin and urlparse(origin).netloc not in hosts:
             raise Forbidden('Request from another web site was blocked.')
 
         # ---------------- no login needed
@@ -698,6 +786,12 @@ class Handler(BaseHTTPRequestHandler):
                 too_many_failures(self.ip, add=True)
                 time.sleep(0.6)
                 return self.link_page(p[3:])
+            try:
+                self.remote_allowed(u)
+            except Forbidden:
+                AUTH.logout(token, u, self.ip)
+                AUTH.log(u['display'], self.ip, 'remote-refused', u['username'], 'Sign-in from outside the centre refused: no permission')
+                raise
             if self.token:
                 AUTH.logout(self.token, None, self.ip)  # whoever was logged in in this browser before
             say(f'Login with personal link: {u["display"]} ({self.ip})')
@@ -713,6 +807,14 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(0.6)  # slows down password guessing
                 raise
             self.u = u
+            try:
+                self.remote_allowed(u)
+            except Forbidden:
+                AUTH.logout(token, u, self.ip)              # the session made a moment ago is ended at once
+                AUTH.log(u['display'], self.ip, 'remote-refused', u['username'], 'Sign-in from outside the centre refused: no permission')
+                raise
+            if self.outside:
+                AUTH.log(u['display'], self.ip, 'remote-login', u['username'], 'Signed in from outside the centre')
             say(f'Login: {u["display"]} ({self.ip})')
             return self.send(200, self.me(), headers=self.set_session(token))
         if p == '/api/join':
@@ -875,6 +977,14 @@ class Handler(BaseHTTPRequestHandler):
             res = check_now(SYSTEM)
             STORE.log_activity(self.user, self.ip, [{'type': 'backup', 'action': 'Data check', 'target': 'ok' if res['ok'] else 'problems found'}])
             return self.send(200, res)
+        if p == '/api/remote':
+            self.need_admin()
+            on = bool(self.json_body().get('on'))
+            if on and self.outside:
+                raise Forbidden('Remote work is switched on at the centre itself, not from outside.')
+            write_config('remote_access', on)
+            AUTH.log(self.u['display'], self.ip, 'remote-switch', NODE.name, 'Work from outside the centre switched on' if on else 'Work from outside the centre switched off')
+            return self.send(200, {'on': on})
         if p == '/api/backups/folder':  # a second folder (USB drive, other disk) that gets a copy of every backup
             self.need('backups.manage')
             if not is_admin(self.u):

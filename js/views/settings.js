@@ -4,7 +4,44 @@
   var HS = window.HS;
   var THEMES = ['auto', 'daylight', 'night', 'asphalt', 'highway', 'contrast'];
   var FONTS = { plex: "'HS Plex Arabic','HS Plex'", cairo: "'HS Cairo'", tajawal: "'HS Tajawal'", kufi: "'HS Kufi'", system: "'Segoe UI',Tahoma,sans-serif" };
-  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'access', 'data'];
+  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'remote', 'access', 'data'];
+
+  /* Work from outside the centre (docs/REMOTE_ACCESS.md): a secure tunnel on this PC, switched on here, for chosen people only */
+  var remote = {
+    render: function () {
+      if (!(HS.me && HS.me.admin)) return HS.ui.empty('lock', HS.t('set.admin.only'), '');
+      return '<div data-remote><div class="skeleton" style="height:14rem"></div></div>';
+    },
+    body: function (r) {
+      var U = HS.ui, seen = r.seen || {};
+      return '<section class="card stack"><header><span class="tile-ic">' + HS.icon('globe') + '</span><h2>' + HS.esc(HS.t('rm.title')) + '</h2></header>' +
+        '<p class="muted">' + HS.esc(HS.t('rm.intro')) + '</p>' +
+        '<div class="row wrap" style="gap:.6rem;align-items:center"><div class="seg" role="group"><button type="button" data-rm="0" aria-pressed="' + !r.on + '">' + HS.esc(HS.t('rm.off')) + '</button>' +
+          '<button type="button" data-rm="1" aria-pressed="' + !!r.on + '"' + (r.here ? '' : ' disabled') + '>' + HS.esc(HS.t('rm.on')) + '</button></div>' +
+          '<span class="badge ' + (r.on ? 'ok' : '') + '">' + HS.esc(HS.t(r.on ? 'rm.isOn' : 'rm.isOff')) + '</span></div>' +
+        (r.here ? '' : '<p class="faint">' + HS.esc(HS.t('rm.onlyHere')) + '</p>') +
+        '<div class="tip ' + (seen.at ? 'ok' : '') + '">' + HS.icon(seen.at ? 'check' : 'info') + '<span>' + (seen.at ? HS.esc(HS.t('rm.seen', { t: U.ago ? U.ago(seen.at) : seen.at, who: seen.user || '–' })) : HS.esc(HS.t('rm.notSeen'))) + '</span></div>' +
+        '<div><b>' + HS.esc(HS.t('rm.people')) + '</b> ' + (r.people.length ? r.people.map(function (n) { return '<span class="chip">' + HS.esc(n) + '</span>'; }).join(' ') : '<span class="muted">' + HS.esc(HS.t('rm.nobody')) + '</span>') +
+          ' <a href="#/settings?tab=access">' + HS.esc(HS.t('rm.give')) + '</a></div>' +
+        '<h3 class="sec">' + HS.esc(HS.t('rm.how')) + '</h3><ol class="rm-ways">' +
+          '<li><b>' + HS.esc(HS.t('rm.a')) + '</b> <span class="badge ok">' + HS.esc(HS.t('rm.recommended')) + '</span><p class="muted">' + HS.esc(HS.t('rm.a.b')) + '</p></li>' +
+          '<li><b>' + HS.esc(HS.t('rm.b')) + '</b><p class="muted">' + HS.esc(HS.t('rm.b.b')) + '</p></li></ol>' +
+        '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(HS.t('rm.pcOff')) + '</span></div>' +
+        '<p class="faint">' + HS.esc(HS.t('rm.guide')) + '</p></section>';
+    },
+    mount: function (root) {
+      var box = root.querySelector('[data-remote]'); if (!box) return;
+      function load() { HS.get('/api/remote').then(function (r) { box.innerHTML = remote.body(r); }, function (e) { box.innerHTML = HS.ui.empty('alert', HS.ui.errorText(e)); }); }
+      load();
+      box.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-rm]'); if (!b || b.getAttribute('aria-pressed') === 'true') return;
+        var on = b.dataset.rm === '1';
+        var go = function () { HS.ui.run(HS.post('/api/remote', { on: on }), on ? 'rm.turnedOn' : 'rm.turnedOff', b).then(load, function () {}); };
+        if (on) HS.ui.confirm({ title: HS.t('rm.on'), body: HS.t('rm.confirm'), ok: HS.t('rm.on') }).then(function (yes) { if (yes) go(); });
+        else go();
+      });
+    }
+  };
 
   function sw(theme) {
     var colors = '<i style="background:var(--side-bg)"></i><b style="background:var(--canvas)">' +
@@ -114,6 +151,7 @@
           : tab === 'access' ? HS.accessTab.render()
           : tab === 'data' ? HS.dataTab.render()
           : tab === 'gateway' ? HS.mailboxTab.render()
+          : tab === 'remote' ? remote.render()
           : tab === 'lists' ? '<div class="stack">' + ['subjects','rooms','teachers','materials'].map(HS.lists.render).join('') + '</div>'
           : settingsBody(tab));
     },
@@ -122,6 +160,7 @@
       if (ctx.route.q.tab === 'lists') HS.lists.mount(root);
       if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
+      if (ctx.route.q.tab === 'remote') remote.mount(root);
       if (ctx.route.q.tab === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
       root.addEventListener('click', function (e) {
         var b = e.target.closest('[data-pref]');

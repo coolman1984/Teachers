@@ -458,6 +458,9 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 .log-diff .now { font-weight: 600; }
 .log-ver { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 @media (max-width: 560px) { .sync-pill { padding: .3rem .5rem; } }
+/* Settings → Remote work: the two ways to connect */
+.rm-ways { margin: 0; padding-inline-start: 1.2rem; display: grid; gap: .6rem; }
+.rm-ways p { margin: .2rem 0 0; }
 /* Settings → Parent links: the four setup steps, done ones ticked */
 .gw-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
 .gw-step { display: flex; gap: .8rem; align-items: flex-start; }

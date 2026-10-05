@@ -2,6 +2,28 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Work from outside the centre, safely (owner's request, review D01-D08 - 2026-10-05)
+
+**Why:** the owner wants to run Hessa on the centre PC and work on it from a phone or another computer over the internet, without
+ever opening the centre PC to the internet (a project rule).
+**Decision:** no relay of our own. A secure tunnel program on the centre PC calls out (Tailscale - recommended, free, private to the
+owner's devices, also carries laptop sync - or Cloudflare Tunnel for a public address with a domain). Building and hosting our own
+relay would mean a server with the children's data outside the centre, a second login system and a new sync path - all risk, no gain.
+**Found while designing it:** a tunnel hands requests to the program from 127.0.0.1, and the program trusted 127.0.0.1 as "the PC
+itself" - so installing any tunnel would have opened the first-start screen, joining and the backup-folder settings to the whole
+internet. Now a request that carries proxy headers (or comes from a Tailscale address) is "outside": refused until the
+administrator switches remote work on at the centre, and then only for people with `remote.use`.
+**What:** `outside`/`via_proxy`/`https` in app.py, the forwarded address (never a loopback one) in logs and lockouts, Secure cookie +
+HSTS behind HTTPS, Origin checked against the forwarded host, Settings → Remote work (switch, last request, allowed people, the two
+ways), `docs/REMOTE_ACCESS.md` in Egyptian Arabic, copied next to the program by the installer.
+**Lessons:** "local" must mean the TCP peer AND no proxy in between; any feature that trusts 127.0.0.1 must be re-read whenever a
+proxy appears.
+**Evidence:** `tests/test_center_remote.py` (7): off by default with a page in both languages; a tunnel request is never local even
+with a spoofed `X-Forwarded-For: 127.0.0.1`; only `remote.use` signs in, a refused session is ended at once, permission taken away
+mid-session is enforced, logs carry the real address; switching on only at the centre; a foreign Origin is refused; a payment from
+home retried with the same key is one receipt; Tailscale address ranges. `test_center_review.test_d_*` drives the switch in Chromium.
+**Limits:** not tried with the owner's real Tailscale/Cloudflare accounts and a phone on 4G yet.
+
 ## The parent's link, from the centre PC to the phone (review C01-C06, P7 - 2026-10-05)
 
 **Why:** the parent page was still the driver page of the trip system (odometer photos, trip events), the gateway still accepted
