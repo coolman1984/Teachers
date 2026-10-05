@@ -14,7 +14,7 @@ class WorkflowTest(unittest.TestCase):
         for module in modules:
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         for module in ('test_center_api', 'test_center_network', 'test_sample', 'test_ci',
-                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway'):
+                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway', 'test_center_links'):
             self.assertIn(module, modules)
         self.assertIn('node --test tests/test_frontend.js', workflow)
 

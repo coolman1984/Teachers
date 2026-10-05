@@ -88,7 +88,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 ## Defects from the completion review (2026-10-05, review of `370c770`)
 - [x] A01 The parent link the program hands out is the page the gateway serves (`/t/<token>`, was `/app/#<token>` whose fragment never reaches the server); the message text carries the same link
 - [x] A02 A replaced link or a removed student is revoked on the gateway; the list of hashes the gateway may hold is kept on this PC (`gateway-cards.json`, hashes only) so the revoke survives an internet outage and a restart
-- [ ] A03 Staff personal-link page (`js/quick.js` missing)
+- [x] A03 Staff personal-link page: `js/quick.js` now exists (a real browser signs in by itself; a preview or scanner never does; another signed-in person is asked first), Arabic-first page, broken characters fixed
 - [ ] A04 Door sound / automatic check-in settings not read by the door
 - [ ] A05 Opening WhatsApp counted as "sent"; follow-up save failures hidden
 - [ ] A06 Windows build needs `docs/GATEWAY_SETUP.md` and `docs/RELEASE_NOTES.md`
