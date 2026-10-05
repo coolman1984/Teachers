@@ -13,11 +13,11 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 ## Phase P1 – Make the fork run again
 - [x] P1.1 index.html script list + skeleton view files
   - [x] Startup-order regression, both-language placeholders, failed-load retry
-  - [ ] Chrome visual verification after P1.2 makes centre navigation reachable; full P1 checks still pending
+  - [x] Every page (21 routes) on a 360 px phone, Arabic and English, night theme, extra-large font: no error, nothing wider than the screen (`test_acceptance.test_a`, review E04) - it found the overview, follow-up, settlements, reports, devices and settings pages pushed sideways (fixed minimum column widths); every auto grid now uses `minmax(min(X, 100%), 1fr)`
 - [x] P1.2 shell.js pages, palette, shortcuts, tour, slides
 - [x] P1.3 ui.js / data.js helpers (money, grade, att badges; error keys)
 - [x] P1.4 Fast refresh with /api/delta
-  - [ ] Two-context Chrome timing check (<3 s, no /api/state request) after browser transport is available
+  - [x] Two-screen timing check: a check-in reaches the other door screen in under 3 s with no /api/state request (`test_acceptance.test_b`, review E03)
 - [x] P1.5 i18n EN + Formal Arabic reset
 - [x] P1.6 test_design.py updated and green
 
@@ -37,13 +37,13 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P3.1 Subjects, rooms, teachers (terms), handouts lists
 - [x] P3.2 Settings tabs (centre, rules, lists, messages, gateway, access by teachers, data)
 
-  - [ ] Chrome visual and keyboard checks for P3 forms (browser transport pending)
+  - [x] Visual check of P3 forms through the page sweep above (keyboard: Enter/Escape flows covered by ShellTest)
 
 ## Phase P4 – Sample centre
 - [x] P4 server/sample.py + tools/make_sample.py + tests/test_sample.py + "delete all sample data"
   - [x] Deterministic centre, sample-account disable/reload, real-record preservation, scopes, history signatures
   - [x] Load sample centre into the local owner app while preserving admin login
-  - [ ] Chrome visual checks for sample controls and import preview (desktop launch works; browser inspection transport unavailable)
+  - [x] Sample centre built and removed without touching a real record; import preview through the browser (`test_acceptance.test_d`, `CentreAdminTest.test_c`, review E05)
 
 ## Phase P5 – Core screens
 - [ ] P5.1 Door
@@ -95,6 +95,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] A06 `docs/GATEWAY_SETUP.md` (Egyptian Arabic) and `docs/RELEASE_NOTES.md` written; `build_windows.py --check` fails in seconds on any missing shipped file and runs on every push
 - [x] B04 Receipt paper per PC (80 mm, 58 mm, A5) + automatic printing switch + test print in Settings → Appearance; the page is measured so a roll stops after the text (`size: 80mm auto` was invalid CSS and printed on A4). PDF width checked in Chromium for all three
   - [ ] Try the three sizes on the centre's real printers (needs the printers)
+- [x] Door: a student the roll call marked absent who then arrives was told "already: absent" and stayed absent (found by the acceptance test) - now checked in as present/late with the arrival time; a second scan still changes nothing
+- [x] E11 Door peak: 30 cards (find + card + check-in) in 1.2 s on a 420-student sample centre (plan: 90 s with people); real PCs of the centre still to measure
 - [x] A07 Lost connection to the centre PC: a bar on every page, save buttons dimmed, writes refused in the browser (no hidden queue); a payment saved again after a lost answer returns the same receipt (one key per dialog, `pk<key>` ids)
 
 ## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)

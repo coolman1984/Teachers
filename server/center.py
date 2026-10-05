@@ -433,7 +433,8 @@ def door_card(store, student_id, now=None, scopes=None):
             continue
         trial = not own and not same_subject   # not enrolled in this subject: a free trial session, once per group
         candidates.append({'session': s, 'own': own, 'makeup': not own and same_subject, 'now': D.door_window(s, mins, cfg['doorEarlyMinutes'], cfg['doorLateMinutes']),
-                           'done': s['id'] in att, 'status': (att.get(s['id']) or {}).get('status'),
+                           # marked absent (or excused) by the roll call and now standing at the door: not done, he can still check in
+                           'done': (att.get(s['id']) or {}).get('status') in ('present', 'late'), 'status': (att.get(s['id']) or {}).get('status'),
                            **({'trial': True, 'trialUsed': trial_used(store, student_id, s['groupId'])} if trial else {})})
     candidates.sort(key=lambda c: (not c['own'], not c['now'], abs((D.hm(c['session']['start']) or 0) - mins)))
     best = next((c for c in candidates if c['own'] and c['now'] and not c['done']), None)
@@ -490,7 +491,8 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None, tria
         makeup = True
     ctx.need_teacher(home.get('teacherId'))
     existing = ctx.store.row('attendance', D.attendance_id(sess['id'], student_id))
-    if existing and status is None:
+    # a second scan changes nothing - but a student the roll call marked absent who then arrives is here now: record him
+    if existing and status is None and existing.get('status') in ('present', 'late'):
         return {'id': existing['id'], 'status': existing['status'], 'already': True, 'makeup': bool(existing.get('makeup'))}
     cfg = settings(ctx.store)
     mins = now.hour * 60 + now.minute
@@ -506,7 +508,8 @@ def checkin(ctx, student_id, session_id, status=None, via='code', now=None, tria
     elif sess.get('status') == 'planned':
         ops.append({'e': 'sessions', 'id': sess['id'], 'op': 'put', 'ver': sess['ver'], 'row': {**_strip(sess), 'status': 'held'}})
     row = {'sessionId': sess['id'], 'studentId': student_id, 'groupId': home['groupId'], 'teacherId': (ctx.store.row('groups', home['groupId']) or {}).get('teacherId'),
-           'date': sess['date'], 'status': status, 'at': (cur or {}).get('at') or now.strftime('%H:%M'), 'via': via, 'makeup': makeup, 'by': ctx.user}
+           'date': sess['date'], 'status': status, 'via': via, 'makeup': makeup, 'by': ctx.user,
+           'at': (cur or {}).get('at') if cur and cur.get('status') in ('present', 'late') and status in ('present', 'late') else now.strftime('%H:%M')}
     ops.append({'e': 'attendance', 'id': aid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
     ctx.commit(f'Attendance: {st.get("name")} ({status})', ops)
     return {'id': aid, 'status': status, 'already': False, 'makeup': makeup}

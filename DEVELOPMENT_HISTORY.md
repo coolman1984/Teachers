@@ -2,6 +2,21 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Acceptance on a full sample centre: phones, big fonts, two screens, the door peak (review E03-E05, E11 - 2026-10-05)
+
+**Why:** "it works" had only been shown on desktop widths and small fixtures.
+**What:** `tests/test_acceptance.py` builds the 420-student sample centre and (a) opens all 21 routes on a 360 px phone in Arabic and
+English, night theme, extra-large font, failing on any console error or anything wider than the screen; (b) checks in a student
+through the API and times the other door screen: under 3 s, and no `/api/state` request; (c) scans 30 cards (find + card +
+check-in) - 1.2 s; (d) removes the sample without touching a real record.
+**Found and fixed:** (1) six pages pushed sideways on a phone with the big font - fixed minimum column widths (22rem = 385 px at
+XL) on every auto grid, side-by-side layouts that never collapsed, a segmented control that could not wrap, grid cells that grew to
+their content; (2) the door told a student who arrived after the roll call marked him absent "already: absent" and left him absent
+(he sat the session, was not charged, and the parent saw an absence) - he is now checked in with his arrival time.
+**Lessons:** an acceptance sweep with the hardest settings (smallest screen, biggest font, RTL, dark) finds in minutes what a
+desktop check never shows; a check-in rule written for "scanned twice" must not swallow "came late".
+**Evidence:** `test_acceptance` 4/4, `test_center_review.test_a_student_marked_absent_who_arrives_is_checked_in`.
+
 ## The inherited tests now test the centre (review E07-E09 - 2026-10-05)
 
 **Why:** since the fork, 6 browser scenarios and 25 multi-PC scenarios still wrote trips, vehicles and drivers, failed, and were left

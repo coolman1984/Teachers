@@ -55,6 +55,20 @@ class MoneyOnceTest(CenterFixture):
         self.assertTrue(b.get('again'))
         self.assertEqual(len([p for p in self.c.get('/api/state')['payments'] if p['studentId'] == self.student]), 1)
 
+    def test_a_student_marked_absent_who_arrives_is_checked_in(self):
+        """Found by the acceptance test: the roll call marked him absent, he arrived 20 minutes later and scanned - the door said
+        "already: absent" and left him absent (and owing nothing for a session he sat in)."""
+        self.c.post('/api/c/roll', {'sessionId': self.session, 'marks': {self.student: 'absent'}})
+        card = self.c.get('/api/c/card?id=' + self.student)
+        self.assertFalse(next(x for x in card['candidates'] if x['session']['id'] == self.session)['done'])
+        r = self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': self.session})
+        self.assertFalse(r['already'])
+        self.assertIn(r['status'], ('present', 'late'))
+        again = self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': self.session})
+        self.assertTrue(again['already'])                                   # the second scan still changes nothing
+        rows = [a for a in self.c.get('/api/state')['attendance'] if a['studentId'] == self.student and a['sessionId'] == self.session]
+        self.assertEqual(len(rows), 1)
+
     def test_handouts_are_never_sold_beyond_the_shelf(self):
         material = self.p + '-few'
         self.put([('materials', material, {'name': 'Synthetic few', 'teacherId': self.teacher, 'stock': 2, 'price': 20})])

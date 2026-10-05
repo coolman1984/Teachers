@@ -21,7 +21,7 @@ class WorkflowTest(unittest.TestCase):
     def test_the_browser_job_runs_the_screens(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         job = workflow.split('  browser:', 1)[1].split('  windows-installer:', 1)[0]
-        for module in ('test_e2e_browser', 'test_e2e_center', 'test_center_review', 'test_gateway_parent'):
+        for module in ('test_e2e_browser', 'test_e2e_center', 'test_center_review', 'test_gateway_parent', 'test_acceptance'):
             self.assertIn(module, job)
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         self.assertIn('HS_CHROMIUM', job)
