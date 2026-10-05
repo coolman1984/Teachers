@@ -32,7 +32,7 @@ jobs:
           python -m pip install pyflakes
           python -m pyflakes server tools tests
       - name: Frontend startup and centre flows
-        run: node --test --test-isolation=none tests/test_frontend.js
+        run: node --test tests/test_frontend.js
       - name: Gateway tests (Worker + D1 stand-in)
         working-directory: gateway
         run: node --test --no-warnings test/gateway.test.js

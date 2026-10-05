@@ -16,5 +16,5 @@ is a separate deployment described by P7; configuring this tab alone does not de
 Read-only users have no save controls. Contact editors require contacts.view. Saving a row that has hidden phone fields preserves
 those fields; changing them without permission fails. Concurrent edits return a conflict rather than overwriting another user's save.
 
-Verification: node --test --test-isolation=none tests/test_frontend.js; from tests, python -m unittest test_center_api test_design test_center_network.
+Verification: node --test tests/test_frontend.js; from tests, python -m unittest test_center_api test_design test_center_network.
 Chrome visual, keyboard and responsive verification is tracked separately in TASKS.md.

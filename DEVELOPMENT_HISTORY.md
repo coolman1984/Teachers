@@ -15,6 +15,8 @@ builder and a commit step so the family payment reuses every existing check.
 the same lock; an interrupted edit left half the trial UI unapplied (re-checked the tree before continuing).
 **Limits:** the sibling payment screen is not built yet (server and tests only); no temporary Ramadan timetable or extra
 make-up session yet. Browser coverage for trial and credit screens is by API tests, not a Chrome scenario.
+**CI repair:** the workflow ran `node --test --test-isolation=none`, a flag Node 22 rejects, so the `test` job failed in 7 seconds on
+every run before any test started; the flag is dropped (the frontend tests pass without it) and `test_ci` follows.
 **Evidence:** Python gate 167 OK in 206 s (3 skips); performance card 46 ms, dashboard 151 ms, state 496 ms; frontend 18;
 browser test_e2e_center 12 OK; pyflakes clean.
 

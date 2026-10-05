@@ -16,7 +16,7 @@ class WorkflowTest(unittest.TestCase):
         for module in ('test_center_api', 'test_center_network', 'test_sample', 'test_ci',
                        'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote'):
             self.assertIn(module, modules)
-        self.assertIn('node --test --test-isolation=none tests/test_frontend.js', workflow)
+        self.assertIn('node --test tests/test_frontend.js', workflow)
 
     def test_installer_publication_requires_an_explicit_version_tag(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')

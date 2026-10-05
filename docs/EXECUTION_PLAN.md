@@ -558,7 +558,7 @@ groups with free seats, WhatsApp booking link) pushed as a public card (no stude
 ## Part G — Checks before every push
 ```
 cd /home/user/Teachers
-node --test --test-isolation=none tests/test_frontend.js                                                # startup asset/order regression
+node --test tests/test_frontend.js                                                # startup asset/order regression
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 cd tests
 python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)

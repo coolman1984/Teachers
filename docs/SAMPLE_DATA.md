@@ -69,7 +69,7 @@ No real owner file has been supplied or tested yet.
 ## Checks
 
 From `tests`: `python -m unittest test_sample test_center_api test_design`.
-From the repository: `node --test --test-isolation=none tests/test_frontend.js`.
+From the repository: `node --test tests/test_frontend.js`.
 Sample tests verify determinism, references, codes, timetable, cash arithmetic,
 dashboard, warning/profitability signals, scoped reads, removal, reload and signatures.
 They also measure card <150 ms, dashboard <400 ms and startup <1.5 s / 6 MB on this PC.
