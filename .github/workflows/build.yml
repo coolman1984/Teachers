@@ -1,11 +1,11 @@
 # Tests on every change, and builds the Windows installer Hessa-Setup-<version>.exe.
-# A new version (server/version.py) merged into main is published once as a GitHub release with its installer.
+# Explicit version tags publish an installer; merging development work does not publish a release.
 # See docs/BUILD_AND_RELEASE.md.
 name: Test and build
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -27,20 +27,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Browser for the screen tests
+      - name: Python lint
         run: |
-          python -m pip install playwright xlwt
-          python -m playwright install --with-deps chromium
-          echo "HS_CHROMIUM=$(python -c "from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()")" >> "$GITHUB_ENV"
+          python -m pip install pyflakes
+          python -m pyflakes server tools tests
+      - name: Frontend startup and centre flows
+        run: node --test --test-isolation=none tests/test_frontend.js
       - name: Gateway tests (Worker + D1 stand-in)
         working-directory: gateway
         run: node --test --no-warnings test/gateway.test.js
-      - name: Office tests (engine, trips, Excel, Word, gateway client, screens)
+      - name: Office tests (engine, centre, Excel, samples and two PCs)
         working-directory: tests
-        run: python -m unittest test_unit test_convergence test_design test_domain test_trips_api test_xlsx test_excel_io test_word_io test_formats test_gateway_client test_multinode test_e2e_browser test_e2e_driver test_e2e_link_ui
+        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_sample test_xlsx
 
   windows-installer:
     needs: test
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -65,7 +67,7 @@ jobs:
           New-Item -ItemType Directory -Force $home_dir | Out-Null
           '{"port": 18080, "sync_port": 18443, "open_browser": false}' | Set-Content (Join-Path $home_dir 'config.json')
           $env:HS_HOME = $home_dir
-          $p = Start-Process -FilePath build\hs_main.dist\Hessa.exe -ArgumentList '--background' -PassThru
+          $p = Start-Process -FilePath build\hs_main.dist\Hessa.exe -ArgumentList '--background' -WindowStyle Hidden -PassThru
           $ok = $false
           for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
             Start-Sleep -Seconds 1
@@ -85,9 +87,8 @@ jobs:
           name: Hessa-Setup
           path: dist/Hessa-Setup-*.exe
           retention-days: 30
-      - name: Publish the release (a new version on main, or a tag v*)
-        # every version (server/version.py) that reaches main is published once under Releases, with its installer
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+      - name: Publish an explicitly tagged release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

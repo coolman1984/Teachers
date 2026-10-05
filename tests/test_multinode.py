@@ -917,7 +917,6 @@ class T34_InstalledMode(unittest.TestCase):
         import subprocess
         import sys
         import tempfile
-        import urllib.request
         from harness import Client, free_port
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         tmp = tempfile.mkdtemp(prefix='to-installed-')

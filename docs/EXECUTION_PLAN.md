@@ -590,6 +590,7 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | 2026-10-04 | Design | **Exactly like Yousef-Transportation**; learn from Mr.Ayman-HR and opening-nerp-tcode (methods: rules file, history with lessons, playbook, evidence before "done") |
 | 2026-10-04 | Themes / languages | **Light and dark; English and Formal Arabic** |
 | 2026-10-04 | Who continues | Plan written for other agents (Sonnet 5.5, ChatGPT) to complete |
+| 2026-10-04 | GitHub integration | Owner explicitly authorized push, merge and main synchronization for this iteration; preserve remote work and local private files |
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |

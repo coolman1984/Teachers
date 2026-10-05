@@ -583,7 +583,7 @@
     'ov.attendance': 'Present / enrolled',
     'ov.trend': 'Attendance in the last 28 days',
     'imp.permission': 'Student management and contact access are required to import student data.',
-    'imp.help': 'Choose an Excel or CSV file with Name, Grade, Parent mobile and optionally Code and Group columns. Preview, correct and select rows before saving. A preview changes no data.',
+    'imp.help': 'Choose an Excel or CSV file with Name, Grade, Parent mobile and optionally Code and Group columns. Preview, correct and select rows before saving. Groups must match the student grade. A preview changes no data.',
     'imp.file': 'Student spreadsheet',
     'imp.defaultGrade': 'Default grade for rows without a grade',
     'imp.preview': 'Preview file',

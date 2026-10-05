@@ -324,7 +324,7 @@ def make_doc(text):
 def ole(streams):
     """OLE2 with big streams only (>= 4096 bytes), sector size 512."""
     SS = 512
-    secs, entries, start = [], [], 0
+    secs = []
     layout = {}
     nxt = 0
     for name, data in streams.items():
@@ -335,7 +335,6 @@ def ole(streams):
     dir_sec = nxt
     nxt += 1
     fat_sec = nxt
-    total = nxt + 1
     fat = [0xFFFFFFFD if False else 0] * 128
     fat = [0xFFFFFFFF] * 128
     for name, (s, ln) in layout.items():

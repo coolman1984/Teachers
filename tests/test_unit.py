@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 import engine_domain
-from cluster import Cluster, Peer, enroll_op  # noqa: F401 (sets sys.path, registers the engine test entities)
+from cluster import Cluster, Peer  # noqa: F401 (sets sys.path, registers the engine test entities)
 import ed25519  # noqa: E402
 import tlscert  # noqa: E402
 from journal import canonical, chash  # noqa: E402
@@ -108,7 +108,7 @@ class JournalRulesTest(unittest.TestCase):
 
     def test_forged_admin_change_rejected_everywhere(self):
         # pc1 (not the administrator PC) makes itself an administrator with its own key
-        evil = self.b.journal.build('data', [], actor='x')  # noqa: F841 - only to reserve nothing
+        self.b.journal.build('data', [], actor='x')
         env_ops = [{'e': 'users', 'id': 'u-evil', 'op': 'insert',
                     's': {'username': 'evil', 'full_name': 'Evil', 'pw_hash': 'x', 'perms': ['users.manage'], 'active': True}}]
         with self.b.journal.lock:

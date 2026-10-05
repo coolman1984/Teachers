@@ -319,6 +319,8 @@ def find_students(store, q, scopes=None, limit=12):
             parts = key.split(' ')
             where = ' AND '.join(['name_key LIKE ?'] * len(parts))
             out = store.rows('students', where, tuple('%' + p + '%' for p in parts), scopes)
+            if not out:
+                out = store.rows('students', "REPLACE(name_key, ' ', '') LIKE ?", ('%' + key.replace(' ', '') + '%',), scopes)
             out.sort(key=lambda s: (not (s.get('nameKey') or '').startswith(key), len(s.get('name') or '')))
     return out[:limit]
 
@@ -1098,6 +1100,8 @@ def settlement(store, teacher_id, ym, facts=None):
 
 
 def settlements(store, ym, scopes=None):
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
     f = _month_facts(store, ym)
     out = []
     for t in store.rows('teachers', '', (), scopes):
@@ -1123,6 +1127,8 @@ def approve_settlement(ctx, teacher_id, ym):
 def profitability(store, ym, scopes=None):
     """Every group of the month: collected, centre share, room cost, the centre's profit, fill rate and attendance,
     and one advice (open another group / merge / watch / loses money)."""
+    if not D.valid_month(ym):
+        raise Problem('err.month', 'Choose the month.')
     f = _month_facts(store, ym)
     teachers = {t['id']: t for t in store.rows('teachers')}
     rooms = {r['id']: r for r in store.rows('rooms')}

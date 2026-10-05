@@ -81,3 +81,5 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 
 ## Phase P10 – Docs and delivery
 - [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version 0.1.0
+  - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
+  - [ ] Final centre browser acceptance and installer/release verification remain pending

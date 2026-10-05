@@ -6,7 +6,6 @@ fonts/*.woff2, fonts/LICENSES/*.txt and css/fonts.css. Needs Node/npm and intern
 The program itself never loads fonts from the internet (the office must work offline)."""
 import glob
 import os
-import re
 import shutil
 import subprocess
 import sys

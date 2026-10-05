@@ -47,6 +47,7 @@ class ApiError(Exception):
         self.code = code
         self.msg = msg
         self.data = data or {}
+        self.key = self.data.get('key')
 
 
 class Client:

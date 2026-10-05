@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server'))
 import store  # noqa: E402
-from store import B, I, J, R, T  # noqa: E402,F401
+from store import B, I, R, T  # noqa: E402,F401
 
 LEGACY = {
         'itemTypes': ('item_types', 'Item Types', [

@@ -2,12 +2,10 @@
 import os
 import sys
 import time
-import json
 import unittest
 from datetime import date, timedelta
-from urllib.parse import quote
 
-from harness import ADMIN, ApiError, Server, make_authority
+from harness import ApiError, Server, make_authority
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server'))
 import domain as D

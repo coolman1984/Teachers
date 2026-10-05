@@ -2,6 +2,37 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Combine remote work and prepare main synchronization (2026-10-04)
+
+**Why:** the owner explicitly requested push, merge and synchronization with GitHub main.
+GitHub had only the session branch, with an independently written remote server/test commit.
+**What:** preserve both histories in a merge. Keep the stronger local atomic/scoped money/contact protections;
+include remote Arabic spacing search and month validation improvements, formats cleanups and ApiError.key.
+Preserve all three remote test modules under distinct names. Adapt their import scenario to require correction
+of invalid phones and mismatched grades before saving; rejection remains atomic. Both import help translations
+now explain grade matching. Remove unused imports/variables reported by the newly available development linter.
+
+The inherited CI selectors referenced deleted trip/driver modules. Replace them with current engine, centre,
+sample, Excel and local/remote two-PC suites plus frontend/gateway checks and lint. Regression tests verify
+selected module existence and tag-only installer publication. Installer building remains manual/tag-triggered
+until delivery is complete; ordinary main merges do not publish an unfinished product release.
+
+**Evidence:** combined Python gate: 151 tests in 252.963 seconds, OK (two existing skips). Frontend: 17 passed.
+Gateway: 15 passed after running outside the sandbox to permit its bundle-build subprocess.
+Pyflakes now runs from an ignored local development dependency and passes across server/tools/tests.
+Final post-lint targeted verification is recorded below when complete.
+GitHub access verified using existing credentials held in memory; no token stored in source or output.
+The configured proxy timed out on API TLS; a direct per-command API connection worked without system proxy changes.
+
+**Limits:** browser visual/acceptance and real owner-data checks remain pending, as already recorded in TASKS.md.
+Legacy trip browser/file-format/multinode scenarios still need domain migration; they are not represented as
+centre acceptance evidence. No claim that P5–P10 or the final installer is complete. The owner's untracked file,
+local admin account, sample data and other runtime files are excluded from GitHub.
+
+**Lessons:** fetch before publishing: remote work may have diverged even when the local tree is clean.
+Resolve overlapping security fixes by their behavior, preserve independent regressions, and validate them together.
+An explicit owner request authorizes main integration for this operation despite the default no-main-push rule.
+
 ## Fictional centre and safe real-student import (2026-10-04)
 
 **Why:** the owner requested sample data to test daily logic and an import path for real records.
