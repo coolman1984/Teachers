@@ -89,6 +89,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)
   - [x] 11 browser scenarios incl. the core journey as the Front desk profile (advisor -> shift -> scan -> pay -> absentee message -> close)
   - [ ] Teacher-scoped login scenario and two-PC UI scenario
+  - [ ] Migrate legacy `tests/test_multinode.py` (still writes trip entities; 24 errors + 1 failure since the fork, excluded from CI) to centre entities
 
 ## Phase P9 – Differentiators 2
 - [ ] P9.1 Bubble sheets print + phone reading
