@@ -85,6 +85,14 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] E10a Free trial session at the door (once per group, never charged)
 - [x] E10b Temporary (Ramadan) timetable (`tempSlots`, clash-checked, sessions follow it); extra session (`session/add`, clash-refused); school name in door search results
 
+## Defects from the completion review (2026-10-05, review of `370c770`)
+- [x] A01 The parent link the program hands out is the page the gateway serves (`/t/<token>`, was `/app/#<token>` whose fragment never reaches the server); the message text carries the same link
+- [x] A02 A replaced link or a removed student is revoked on the gateway; the list of hashes the gateway may hold is kept on this PC (`gateway-cards.json`, hashes only) so the revoke survives an internet outage and a restart
+- [ ] A03 Staff personal-link page (`js/quick.js` missing)
+- [ ] A04 Door sound / automatic check-in settings not read by the door
+- [ ] A05 Opening WhatsApp counted as "sent"; follow-up save failures hidden
+- [ ] A06 Windows build needs `docs/GATEWAY_SETUP.md` and `docs/RELEASE_NOTES.md`
+
 ## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)
 - [x] A1 Devices & Sync page and the light in the top bar (PCs, to decide, warnings, record check, administrator key, backup administrator PC)
 - [x] A2 First start: join the centre PC (find or type the address, live check, first copy, "same PC or a new one?" for a copied folder)
