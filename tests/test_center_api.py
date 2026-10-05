@@ -428,6 +428,35 @@ class CenterApiTest(unittest.TestCase):
             changed = {**row, key:value}
             self.error('/api/commit', {'ops':[{'e':'teachers','id':self.teacher,'op':'put','ver':row['ver'],'row':changed}]}, 'err.amount')
 
+    def test_23_advisor_ranks_problems_and_respects_permissions(self):
+        clash = self.p + '-clash'
+        self.put([('groups', clash, {'name': 'Clash ' + self.p, 'teacherId': self.teacher, 'gradeCode': 'S1', 'feeType': 'session',
+                   'fee': 50, 'capacity': 30, 'active': True, 'slots': [{'day': D.weekday(date.today()), 'start': '00:00', 'end': '23:59'}]}),
+                  ('materials', self.p + '-low', {'name': 'Synthetic low handout', 'teacherId': self.teacher, 'stock': 2, 'price': 20})])
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': self.session})   # a session fee nobody paid yet
+        before = self.c.get('/api/version')['version']
+        advice = self.c.get('/api/c/advice')
+        self.assertEqual(self.c.get('/api/version')['version'], before)   # reading advice never writes
+        ids = [a['id'] for a in advice]
+        for expected in ('clashes', 'debts', 'stockLow'):
+            self.assertIn(expected, ids)
+        self.assertEqual(advice[0]['level'], 'bad')
+        levels = [a['level'] for a in advice]
+        self.assertEqual(levels, sorted(levels, key=['bad', 'warn', 'info', 'ok'].index))
+        self.assertNotIn('allGood', ids)
+        debts = next(a for a in advice if a['id'] == 'debts')
+        self.assertGreaterEqual(debts['vars']['amount'], 50)
+        # a teacher-scoped user without money permissions hears about his clash but nothing about money
+        scoped = [a['id'] for a in self.scoped_client(['overview.view', 'groups.view', 'door.use', 'followup.view']).get('/api/c/advice')]
+        self.assertIn('clashes', scoped)
+        for hidden in ('debts', 'openShift', 'stockLow', 'staleShifts', 'settle'):
+            self.assertNotIn(hidden, scoped)
+        # the drawer: work today without an open shift is flagged, and disappears once the shift is open
+        if any(s['enrolled'] for s in self.c.get('/api/c/today')['sessions']):
+            self.assertIn('openShift', ids)
+            self.open_shift()
+            self.assertNotIn('openShift', [a['id'] for a in self.c.get('/api/c/advice')])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,26 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Command centre, advisor and phone shell (2026-10-05)
+
+**Why:** the owner found the app hard to use: nine of the twelve pages were placeholders and the overview was two plain
+tables. He asked for "all main control in the main dashboard", a clear guide and advisor system, and a web app that
+works on Android and iOS phones, with the look and richness of Yousef-Transportation and Mr.Ayman-HR.
+**What:** the overview became a command centre (greeting, six live figures, quick actions, sessions now and next,
+28-day SVG charts, a getting-started checklist, tips). A server advisor (`center.advice`, `GET /api/c/advice`) ranks
+what needs a person today – clashes, stale or missing cash shifts, forgotten roll calls, students at risk, debts, full and
+thin groups, low handouts, unapproved settlements, missing parent numbers, setup steps – each with the page that fixes it.
+It reads only, respects permissions (money advice needs a money permission) and teacher scopes. Phones get a bottom tab
+bar, a "connection lost" pill, a home-screen manifest with generated icons (`tools/make_app_icons.py`, stdlib PNG) and an
+"Open on phone" dialog with a QR of the centre address. The merge left pending by the previous session was concluded.
+**Mistakes:** HS.t already escapes the values it fills in; wrapping it in HS.esc showed "&amp;" (caught by the new
+frontend test). The first open-shift rule looked at any open shift in the centre; shifts belong to one user on one PC.
+Arabic names inside English advice lost their order until wrapped in `<bdi>`. A dashboard timer kept node tests alive.
+**Evidence:** Python gate 144 tests (test_23 added), design 17, frontend 19 – all green. Visual check with Playwright +
+Chrome: Arabic/daylight and English/night, desktop 1440 px and phone 390 px, no console errors.
+**Lessons:** never escape the output of HS.t; per-user state (shifts) must be checked per user; full-page screenshots
+can freeze entry animations – check live DOM state before calling a layout broken.
+
 ## Combine remote work and prepare main synchronization (2026-10-04)
 
 **Why:** the owner explicitly requested push, merge and synchronization with GitHub main.

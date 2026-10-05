@@ -42,15 +42,38 @@ test('import preview escapes records, retains selection and saves only after con
   assert.equal(saved.rows.length,1);assert.equal(saved.rows[0].consent,true);assert.equal(preview.innerHTML,'');
 });
 
-test('overview shows scoped server numbers and renders retry on a failed read', async () => {
-  const HS=startup('ar');HS.lang='ar';HS.data.state={settings:{}};HS.me={perms:['overview.view']};
-  const target={innerHTML:''},root={isConnected:true,querySelector:()=>target,addEventListener(){}};
-  HS.get=async()=>({checkedIn:12,sessions:[],students:40,risk:3,trend:[]});
-  HS.views.overview.mount(root);await new Promise(resolve=>setImmediate(resolve));
-  assert.ok(target.innerHTML.includes('12'));assert.ok(target.innerHTML.includes(HS.t('ov.students')));
-  assert.ok(!target.innerHTML.includes(HS.t('ov.money')));
-  HS.get=async()=>{throw new Error('Offline');};HS.views.overview.mount(root);
-  await new Promise(resolve=>setImmediate(resolve));assert.ok(target.innerHTML.includes('data-dashboard-retry'));
+test('command centre shows scoped numbers, escaped advice, permission-aware actions and retry', async () => {
+  for (const lang of ['ar','en']) {
+    const HS=startup(lang);HS.lang=lang;HS.data.state={settings:{},groups:[],rooms:[],teachers:[],students:[],attendance:[]};
+    HS.prefs.data={};HS.prefs.save=()=>{};HS.me={username:'desk',perms:['overview.view']};
+    let html=HS.views.overview.render({});
+    assert.ok(!html.includes('data-k="money"'));assert.ok(!html.includes('quick-btn'));assert.ok(!html.includes('undefined'));
+    HS.me.perms.push('money.view','door.use','students.manage');html=HS.views.overview.render({});
+    assert.ok(html.includes('data-k="money"'));assert.ok(html.includes('href="#/door"'));assert.ok(html.includes(HS.t('ov.act.student')));
+    assert.ok(html.includes(HS.t('ov.guide.title')));                                   // an empty centre gets the guide
+    const els={},root={isConnected:true,addEventListener(){},querySelector:s=>els[s]||(els[s]={innerHTML:'',textContent:''})};
+    HS.get=async url=>url.includes('advice')
+      ?[{id:'groupsFull',level:'info',page:'groups',icon:'layers',vars:{n:1,name:'<b>G</b>'}},{id:'debts',level:'warn',page:'followup?tab=debts',icon:'sheet',vars:{n:2,amount:1500}}]
+      :{date:'2026-10-05',checkedIn:12,sessions:[],students:40,risk:3,trend:[],todayTotal:500,owed:150,debtors:2,moneyTrend:[]};
+    HS.views.overview.mount(root);await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(els['[data-k="checked"]'].textContent,'12');assert.equal(els['[data-k="students"]'].textContent,'40');
+    const advice=els['[data-advice]'].innerHTML;
+    assert.ok(advice.includes('href="#/followup?tab=debts"'));assert.ok(advice.includes('1,500'));
+    assert.ok(advice.includes('&lt;b&gt;G&lt;/b&gt;'));assert.ok(!advice.includes('<b>G</b>'));
+    assert.ok(advice.indexOf('adv info')<advice.indexOf('adv warn'));                    // the server's order is kept
+    assert.equal(els['[data-adv-count]'].textContent,HS.t('ov.advisor.n',{n:2}));
+    HS.get=async()=>{throw new Error('Offline');};HS.views.overview.mount(root);
+    await new Promise(resolve=>setImmediate(resolve));assert.ok(els['[data-now]'].innerHTML.includes('data-retry'));
+  }
+});
+
+test('the home-screen manifest is linked and its icons exist', () => {
+  const fs=require('node:fs'),path=require('node:path');
+  const html=fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  assert.ok(html.includes('rel="manifest" href="lib/manifest.json"'));assert.ok(html.includes('apple-touch-icon'));
+  const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,'..','lib','manifest.json'),'utf8'));
+  for (const icon of manifest.icons) assert.ok(fs.existsSync(path.join(__dirname,'..',icon.src)),icon.src);
+  assert.equal(manifest.display,'standalone');
 });
 
 test('centre navigation uses server permissions and supported routes', () => {

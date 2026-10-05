@@ -1,0 +1,20 @@
+{
+  "name": "Hessa - حصة",
+  "short_name": "Hessa",
+  "description": "Tutoring centre: front desk, students, groups, money and follow-up.",
+  "start_url": "/#/overview",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#13294B",
+  "theme_color": "#13294B",
+  "dir": "auto",
+  "icons": [
+    { "src": "/lib/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/lib/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Front desk", "url": "/#/door", "icons": [{ "src": "/lib/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Students", "url": "/#/students", "icons": [{ "src": "/lib/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

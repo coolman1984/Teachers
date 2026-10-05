@@ -167,6 +167,7 @@ New (center) — GET `/api/c/<action>`:
 | `dashboard` | – | overview.view | KPIs (money hidden without money.view/reports.view) |
 | `exam` | id | exams.view, marks.enter | `{exam, rows[{student, mark, rank, groupId}], stats}` |
 | `clashes` | – | groups.view | timetable clashes |
+| `advice` | – | overview.view | ranked advisor items `[{id, level bad/warn/info/ok, page, icon, vars}]`; texts `adv.<id>.t/.b/.go` |
 
 POST `/api/c/<action>` (JSON body): `checkin {studentId, sessionId, status?, via?}`, `roll {sessionId, marks:{studentId:status}}`,
 `session {sessionId, status, topic?}`, `enroll {studentId, groupId, from?, fee?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
@@ -591,6 +592,7 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | 2026-10-04 | Themes / languages | **Light and dark; English and Formal Arabic** |
 | 2026-10-04 | Who continues | Plan written for other agents (Sonnet 5.5, ChatGPT) to complete |
 | 2026-10-04 | GitHub integration | Owner explicitly authorized push, merge and main synchronization for this iteration; preserve remote work and local private files |
+| 2026-10-05 | Usability | **All main control in the dashboard**, a guide and an advisor; web app usable on Android and iOS phones (home-screen manifest, tab bar); design and richness of Yousef-Transportation + Mr.Ayman-HR |
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |

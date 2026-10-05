@@ -991,6 +991,9 @@ class Handler(BaseHTTPRequestHandler):
                 for k in ('todayMoney', 'todayTotal', 'monthMoney', 'monthExpenses', 'owed', 'moneyTrend'):
                     out.pop(k, None)
             return self.send(200, out)
+        if action == 'advice':
+            self.need('overview.view')
+            return self.send(200, center.advice(STORE, sc, self.u['perms'], user_id=self.u['id'], node_id=NODE.id))
         if action == 'exam':
             self.need('exams.view', 'marks.enter')
             r = center.exam_results(STORE, qs.get('id', ''), sc)

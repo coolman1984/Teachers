@@ -108,6 +108,16 @@ class LanguageTest(unittest.TestCase):
         for lang in ('en', 'ar'):
             self.assertEqual(sorted(errors - dict_keys(lang)), [], lang)
 
+    def test_every_advisor_item_is_translated(self):
+        """center.advice() emits ids; the overview shows adv.<id>.t/.b/.go - a missing text would show the raw key."""
+        ids = set(re.findall(r"add\('([A-Za-z]+)'", read('server', 'center.py')))
+        self.assertGreater(len(ids), 10)
+        for lang in ('en', 'ar'):
+            keys = dict_keys(lang)
+            for i in ids:
+                for part in ('t', 'b', 'go'):
+                    self.assertIn(f'adv.{i}.{part}', keys, lang)
+
     def test_centre_vocabulary_is_complete(self):
         import sys
         sys.path.insert(0, os.path.join(ROOT, 'server'))

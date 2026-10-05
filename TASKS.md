@@ -56,7 +56,10 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [ ] P5.6 Exams & marks
 - [ ] P5.7 Overview
   - [x] Live scoped dashboard numbers and sample-centre controls
-  - [ ] Greeting, SVG trends, getting-started guidance, running-session actions and system status
+  - [x] Command centre: greeting, count-up figures, quick actions, sessions now/next, 28-day SVG trends, getting-started checklist
+  - [x] Advisor: `GET /api/c/advice` ranked, permission- and scope-aware advice with a page for each (test_23 + design family test)
+  - [x] Phones: bottom tab bar, connection-lost pill, home-screen manifest + icons, "Open on phone" QR dialog
+  - [ ] System status card (backup age, sync, parent links) – needs a cheap `/api/c/status`
 
 ## Phase P6 – Differentiators 1
 - [ ] P6.1 Follow-up / early warning + debts

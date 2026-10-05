@@ -70,6 +70,7 @@
           '<button class="icon-btn menu-btn" data-act="menu" aria-label="' + HS.esc(HS.t('top.menu')) + '">' + HS.icon('menu') + '</button>' +
           '<div class="crumbs" id="crumbs"></div>' +
           '<span class="grow"></span>' +
+          '<span class="conn-pill" id="conn-pill" role="status"' + (HS.data && HS.data.connected === false ? '' : ' hidden') + '>' + HS.icon('alert', 'sm') + '<span>' + HS.esc(HS.t('top.offline')) + '</span></span>' +
           '<button class="search-trigger" data-act="palette" data-tour="search">' + HS.icon('search', 'sm') + '<span>' + HS.esc(HS.t('top.search')) + '</span><i class="kbd">Ctrl K</i></button>' +
           '<span class="grow" style="flex:0 0 0"></span>' +
           '<span data-tour="tools" class="row" style="gap:.2rem">' +
@@ -79,10 +80,20 @@
           '</span>' +
         '</header>' +
         '<main class="content" id="view" tabindex="-1"></main>' +
-      '</div>' +
+      '</div>' + tabbarHTML() +
       '<div id="panels" aria-live="polite"></div>' +
       '</div>';
   }
+
+  /* On a phone the four most used pages sit under the thumb, like an app; "More" opens the full menu. */
+  var TABS = ['overview', 'door', 'students', 'followup', 'groups', 'exams'];
+  function tabbarHTML() {
+    var tabs = TABS.map(function (id) { return PAGES.filter(function (p) { return p.id === id && HS.can(p.perm); })[0]; }).filter(Boolean).slice(0, 4);
+    return '<nav class="tabbar" aria-label="' + HS.esc(HS.t('top.menu')) + '">' + tabs.map(function (p) {
+      return '<a href="#/' + p.id + '" data-tab="' + p.id + '">' + HS.icon(p.icon) + '<span>' + HS.esc(HS.t('nav.' + p.id)) + '</span></a>';
+    }).join('') + '<button data-act="menu">' + HS.icon('menu') + '<span>' + HS.esc(HS.t('top.more')) + '</span></button></nav>';
+  }
+  HS.on('connection', function (ok) { var p = HS.$('#conn-pill'); if (p) p.hidden = ok !== false; });
 
   HS.shell = {
     start: function () {
@@ -107,7 +118,7 @@
     var r = HS.route();
     var page = PAGES.filter(function (p) { return p.id === r.path; })[0];
     if (!page || !HS.can(page.perm)) { HS.go(visiblePages()[0].id); return; }
-    HS.$$('#sidebar a[data-page]').forEach(function (a) { if (a.dataset.page === page.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    HS.$$('#sidebar a[data-page], .tabbar a[data-tab]').forEach(function (a) { if ((a.dataset.page || a.dataset.tab) === page.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     HS.$('#crumbs').innerHTML = '<span class="mut">' + HS.esc(HS.t('app.name')) + '</span><span class="mut faint">/</span><b>' + HS.esc(HS.t('nav.' + page.id)) + '</b>';
     document.title = HS.t('nav.' + page.id) + ' · ' + HS.t('app.name');
     var view = r.path === 'students' && r.parts[1] === 'import' ? HS.views.importx : HS.views[page.id] || HS.views.soon;
@@ -196,6 +207,7 @@
       { icon: 'collapse', label: HS.t('act.collapse'), group: HS.t('pal.g.appearance'), hint: '[', run: function () { toggleCollapse(); } },
       { icon: 'keyboard', label: HS.t('act.shortcuts'), group: HS.t('pal.g.actions'), hint: '?', run: function () { showKeys(); } },
       { icon: 'play', label: HS.t('act.tour'), group: HS.t('pal.g.actions'), hint: '', run: function () { HS.tour.start(); } },
+      { icon: 'globe', label: HS.t('act.phone'), group: HS.t('pal.g.actions'), hint: '', run: function () { if (HS.phoneDialog) HS.phoneDialog(); } },
       { icon: 'present', label: HS.t('act.slides'), group: HS.t('pal.g.actions'), hint: '', run: function () { HS.slides.open(); } },
       { icon: 'info', label: HS.t('act.about'), group: HS.t('pal.g.actions'), hint: '', run: function () { openAbout(); } },
       { icon: 'logout', label: HS.t('act.logout'), group: HS.t('pal.g.actions'), hint: '', run: function () { logout(); } }
@@ -367,7 +379,8 @@
   /* ---------- guided tour (spotlight) ---------- */
   var TOUR = [
     { sel: '[data-tour="nav"]', k: 1 }, { sel: '[data-tour="search"]', k: 2 }, { sel: '[data-tour="tools"]', k: 3 },
-    { sel: '[data-tour="kpis"]', k: 4, page: 'overview' }, { sel: '[data-act="account"]', k: 5 }
+    { sel: '[data-tour="kpis"]', k: 4, page: 'overview' }, { sel: '[data-tour="advisor"]', k: 6 }, { sel: '[data-tour="actions"]', k: 7 },
+    { sel: '[data-tour="guide"]', k: 8 }, { sel: '[data-act="account"]', k: 5 }
   ];
   HS.tour = {
     active: false,

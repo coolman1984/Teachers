@@ -1208,6 +1208,112 @@ def dashboard(store, scopes=None, d=None):
             'risk': len(risk_list(store, scopes, limit=2000))}
 
 
+ADVICE_ORDER = {'bad': 0, 'warn': 1, 'info': 2, 'ok': 3}
+
+
+def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id=None):
+    """The advisor on the overview: the few things that need a person today, most urgent first, each with the page
+    that fixes it. Only advice the user may act on or see is returned (money advice needs a money permission), and
+    a teacher-scoped user only hears about his own groups. Pure reads: a GET must never change anything."""
+    can = set(perms or ()).intersection
+    d = d or _today()
+    now = now or datetime.now()
+    day = d.isoformat()
+    out = []
+
+    def add(id_, level, page, icon, **vars_):
+        out.append({'id': id_, 'level': level, 'page': page, 'icon': icon, 'vars': vars_})
+
+    groups = [g for g in store.rows('groups', 'active=1 OR active IS NULL', (), scopes)]
+    # 1. setting up an empty centre, in the order the work is done
+    if scopes is None:
+        if can({'rooms.manage', 'settings.edit'}) and not store.rows('rooms'):
+            add('setupRooms', 'info', 'settings?tab=lists', 'home')
+        if can({'teachers.manage'}) and not store.rows('teachers'):
+            add('setupTeachers', 'info', 'settings?tab=lists', 'users')
+    if can({'groups.manage'}) and not groups:
+        add('setupGroups', 'info', 'groups', 'layers')
+    if can({'students.manage'}) and groups and not store.rows('students', '', (), scopes):
+        add('setupStudents', 'info', 'students/import', 'upload')
+    # 2. timetable clashes block real people in the same room
+    if can({'groups.view'}) and groups:
+        rooms = {r['id']: r for r in store.rows('rooms')}
+        mine = {g['id'] for g in groups}
+        cl = [c for c in D.clashes(store.rows('groups'), rooms) if c['kind'] in ('room', 'teacher') and (c['a'] in mine or c['b'] in mine)]
+        if cl:
+            add('clashes', 'bad', 'groups?tab=timetable', 'alert', n=len(cl))
+    # 3. the drawer: shifts left open on an earlier day, and today's work without an open shift
+    if can({'shifts.manage'}):
+        stale = [s for s in store.rows('shifts', "status='open'") if (s.get('openedAt') or '')[:10] < day]
+        if stale:
+            add('staleShifts', 'bad', 'money?tab=shifts', 'lock', n=len(stale))
+    sess = sessions_on(store, d, scopes) if groups else []
+    # every desk user counts his own drawer on his own PC, so the advice is about the caller's shift
+    if can({'money.collect'}) and sess and user_id and not my_shift(store, user_id, node_id):
+        add('openShift', 'warn', 'money', 'sheet')
+    # 4. sessions that started more than the late limit ago and nobody was checked in: the roll call was forgotten
+    if can({'attendance.mark', 'door.use'}):
+        cfg = settings(store)
+        hm = now.strftime('%H:%M')
+        if d == now.date():
+            limit = (now - timedelta(minutes=int(cfg.get('lateMinutes') or 15))).strftime('%H:%M')
+            empty = [s for s in sess if s.get('status') != 'cancelled' and (s.get('start') or '99') <= limit and hm <= (s.get('end') or '')
+                     and not s.get('present') and s.get('enrolled')]
+            if empty:
+                add('noRollCall', 'warn', 'door', 'clock', n=len(empty))
+    # 5. students about to leave
+    if can({'followup.view'}):
+        risky = risk_list(store, scopes, limit=2000)
+        high = len({r['studentId'] for r in risky if r['level'] == 'high' and not r['followed']})
+        if high:
+            add('riskHigh', 'bad', 'followup', 'bell', n=high)
+        elif risky:
+            add('riskCall', 'warn', 'followup', 'bell', n=len({r['studentId'] for r in risky if not r['followed']}))
+    # 6. money owed by students (computed from attendance and receipts, never stored)
+    if can({'money.view', 'reports.view'}):
+        ens = store.rows('enrollments', "(status IS NULL OR status='active') AND (to_date IS NULL OR to_date='' OR to_date>=?)", (day,), scopes)
+        bals = balances(store, ens, d)
+        debt = {}
+        for e in ens:
+            b = (bals.get(e['id']) or {}).get('balance', 0)
+            if b < 0:
+                debt[e['studentId']] = debt.get(e['studentId'], 0) - b
+        if debt:
+            add('debts', 'warn', 'followup?tab=debts', 'sheet', n=len(debt), amount=round(sum(debt.values()), 2))
+    # 7. groups: full ones should open a twin, nearly empty ones should merge (only a few weeks after they started)
+    if can({'groups.view'}) and groups:
+        counts = _enrolled_counts(store, day)
+        full = [g for g in groups if g.get('capacity') and counts.get(g['id'], 0) >= int(g['capacity'])]
+        thin = [g for g in groups if g.get('capacity') and counts.get(g['id'], 0) < 0.4 * int(g['capacity'])
+                and (g.get('startDate') or '0000') <= (d - timedelta(days=21)).isoformat()]
+        if full:
+            add('groupsFull', 'info', 'groups', 'layers', n=len(full), name=full[0].get('name') or '')
+        if thin:
+            add('groupsThin', 'warn', 'groups', 'layers', n=len(thin), name=thin[0].get('name') or '')
+    # 8. handouts running out
+    if can({'materials.manage', 'money.collect'}):
+        low = [m for m in store.rows('materials', 'active=1 OR active IS NULL', (), scopes) if int(m.get('stock') or 0) <= 5]
+        if low:
+            add('stockLow', 'warn', 'money?tab=handouts', 'doc', n=len(low), name=low[0].get('name') or '')
+    # 9. last month's settlements still not approved after the 5th
+    if can({'settlements.manage'}) and d.day > 5:
+        prev = (d.replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+        teachers = store.rows('teachers', 'active=1 OR active IS NULL', (), scopes)
+        done = {s['teacherId'] for s in store.rows('settlements', "period=? AND status='approved'", (prev,), scopes)}
+        missing = [t for t in teachers if t['id'] not in done]
+        if teachers and missing:
+            add('settle', 'info', 'settlements?ym=' + prev, 'chart', n=len(missing), ym=prev)
+    # 10. parents nobody can reach
+    if can({'contacts.view'}) and can({'students.manage'}):
+        n = len(store.rows('students', "(active=1 OR active IS NULL) AND (parent_mobile IS NULL OR parent_mobile='')", (), scopes))
+        if n:
+            add('noParentMobile', 'info', 'students?missing=parent', 'user', n=n)
+    if not out:
+        add('allGood', 'ok', 'door' if can({'door.use'}) else 'overview', 'check')
+    out.sort(key=lambda a: ADVICE_ORDER[a['level']])
+    return out
+
+
 def reports(store, ym, scopes=None):
     """The month in numbers for the Reports page."""
     if not D.valid_month(ym):
