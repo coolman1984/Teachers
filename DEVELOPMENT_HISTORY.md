@@ -2,6 +2,33 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Every core screen built and the daily journey tested end to end (2026-10-05)
+
+**Why:** the owner asked for the whole app, easy for non-technical staff, impressive through simplicity and smart
+problem solving, with the core journey tested and nothing outside the project's scope.
+**What:** Students (filters, computed balances, the student file, enrol/move/end with seats, follow-up log, QR ID
+cards), Groups (list, week timetable with server clashes, today, teachers/rooms/subjects, weekly-times form with a clash
+check before saving, bulk enrol by codes, paper attendance sheet), Money (my shift, other income, expenses, banknote
+counter close with printed report, receipts and expenses by period with CSV, all shifts, handouts), Follow-up (risk
+cards, debts, one-by-one WhatsApp sender), Exams (Enter-down marks sheet, paste a column, ties, stats, results), Teacher
+settlements (formula in words, approve, payout, statement), Reports (month figures, charts, profitability decisions,
+presentation) and a Help centre with "help for this page". New reads: `/api/c/balances`, `/api/c/absent`.
+**Smart fixes found by building and testing:** absence is never stored, so a stored-record absentee list was always
+empty – absentees are now computed from held sessions, the advisor offers "N absent today – message parents", and a
+parent is never messaged twice the same day. The Front desk profile could take money but could not open the Money page to
+close its own drawer – each Money tab now follows the permission its data needs. Persian yeh/kaf from some keyboards
+did not match Arabic names – unified in the browser and the server.
+**Mistakes:** `HS.dialog` returned the shared overlay so dialog listeners leaked into later dialogs; record colours are
+theme token names, not CSS colours; follow-up reason/outcome were swapped against the server's 40/400 limits; a
+duplicate i18n key (`shift.opened`); the settlement payout prefill raced a timer; the attendance buttons reused the
+`present` class of the presentation overlay. Each was caught by a test written for the screen.
+**Evidence:** Python gate 152 tests OK (2 skips) in 257 s incl. sample performance (card 46 ms, dashboard 160 ms,
+state 453 ms / 4.2 MB); frontend 19 OK; browser `test_e2e_center` 11 OK with local Chrome, including the journey of a
+day as the Front desk profile (advisor → open shift → scan → pay → absentee message → close with no difference). One
+earlier run timed out once at the login screen and passed on the re-run; not reproduced. Pyflakes clean.
+**Lessons:** write the browser scenario together with the screen – it found most of the defects above; test with the
+built-in profiles, not only the administrator; derive "absent" the way the server defines it.
+
 ## GitHub synchronization lint prerequisite (2026-10-05)
 
 **Why:** the owner requested publishing the committed work and synchronizing GitHub main.

@@ -443,6 +443,9 @@ class CenterApiTest(unittest.TestCase):
         self.assertNotIn(self.student, got)                              # present
         self.assertNotIn(fourth, got)                                    # excused is not chased
         self.assertFalse([a for a in self.c.get('/api/state')['attendance'] if a['studentId'] == third])
+        self.c.post('/api/c/followup', {'studentId': third, 'type': 'whatsapp', 'reason': 'absence'})
+        row = next(r for r in self.c.get('/api/c/absent')['rows'] if r['studentId'] == third)
+        self.assertTrue(row['told'])                                     # the parent is not messaged twice the same day
         scoped = self.scoped_client(['followup.view'])
         self.assertIn(third, {r['studentId'] for r in scoped.get('/api/c/absent')['rows']})
 

@@ -258,7 +258,11 @@
     render: function (ctx) {
       var q = (ctx && ctx.route && ctx.route.q) || {};
       if (q.tab && TABS.indexOf(q.tab) >= 0) tab = q.tab;
-      var tabs = TABS.filter(function (t) { return t !== 'shifts' || HS.can(['shifts.manage', 'money.view']); });
+      // each tab follows the permission its server reads need: all receipts and expenses need money.view
+      var need = { shift: ['money.collect', 'expenses.add', 'shifts.close', 'shifts.manage'], receipts: ['money.view'], expenses: ['money.view'],
+        shifts: ['shifts.manage', 'money.view'], handouts: ['money.collect', 'materials.manage'] };
+      var tabs = TABS.filter(function (t) { return HS.can(need[t]); });
+      if (tabs.indexOf(tab) < 0) tab = tabs[0] || 'shift';
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.money')) + '</h1><p>' + HS.esc(HS.t('page.money.d')) + '</p></div></div>' +
         '<div class="tabs" role="tablist" style="margin-bottom:1rem">' + tabs.map(function (t) { return '<button role="tab" data-mtab="' + t + '" aria-selected="' + (t === tab) + '">' + HS.esc(HS.t('money.tab.' + t)) + '</button>'; }).join('') + '</div><div data-mpane></div>';
     },

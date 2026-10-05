@@ -167,6 +167,8 @@ New (center) — GET `/api/c/<action>`:
 | `dashboard` | – | overview.view | KPIs (money hidden without money.view/reports.view) |
 | `exam` | id | exams.view, marks.enter | `{exam, rows[{student, mark, rank, groupId}], stats}` |
 | `clashes` | – | groups.view | timetable clashes |
+| `balances` | – | money.view, money.collect, followup.view | `{students:{id: balance}, lastPaid:{id: date}, enrollments:{id:{balance, feeType, unit, due, sessionsLeft?}}}` (computed) |
+| `absent` | – | followup.view, attendance.mark, messages.send | today's absentees in held sessions `{date, rows[{studentId, name, code, groupId, sessionId, start, told}]}` – absence is never stored |
 | `advice` | – | overview.view | ranked advisor items `[{id, level bad/warn/info/ok, page, icon, vars}]`; texts `adv.<id>.t/.b/.go` |
 
 POST `/api/c/<action>` (JSON body): `checkin {studentId, sessionId, status?, via?}`, `roll {sessionId, marks:{studentId:status}}`,
@@ -562,6 +564,7 @@ cd tests
 python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)
 python3 -m unittest test_sample test_multinode                                                          # before a PR (~4 min)
 HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser              # when screens changed
+# Windows: HS_CHROMIUM="C:\Program Files\Google\Chrome\Application\chrome.exe"; pyflakes lives in data/qa-deps (PYTHONPATH)
 cd ../gateway && node --test --no-warnings test/                                                        # when gateway changed
 grep -rn "trip\|Trip\|vehicle\|driver" js server --include=*.js --include=*.py | grep -v "^server/\(sync\|journal\|replica\)"   # must be empty after P1
 ```

@@ -53,12 +53,17 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Browser tests `tests/test_e2e_center.py` (door flow, roll call, phone tab bar) – 3 OK with local Chrome
   - [ ] Handout sale, wallet top-up and sounds setting on the card; camera scan verified on HTTPS
 - [ ] P5.2 Students + student panel + cards/receipt printing
+  - [x] List filters (grade, group, teacher, debt, risk, no parent number) with computed balances (`/api/c/balances`)
+  - [x] Student file tabs; grade-system-track form; enrol/move/end with seats; follow-up log; ID cards with QR (10 per A4)
   - [x] Editable CSV/Excel import preview and atomic selected save: scoped matching, deduplication, consent, capacity
   - [ ] Owner's actual real-data file test (source/path not yet supplied)
-- [ ] P5.3 Groups & timetable
-- [ ] P5.4 Roll call panel
-- [ ] P5.5 Money (shift, receipts, expenses, shifts, handouts)
-- [ ] P5.6 Exams & marks
+- [x] P5.3 Groups & timetable
+  - [x] List, week timetable in teacher colours with clashes outlined, phone day view, today tab, teachers/rooms/subjects
+  - [x] Group form with weekly times; server clash check blocks room/teacher clashes, warns on small room; bulk enrol by codes; paper attendance sheet
+- [x] P5.4 Roll call panel (HS.openRoster: 4 states, all present, live count; from door, groups and overview)
+- [x] P5.5 Money (shift, receipts, expenses, shifts, handouts)
+  - [x] Banknote counter close with reason and printed report; reversals; CSV export; desk profile reaches its own shift
+- [x] P5.6 Exams & marks (Enter moves down, A = absent, paste a column, live ranking with ties, stats, print, results queue)
 - [ ] P5.7 Overview
   - [x] Live scoped dashboard numbers and sample-centre controls
   - [x] Command centre: greeting, count-up figures, quick actions, sessions now/next, 28-day SVG trends, getting-started checklist
@@ -67,10 +72,12 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [ ] System status card (backup age, sync, parent links) – needs a cheap `/api/c/status`
 
 ## Phase P6 – Differentiators 1
-- [ ] P6.1 Follow-up / early warning + debts
-- [ ] P6.2 Sequential WhatsApp/SMS sender + monthly report text
-- [ ] P6.3 Teacher settlements
+- [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)
+- [x] P6.2 Sequential WhatsApp/SMS sender (HS.waQueue, never bulk, every send logged, not twice the same day) + per-kind default texts
+- [x] P6.3 Teacher settlements (formula in words, approve / changed-after-approval, prefilled payout, printed statement)
 - [ ] P6.4 Reports + profitability + presentation
+  - [x] Month figures, daily charts, breakdowns, profitability with one decision per group, drawer differences, 4-slide presentation, print
+  - [ ] Excel export of the report (sheets per section)
 - [ ] P6.5 School support groups statement
 
 ## Phase P7 – Parent link
@@ -80,6 +87,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 
 ## Phase P8 – Daily scenario tests (browser)
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)
+  - [x] 11 browser scenarios incl. the core journey as the Front desk profile (advisor -> shift -> scan -> pay -> absentee message -> close)
+  - [ ] Teacher-scoped login scenario and two-PC UI scenario
 
 ## Phase P9 – Differentiators 2
 - [ ] P9.1 Bubble sheets print + phone reading
@@ -89,5 +98,6 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 
 ## Phase P10 – Docs and delivery
 - [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version 0.1.0
+  - [x] Help centre: 11 topics, 42 questions in both languages, Arabic-tolerant search, "?" opens the current page's topic
   - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
   - [ ] Final centre browser acceptance and installer/release verification remain pending

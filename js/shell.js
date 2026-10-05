@@ -11,7 +11,8 @@
     { id: 'door', icon: 'board', group: 'ops', perm: 'door.use', key: 'd', phase: 1 },
     { id: 'students', icon: 'users', group: 'ops', perm: 'students.view', key: 's', phase: 1 },
     { id: 'groups', icon: 'layers', group: 'ops', perm: 'groups.view', key: 'g', phase: 1 },
-    { id: 'money', icon: 'sheet', group: 'money', perm: 'money.view', key: 'm', phase: 1 },
+    // the desk can collect and close its own shift without seeing everybody's money (money.view)
+    { id: 'money', icon: 'sheet', group: 'money', perm: ['money.view', 'money.collect', 'expenses.add', 'shifts.close'], key: 'm', phase: 1 },
     { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1 },
     { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1 },
     { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1 },

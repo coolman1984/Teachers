@@ -476,11 +476,13 @@ def absentees(store, d=None, scopes=None):
             if r.get('status') in ('present', 'late', 'excused') or r.get('guest') or not st.get('id'):
                 continue
             out.append({'studentId': st['id'], 'name': st.get('name'), 'code': st.get('code'), 'groupId': s['groupId'], 'sessionId': s['id'], 'start': s.get('start')})
+    with store.lock:   # parents already told today (a WhatsApp/SMS/call logged with reason "absence") are not told twice
+        told = {r[0] for r in store.conn.execute("SELECT student_id FROM followups WHERE deleted=0 AND date=? AND reason='absence'", (day,))}
     seen, uniq = set(), []
     for a in out:   # one message per student even if he missed two sessions
         if a['studentId'] not in seen:
             seen.add(a['studentId'])
-            uniq.append(a)
+            uniq.append({**a, 'told': a['studentId'] in told})
     return {'date': day, 'rows': uniq}
 
 
@@ -1325,9 +1327,7 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
                 add('noRollCall', 'warn', 'door', 'clock', n=len(empty))
     # 4b. today's absentees whose parents have not been told yet (absence is computed, never stored)
     if can({'messages.send'}) and can({'contacts.view'}) and sess:
-        with store.lock:
-            told = {r[0] for r in store.conn.execute("SELECT student_id FROM followups WHERE deleted=0 AND date=? AND reason='absence'", (day,))}
-        n = len([a for a in absentees(store, d, scopes)['rows'] if a['studentId'] not in told])
+        n = len([a for a in absentees(store, d, scopes)['rows'] if not a['told']])
         if n:
             add('absentees', 'warn', 'followup?tab=messages', 'chat', n=n)
     # 5. students about to leave

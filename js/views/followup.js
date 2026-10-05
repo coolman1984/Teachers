@@ -115,7 +115,7 @@
   // absence is computed by the server (it is never stored), so the absentee list comes from /api/c/absent
   function audience(key, risk, absent) {
     var ids = {};
-    if (key === 'absent') return (absent || []).map(function (a) { return { id: a.studentId, name: a.name }; });
+    if (key === 'absent') return (absent || []).filter(function (a) { return !a.told; }).map(function (a) { return { id: a.studentId, name: a.name }; });
     if (key === 'risk') (risk || []).forEach(function (r) { if (!r.followed) ids[r.studentId] = 1; });
     else if (key.indexOf('g:') === 0) D.list('enrollments').forEach(function (e) { if (e.groupId === key.slice(2) && (e.status || 'active') === 'active') ids[e.studentId] = 1; });
     return Object.keys(ids).map(function (id) { return D.get('students', id); }).filter(Boolean).map(function (s) { return { id: s.id, name: s.name }; });

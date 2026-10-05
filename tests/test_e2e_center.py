@@ -264,6 +264,70 @@ class DoorTest(BrowserBase):
         self.assertTrue(any('وردية' in v for v in visible), visible)
         self.assertEqual(self.errors, [])
 
+    def test_journey_a_day_at_the_front_desk(self):
+        """The core journey with the built-in Front desk profile (not the administrator): the advisor says what to do,
+        the shift is opened, a scanned student is checked in and pays, the parents of an absent student are told,
+        and the drawer is counted and closed with no difference."""
+        ops = [('students', 'e2e-j1', {'code': '42001', 'name': 'Journey Present', 'gradeCode': 'S1', 'system': 'thanaweya', 'parentMobile': '01011111111', 'consent': True, 'active': True}),
+               ('students', 'e2e-j2', {'code': '42002', 'name': 'Journey Absent', 'gradeCode': 'S1', 'system': 'thanaweya', 'parentMobile': '01022222222', 'consent': True, 'active': True}),
+               ('groups', 'e2e-jg', {'name': 'Journey Group', 'teacherId': 'e2e-t', 'subjectId': 'e2e-sub', 'gradeCode': 'S1', 'feeType': 'session', 'fee': 75,
+                                     'capacity': 30, 'active': True, 'slots': [{'day': D.weekday(date.today()), 'start': '00:01', 'end': '23:58'}]})]
+        self.c.post('/api/commit', {'label': 'Journey fixture', 'ops': [{'e': e, 'id': i, 'op': 'put', 'row': r} for e, i, r in ops]})
+        for sid in ('e2e-j1', 'e2e-j2'):
+            self.c.post('/api/c/enroll', {'studentId': sid, 'groupId': 'e2e-jg'})
+        perms = next(p for p in self.c.get('/api/users')['profiles'] if p['id'] == 'secretary')['perms']
+        self.c.post('/api/users/save', {'username': 'desk.journey', 'full_name': 'Desk Journey', 'password': 'Strong-pass1', 'must_change': False, 'perms': perms, 'scopes': None})
+        ctx = self.browser.new_context(viewport={'width': 1360, 'height': 860})
+        ctx.add_init_script("localStorage.setItem('hs.prefs', JSON.stringify({welcomed: true, lang: 'en'}))")
+        pg = ctx.new_page(); errors = []
+        pg.on('pageerror', lambda e: errors.append(str(e)))
+        pg.goto(self.S.base)
+        pg.fill('#username', 'desk.journey'); pg.fill('#password', 'Strong-pass1'); pg.click('button[type=submit]')
+        pg.wait_for_selector('#app-shell')
+        self.assertFalse(pg.is_visible('#sidebar a[data-page="reports"]'))         # the desk does not see the centre's reports
+        # 1. the advisor tells the desk to open its shift; its button leads there
+        pg.wait_for_selector('.adv:has-text("Open the cash shift") a')
+        pg.click('.adv:has-text("Open the cash shift") a')
+        pg.click('[data-openshift]'); pg.fill('#sh-o', '300'); pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.shift-card')
+        # 2. a scanned card checks the present student in; he pays the session fee in cash
+        pg.goto(self.S.base + '/#/door')
+        pg.wait_for_selector('#door-q').type('42001', delay=5); pg.keyboard.press('Enter')
+        pg.wait_for_selector('.done-banner')
+        pg.click('[data-pay]'); pg.wait_for_selector('#pay-a')
+        self.assertEqual(pg.input_value('#pay-a'), '75')
+        pg.click('.dialog [data-ok]'); pg.wait_for_selector('[data-print]')
+        # 3. the session is held and the other student never came: the advisor offers to tell his parents
+        pg.goto(self.S.base + '/#/overview')
+        pg.wait_for_selector('.adv:has-text("absent today") a')
+        pg.click('.adv:has-text("absent today") a')
+        pg.select_option('#m-a', 'absent')
+        pg.wait_for_selector('[data-count]:not(:has-text("0"))')
+        pg.evaluate("window.open = () => null")
+        pg.click('[data-start]')
+        for _ in range(8):                                                   # other absentees may come first: skip them
+            pg.wait_for_selector('.dialog [data-text], .dialog .empty')
+            if 'Journey Absent' in pg.inner_text('.dialog [data-q]'):
+                break
+            pg.click('.dialog [data-skip]')
+        pg.click('.dialog [data-open]')
+        pg.click('.dialog [data-close]')
+        # 4. closing: 300 opening + 75 cash = 375 counted exactly
+        pg.goto(self.S.base + '/#/money')
+        pg.wait_for_selector('[data-close-shift]'); pg.click('[data-close-shift]')
+        pg.fill('[data-note="200"]', '1'); pg.fill('[data-note="100"]', '1'); pg.fill('[data-note="50"]', '1'); pg.fill('[data-note="20"]', '1'); pg.fill('[data-note="5"]', '1')
+        self.assertTrue(pg.is_hidden('[data-reason]'))
+        pg.evaluate("window.print = () => {}")
+        pg.click('.dialog [data-ok]'); pg.wait_for_selector('[data-openshift]')
+        state = self.c.get('/api/state')
+        self.assertTrue(any(a['studentId'] == 'e2e-j1' and a['status'] in ('present', 'late') for a in state['attendance']))
+        self.assertEqual([(p['amount'], p['method'], p['by'].startswith('Desk Journey')) for p in state['payments'] if p['studentId'] == 'e2e-j1'], [(75, 'cash', True)])
+        self.assertTrue(any(f['studentId'] == 'e2e-j2' and f['reason'] == 'absence' for f in state['followups']))
+        shift = [s for s in self.c.get('/api/c/shifts') if str(s.get('user')).startswith('Desk Journey')][0]
+        self.assertEqual((shift['status'], shift['expectedCash'], shift['diff']), ('closed', 375, 0))
+        self.assertEqual(errors, [])
+        ctx.close()
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')
