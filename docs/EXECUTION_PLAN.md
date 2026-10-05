@@ -239,7 +239,7 @@ Grades: الصف الأول الابتدائي … السادس الابتدائ
 **P1.1 index.html.** Script list exactly: `lib/qrcode.min.js, js/core.js, js/i18n.js, js/i18n/en.js, js/i18n/ar.js, js/prefs.js,
 js/shell.js, js/data.js, js/ui.js, js/views/join.js, js/views/auth.js, js/views/overview.js, js/views/door.js, js/views/students.js,
 js/views/groups.js, js/views/money.js, js/views/exams.js, js/views/followup.js, js/views/settlements.js, js/views/reports.js,
-js/views/lists.js, js/views/importx.js, js/views/print.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
+js/views/lists.js, js/views/importx.js, js/views/print.js, js/omr.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
 js/views/mailbox.js, js/views/soon.js, js/views/settings.js, js/views/help.js, js/app.js`. `<title>Hessa</title>`,
 noscript text "Hessa needs JavaScript. يحتاج نظام حصة إلى تفعيل جافاسكريبت." New favicon (amber square + cap).
 Create each new view file as a minimal `HS.views.<id> = HS.withData({render, mount})` first (skeleton), then fill it in its task.

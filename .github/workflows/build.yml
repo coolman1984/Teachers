@@ -62,7 +62,7 @@ jobs:
           HS_CHROMIUM: /usr/bin/google-chrome
         run: |
           python -c "import os, sys; sys.exit(0 if os.path.exists(os.environ['HS_CHROMIUM']) else 'Chrome is missing on the runner')"
-          python -m unittest test_e2e_browser test_e2e_center test_center_review test_center_links test_gateway_parent test_acceptance
+          python -m unittest test_e2e_browser test_e2e_center test_center_review test_center_links test_gateway_parent test_acceptance test_omr
 
   windows-installer:
     needs: test

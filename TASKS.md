@@ -153,7 +153,8 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] CI: a `browser` job runs the screen tests with the runner's Chrome (review E09)
 
 ## Phase P9 – Differentiators 2
-- [ ] P9.1 Bubble sheets print + phone reading
+- [x] P9.1 Bubble sheets print + phone reading (review G01, G02): answer key in the exam form (Latin or Arabic letters, live count), A4 sheets at true size named per student (code pre-filled) or blank, Arabic or Latin letters; `js/omr.js` reads photos in the browser (Otsu threshold, corner squares, homography, bubble darkness), flags empty/double rows and unknown codes, a person checks before saving; the server counts the score from the answers (never trusts the page). `tests/test_omr.py`: 960/960 bubbles right over 6 turned, perspective, blurred, noisy photos incl. light pen marks; the whole teacher journey in Chromium
+  - [ ] Try printed sheets and real phone photos at the centre
 - [ ] P9.2 AI question generator (optional key)
 - [ ] P9.3 Top students image, certificates, teacher page
 - [ ] P9.4 Video protection (ask the owner first)

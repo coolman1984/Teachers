@@ -20,6 +20,9 @@
         '<div class="field"><label for="xf-k">' + HS.esc(HS.t('ex.kind')) + '</label><select class="input" id="xf-k" name="kind">' + KINDS.map(function (k) { return opt(k, HS.t('exam.kind.' + k), x.kind); }).join('') + '</select></div>' +
         '<div class="field"><label for="xf-d">' + HS.esc(HS.t('f.date')) + '</label><input class="input" id="xf-d" name="date" type="date" value="' + HS.esc(x.date || '') + '"></div>' +
         '<div class="field"><label for="xf-m">' + HS.esc(HS.t('ex.max')) + '</label><input class="input" id="xf-m" name="maxScore" type="number" min="1" step="any" dir="ltr" value="' + HS.esc(x.maxScore || '') + '"></div>' +
+        '<div class="field"><label for="xf-q">' + HS.esc(HS.t('omr.questions')) + '</label><input class="input" id="xf-q" name="questions" type="number" min="0" max="' + HS.omr.MAX_Q + '" dir="ltr" value="' + HS.esc(x.questions || '') + '"><span class="help">' + HS.esc(HS.t('omr.questions.h')) + '</span></div>' +
+        '<div class="field"><label for="xf-c">' + HS.esc(HS.t('omr.choices')) + '</label><select class="input" id="xf-c" name="choices">' + [2, 3, 4, 5].map(function (n) { return opt(n, String(n), x.choices || 4); }).join('') + '</select></div>' +
+        '<div class="field wide" data-keyfield><label for="xf-k2">' + HS.esc(HS.t('omr.key')) + '</label><input class="input" id="xf-k2" name="answerKey" dir="ltr" autocomplete="off" spellcheck="false" placeholder="ABCDA BCDAB …" value="' + HS.esc((x.answerKey || []).join('')) + '"><span class="help" data-keycount></span></div>' +
         '<div class="field wide"><span class="lbl">' + HS.esc(HS.t('ex.groups')) + '</span><div class="check-list">' + groups.map(function (g) {
           return '<label class="choice"><input type="checkbox" name="g" value="' + HS.esc(g.id) + '"' + ((x.groupIds || []).indexOf(g.id) >= 0 ? ' checked' : '') + '><span><b>' + HS.esc(g.name) + '</b><small>' + HS.esc(D.teacherName(g.teacherId)) + '</small></span></label>'; }).join('') + '</div>' +
           '<span class="help">' + HS.esc(HS.t('ex.groups.b')) + '</span></div>' +
@@ -27,6 +30,14 @@
       footer: '<button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t(cur ? 'common.save' : 'ex.create')) + '</button>',
       mount: function (p) {
         var form = p.querySelector('[data-xform]');
+        function keyCount() {   // "12 of 20" as the key is typed: the printed sheet and the marking both need it complete
+          var n = Number(digits(form.questions.value)) || 0, k = HS.omr.parseKey(form.answerKey.value), bad = k.indexOf('?') >= 0;
+          p.querySelector('[data-keyfield]').hidden = !n;
+          var out = p.querySelector('[data-keycount]');
+          out.textContent = n ? HS.t('omr.keyCount', { k: k.length, n: n }) + (bad ? ' · ' + HS.t('omr.keyBad') : '') : '';
+          out.className = 'help' + (n && (k.length !== n || bad) ? ' neg' : '');
+        }
+        form.addEventListener('input', keyCount); keyCount();
         function save() {
           var gids = Array.prototype.filter.call(form.querySelectorAll('[name=g]'), function (c) { return c.checked; }).map(function (c) { return c.value; });
           var err = p.querySelector('[data-err]'), title = form.title.value.trim(), max = Number(digits(form.maxScore.value));
@@ -34,10 +45,14 @@
           if (!title) miss.push(HS.t('ex.title'));
           if (!gids.length) miss.push(HS.t('ex.groups'));
           if (!(max > 0)) miss.push(HS.t('ex.max'));
+          var nq = Number(digits(form.questions.value)) || 0, key = HS.omr.parseKey(form.answerKey.value);
+          if (nq > HS.omr.MAX_Q || nq < 0) { err.hidden = false; err.textContent = HS.t('omr.tooMany', { n: HS.omr.MAX_Q }); return; }
+          if (nq && (key.length !== nq || key.indexOf('?') >= 0)) { err.hidden = false; err.textContent = HS.t('omr.keyCount', { k: key.length, n: nq }) + ' · ' + HS.t('omr.keyBad'); return; }
           if (miss.length) { err.hidden = false; err.textContent = HS.t('form.missing', { f: miss.join(', ') }); return; }
           var teachers = {}; gids.forEach(function (g) { teachers[(D.get('groups', g) || {}).teacherId] = 1; });
           if (Object.keys(teachers).length > 1) { err.hidden = false; err.textContent = HS.t('ex.oneTeacher'); return; }   // marks belong to one teacher's scope
-          var row = Object.assign({}, cur || {}, { title: title, kind: form.kind.value, date: form.date.value, maxScore: max, groupIds: gids, teacherId: Object.keys(teachers)[0] });
+          var row = Object.assign({}, cur || {}, { title: title, kind: form.kind.value, date: form.date.value, maxScore: max, groupIds: gids, teacherId: Object.keys(teachers)[0],
+            questions: nq || null, choices: Number(form.choices.value) || 4, answerKey: nq ? key : [] });
           delete row.id; delete row.ver;
           var xid = id || D.newId('ex');
           U.run(D.save('exams', xid, row, (cur ? 'Edit exam ' : 'New exam ') + title), 'common.saved', p.querySelector('[data-save]')).then(function () {
@@ -71,6 +86,70 @@
       '<div><small>' + HS.esc(HS.t('ex.range')) + '</small><b class="num">' + HS.fmt.num(Math.min.apply(null, vals)) + ' – ' + HS.fmt.num(Math.max.apply(null, vals)) + '</b></div></div>' +
       '<div class="histo" aria-label="' + HS.esc(HS.t('ex.histo')) + '">' + bins.map(function (n, i) { return '<div><i style="height:' + Math.round(n * 100 / top) + '%"></i><span class="num">' + (i * 20) + '–' + ((i + 1) * 20) + '%</span><b class="num">' + n + '</b></div>'; }).join('') + '</div>';
   }
+  /* ---------- bubble sheets: print (named or blank) and read the photos, then a person checks before anything is saved ---------- */
+  function bubbleMenu(ex, rows) {
+    var el = HS.dialog({ title: HS.t('omr.print'), body: '<p class="muted">' + HS.esc(HS.t('omr.print.b')) + '</p>' +
+        '<div class="seg" role="group" data-lang><button type="button" data-v="ar" aria-pressed="' + (HS.lang === 'ar') + '">' + HS.esc(HS.t('omr.lettersAr')) + '</button><button type="button" data-v="en" aria-pressed="' + (HS.lang !== 'ar') + '">A B C D</button></div>',
+      footer: '<button class="btn" data-blank>' + HS.esc(HS.t('omr.blank')) + '</button><button class="btn primary" data-named>' + HS.icon('printer', 'sm') + HS.esc(HS.t('omr.named', { n: rows.length })) + '</button>' });
+    var lang = HS.lang === 'ar' ? 'ar' : 'en';
+    el.querySelector('[data-lang]').addEventListener('click', function (e) { var b = e.target.closest('[data-v]'); if (!b) return; lang = b.dataset.v; el.querySelectorAll('[data-v]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); }); });
+    el.querySelector('[data-blank]').addEventListener('click', function () { HS.overlay.close(); HS.printBubbleSheets(ex, null, lang); });
+    el.querySelector('[data-named]').addEventListener('click', function () { HS.overlay.close(); HS.printBubbleSheets(ex, rows.map(function (r) { return { name: r.name, code: r.code }; }), lang); });
+  }
+  function readSheets(ex, rows, done) {
+    var byCode = {}; rows.forEach(function (r) { if (r.code) byCode[String(r.code)] = r; });
+    var results = [];
+    var el = HS.dialog({ title: HS.t('omr.read'), wide: true, body:
+        '<p class="muted">' + HS.esc(HS.t('omr.read.b')) + '</p>' +
+        '<label class="btn primary" style="width:max-content">' + HS.icon('camera', 'sm') + HS.esc(HS.t('omr.pick')) + '<input type="file" accept="image/*" capture="environment" multiple hidden data-files></label>' +
+        '<div data-res></div>',
+      footer: '<span class="grow faint" data-sum></span><button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-save disabled>' + HS.icon('check', 'sm') + HS.esc(HS.t('omr.save')) + '</button>' });
+    var box = el.querySelector('[data-res]');
+    function paint() {
+      if (!results.length) { box.innerHTML = ''; return; }
+      box.innerHTML = U.table([
+        { h: 'omr.photo', cell: function (r) { return '<span class="faint">' + HS.esc(r.file) + '</span>'; } },
+        { h: 'f.name', cell: function (r) {
+          if (!r.ok) return '<span class="badge bad">' + HS.esc(HS.t('omr.noCorners')) + '</span>';
+          return '<select class="input" data-who="' + r.i + '">' + '<option value="">' + HS.esc(HS.t('omr.whoUnknown', { code: r.codeRead })) + '</option>' + rows.map(function (x) {
+            return '<option value="' + HS.esc(x.id) + '"' + (r.studentId === x.id ? ' selected' : '') + '>' + HS.esc(x.name + ' · ' + (x.code || '')) + '</option>'; }).join('') + '</select>'; } },
+        { h: 'f.score', cls: 'end', cell: function (r) { return r.ok ? '<b class="num">' + HS.fmt.num(r.score) + '</b> <span class="faint num">/ ' + HS.fmt.num(ex.maxScore) + '</span>' : ''; } },
+        { h: 'omr.check', cell: function (r) {
+          if (!r.ok) return '';
+          var f = [];
+          if (r.blank.length) f.push('<span class="badge warn">' + HS.esc(HS.t('omr.blankQ', { q: r.blank.join(', ') })) + '</span>');
+          if (r.multi.length) f.push('<span class="badge bad">' + HS.esc(HS.t('omr.multiQ', { q: r.multi.join(', ') })) + '</span>');
+          return f.join(' ') || '<span class="badge ok">' + HS.icon('check', 'sm') + HS.esc(HS.t('omr.clean')) + '</span>'; } }
+      ], results);
+      var ready = results.filter(function (r) { return r.ok && r.studentId; });
+      el.querySelector('[data-sum]').textContent = HS.t('omr.ready', { n: ready.length, m: results.length });
+      el.querySelector('[data-save]').disabled = !ready.length;
+    }
+    el.addEventListener('change', function (e) {
+      if (e.target.matches('[data-files]')) {
+        var files = Array.prototype.slice.call(e.target.files || []);
+        box.innerHTML = '<div class="skeleton" style="height:6rem"></div>';
+        files.reduce(function (chain, file) {
+          return chain.then(function () {
+            return HS.omr.readImage(file, ex).then(function (r) {
+              r.file = file.name; r.i = results.length;
+              if (r.ok) { var who = r.code && byCode[r.code]; r.studentId = who ? who.id : ''; var g = HS.omr.grade(ex.answerKey, r.answers, ex.maxScore); r.score = g.score; r.right = g.right; }
+              results.push(r);
+            }, function () { results.push({ ok: false, file: file.name, i: results.length }); });
+          });
+        }, Promise.resolve()).then(paint);
+        return;
+      }
+      var who = e.target.closest('[data-who]'); if (who) { results[Number(who.dataset.who)].studentId = who.value; paint(); }
+    });
+    el.querySelector('[data-save]').addEventListener('click', function () {
+      var ready = results.filter(function (r) { return r.ok && r.studentId; }), seen = {};
+      var items = ready.filter(function (r) { if (seen[r.studentId]) return false; seen[r.studentId] = 1; return true; })
+        .map(function (r) { return { studentId: r.studentId, score: r.score, answers: r.answers, via: 'omr' }; });
+      U.run(HS.post('/api/c/marks', { examId: ex.id, items: items }), 'ex.saved', this).then(function () { HS.overlay.close(); done(); }, function () {});
+    });
+  }
+
   function openSheet(id) {
     HS.get('/api/c/exam?id=' + encodeURIComponent(id)).then(function (res) {
       var ex = res.exam, max = Number(ex.maxScore) || 0, can = HS.can('marks.enter');
@@ -96,6 +175,8 @@
         '<div data-sheet>' + (rows.length ? tableHTML() : U.empty('users', HS.t('roll.empty'), HS.t('roll.empty.b'))) + '</div>',
         footer: (HS.can('exams.manage') ? '<button class="btn" data-publish aria-pressed="' + (ex.published === true) + '">' + HS.icon(ex.published === true ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(ex.published === true ? 'ex.shown' : 'ex.hidden')) + '</button>' : '') +
           '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ex.print')) + '</button>' +
+          (ex.questions && (ex.answerKey || []).length ? '<button class="btn" data-bubbles>' + HS.icon('doc', 'sm') + HS.esc(HS.t('omr.print')) + '</button>' +
+            (can ? '<button class="btn" data-omr>' + HS.icon('camera', 'sm') + HS.esc(HS.t('omr.read')) + '</button>' : '') : '') +
           (HS.can('messages.send') && HS.can('contacts.view') ? '<button class="btn" data-send>' + HS.icon('chat', 'sm') + HS.esc(HS.t('ex.send')) + '</button>' : '') +
           (can ? '<button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('ex.saveMarks')) + '</button>' : ''),
         mount: function (p) {
@@ -150,6 +231,8 @@
           });
           p.addEventListener('click', function (e) {
             if (e.target.closest('[data-print]')) { HS.printResults(ex, rows, rankOf(rows).rank); return; }
+            if (e.target.closest('[data-bubbles]')) { bubbleMenu(ex, rows); return; }
+            if (e.target.closest('[data-omr]')) { readSheets(ex, rows, function () { HS.panel.close(); setTimeout(function () { openSheet(id); }, 260); }); return; }
             var pub = e.target.closest('[data-publish]');
             if (pub) {   // marks reach the parents' page only after the teacher says so (a half-entered exam never shows)
               var cur = D.get('exams', id); if (!cur) return;

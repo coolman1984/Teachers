@@ -86,6 +86,12 @@
       '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>');
   };
   HS.printHTML = function (html) { printSheet(html); };
+  /* bubble sheets (js/omr.js): one A4 page each, true size, no margins - the reader finds the corner squares */
+  HS.printBubbleSheets = function (exam, students, lang) {
+    var centre = setting('systemName') || HS.t('app.name');
+    var pages = (students && students.length ? students : [null]).map(function (s) { return '<div class="omr-page">' + HS.omr.sheet(exam, s, centre, lang) + '</div>'; });
+    printSheet(pages.join(''), '@page { size: A4; margin: 0; }');
+  };
   /* a sample receipt to set up the printer: nothing is saved, the number says it is a test */
   HS.printTestReceipt = function () {
     printSheet(receipt({ no: HS.t('print.testNo'), date: U.today(), at: new Date().toTimeString().slice(0, 5), studentId: '', amount: 1250, method: 'cash', by: (HS.me || {}).full_name || '' })
@@ -106,14 +112,15 @@
     document.head.appendChild(style);
     return style;
   }
-  function printSheet(html) {
+  function printSheet(html, pageCss) {
     var el = document.createElement('div');
     el.id = 'print-sheet';
     el.className = 'paper-' + (PAPER[HS.prefs.data.receiptPaper] ? HS.prefs.data.receiptPaper : '80');   // only receipts change with it
     el.innerHTML = html;
     document.body.appendChild(el);
     var old = document.getElementById('print-page'); if (old) old.remove();
-    var page = receiptPage(el);
+    var page = pageCss ? document.createElement('style') : receiptPage(el);
+    if (pageCss) { page.id = 'print-page'; page.textContent = pageCss; document.head.appendChild(page); }   // e.g. bubble sheets: A4 without margins
     document.body.classList.add('printing');
     var done = function () { document.body.classList.remove('printing'); el.remove(); if (page) page.remove(); window.removeEventListener('afterprint', done); };
     window.addEventListener('afterprint', done);

@@ -2,6 +2,21 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Bubble sheets: print, photograph, check, save (review G01, G02, plan P9.1 - 2026-10-05)
+
+**Why:** marking a weekly MCQ quiz for 40 students by hand takes a teacher an evening; the plan asked for sheets read by a phone.
+**What:** one geometry in millimetres (`js/omr.js`) draws the A4 sheet as SVG (prints at true size, no margins) and reads its photo:
+grey levels, a threshold from the picture itself (Otsu), the four corner squares as the blobs nearest the photo's corners, a
+perspective map (homography, 8x8 solve), and the darkness inside each bubble. A row with no mark or two marks is flagged, an unknown
+code asks the person to choose the student, and nothing is saved before the person presses Save. The server recomputes the score
+from the answers and the key.
+**Decisions:** no library, no upload - the photo never leaves the phone or PC; max 75 questions (three columns of 25 beside the code);
+the code is five columns of 0-9 (all centre codes are 5 digits).
+**Evidence:** `tests/test_omr.py` - sheets drawn with known answers, then turned up to 10°, in perspective, blurred, darker, noisy,
+on dark tables, with full and light pen marks: 960/960 bubbles right (plan target 98%); a blank photo is refused; a page claiming
+20/20 for 3 right answers is stored as 15; the teacher journey (Arabic key, named sheets, photo, check, save) in Chromium.
+**Limits:** not yet tried with real printers and phone cameras at the centre.
+
 ## Every role tries what it must not do (review E02 - 2026-10-05)
 
 **What:** `tests/test_center_roles.py` signs in as each built-in profile (front desk, teacher limited to one teacher, assistant,

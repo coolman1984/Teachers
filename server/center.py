@@ -1366,6 +1366,11 @@ def save_marks(ctx, exam_id, items):
             continue
         absent = bool(it.get('absent'))
         score = None
+        answers = it.get('answers') if isinstance(it.get('answers'), list) else None
+        if answers is not None and (ex.get('answerKey') or []) and not absent:
+            # a bubble sheet: the score is counted here from the answers and the key, never trusted from the page
+            answers = [str(a or '')[:2].upper() for a in answers[:200]]
+            it = {**it, 'score': grade_answers(ex['answerKey'], answers, mx)[0]}
         if not absent and it.get('score') not in (None, ''):
             try:
                 score = round(float(it['score']), 2)
@@ -1378,7 +1383,7 @@ def save_marks(ctx, exam_id, items):
         mid = D.mark_id(exam_id, sid)
         cur = ctx.store.row('marks', mid)
         row = {'examId': exam_id, 'studentId': sid, 'teacherId': ex.get('teacherId'), 'score': score, 'absent': absent,
-               'via': it.get('via') or 'manual', 'answers': it.get('answers') if isinstance(it.get('answers'), list) else (cur or {}).get('answers')}
+               'via': str(it.get('via') or 'manual')[:10], 'answers': answers if answers is not None else (cur or {}).get('answers')}
         if cur and all(cur.get(k) == row.get(k) for k in ('score', 'absent')):
             continue
         ops.append({'e': 'marks', 'id': mid, 'op': 'put', 'ver': cur['ver'] if cur else None, 'row': row})
