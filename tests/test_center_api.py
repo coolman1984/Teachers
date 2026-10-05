@@ -672,3 +672,16 @@ class CenterMoneyEdgeTest(CenterFixture):
         one = self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 7, 'method': 'vodafone', 'ref': 'VF-' + self.p})
         self.c.post('/api/c/void', {'id': one['id'], 'reason': 'typo'})
         self.c.post('/api/c/pay', {'studentId': self.student, 'groupId': self.group, 'kind': 'fee', 'amount': 7, 'method': 'vodafone', 'ref': 'VF-' + self.p})
+
+    def test_33_day_off_keeps_a_held_session_where_everybody_was_absent(self):
+        # a roll call with only absent/excused students has no "present" count but is history, never a cancellation
+        self.c.post('/api/c/roll', {'sessionId': self.session, 'marks': {self.student: 'absent'}})
+        statuses = {s['id']: s['status'] for s in self.c.get('/api/c/today')['sessions']}
+        self.assertEqual(statuses[self.session], 'held')
+        res = self.c.post('/api/c/dayoff', {'date': date.today().isoformat(), 'reason': 'Power cut'})
+        self.assertGreaterEqual(res['kept'], 1)
+        statuses = {s['id']: s['status'] for s in self.c.get('/api/c/today')['sessions']}
+        self.assertEqual(statuses[self.session], 'held')                                # still held
+        absent = self.c.get('/api/c/absent')['rows']
+        self.assertIn(self.student, {r['studentId'] for r in absent})                   # still counted as absent for follow-up
+        self.assertEqual(statuses[self.other_session], 'cancelled')                     # the untouched session was cancelled

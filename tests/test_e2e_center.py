@@ -46,10 +46,10 @@ class DoorTest(BrowserBase):
         self.assertEqual(len(att), 1)
         # the session fee is owed now: pay it, opening the cash shift on the way
         pg.click('[data-pay]')
-        pg.wait_for_selector('#sh-o')
-        pg.fill('#sh-o', '500')
-        pg.click('.dialog [data-ok]')
-        pg.wait_for_selector('#pay-a')
+        if pg.wait_for_selector('#sh-o, #pay-a').get_attribute('id') == 'sh-o':   # another scenario of this class may have opened the shift
+            pg.fill('#sh-o', '500')
+            pg.click('.dialog [data-ok]')
+            pg.wait_for_selector('#pay-a')
         self.assertEqual(pg.input_value('#pay-a'), '60')
         pg.click('.dialog [data-m="vodafone"]')
         pg.fill('#pay-r', 'TX-1')
@@ -281,6 +281,47 @@ class DoorTest(BrowserBase):
         g = next(g for g in self.c.get('/api/state')['groups'] if g['id'] == 'e2e-g2')
         self.assertEqual((g['fee'], g['feeHistory'][0]['fee']), (350, 300))
         self.assertEqual(self.errors, [])
+
+    def test_repeated_transfer_reference_warns_again_when_the_reference_is_edited(self):
+        self.c.post('/api/commit', {'label': 'E2E dup', 'ops': [{'e': 'students', 'id': 'e2e-dup', 'op': 'put', 'row': {
+            'code': '41950', 'name': 'Synthetic Dup Payer', 'gradeCode': 'S1', 'system': 'thanaweya', 'consent': True, 'active': True}}]})
+        self.c.post('/api/c/enroll', {'studentId': 'e2e-dup', 'groupId': 'e2e-g'})
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/door')
+        pg.wait_for_selector('#door-q').type('41950', delay=5)
+        pg.keyboard.press('Enter')
+
+        def pay(ref):
+            pg.click('[data-card] [data-pay]')
+            if pg.wait_for_selector('#sh-o, #pay-a').get_attribute('id') == 'sh-o':
+                pg.fill('#sh-o', '100')
+                pg.click('.dialog [data-ok]')
+                pg.wait_for_selector('#pay-a')
+            pg.fill('#pay-a', '10')
+            pg.click('.dialog [data-m="instapay"]')
+            pg.fill('#pay-r', ref)
+
+        def count(ref):
+            return len([p for p in self.c.get('/api/state')['payments'] if p['studentId'] == 'e2e-dup' and p['ref'] == ref])
+        pay('DUP-1')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-print]')
+        self.assertEqual(count('DUP-1'), 1)
+        pay('DUP-1')                                   # the same number again: warned, nothing saved
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.dialog [data-err]:not([hidden])')
+        self.assertIn('already on receipt', pg.inner_text('.dialog [data-err]'))
+        self.assertEqual(count('DUP-1'), 1)
+        pg.fill('#pay-r', 'DUP-1')                     # the operator edits the field (to a value that is also used): warned AGAIN
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.dialog [data-err]:not([hidden])')
+        self.assertEqual(count('DUP-1'), 1)
+        pg.click('.dialog [data-ok]')                  # pressing Save again for the exact value that was shown confirms it
+        pg.wait_for_selector('.dialog', state='detached')
+        self.assertEqual(count('DUP-1'), 2)
+        # the two warnings are answered with HTTP 400 by design (the browser logs them); nothing else may be logged
+        self.assertEqual([e for e in self.errors if 'status of 400' not in e], [])
+        self.assertEqual(len(self.errors), 2)
 
     def test_zz_settlement_approve_payout_and_reports(self):
         # runs last (zz): a fee of the fixture group is collected, then the teacher is settled and paid

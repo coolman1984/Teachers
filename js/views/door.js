@@ -158,6 +158,9 @@
         }, function (e) { btn.disabled = false; err.hidden = false; err.textContent = U.errorText(e); beep('warn'); if (e && e.data && e.data.key === 'err.refUsed') dupSeen = true; });
       }
       var dupSeen = false;   // the same transfer number twice is shown once; pressing Save again confirms it is a real second payment
+      // ... but only for the reference and method that were shown: changing either asks again
+      el.querySelector('#pay-r').addEventListener('input', function () { dupSeen = false; });
+      el.querySelector('[data-methods]').addEventListener('click', function () { dupSeen = false; });
       el.querySelector('[data-ok]').addEventListener('click', save);
       amount.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
     }, function () { /* the shift was not opened: nothing happens */ });
@@ -346,7 +349,7 @@
         if (e.target.closest('[data-print]') && card.lastReceipt) { HS.printReceipt(card.lastReceipt); return; }
         if (e.target.closest('[data-enrol]')) { var sid = card.student.id; HS.pickGroup(card.student, function () { openCard(sid, false); }); return; }
         var eg = e.target.closest('[data-enrol-g]');
-        if (eg) { var sid2 = card.student.id; U.run(HS.post('/api/c/enroll', { studentId: sid2, groupId: eg.dataset.enrolG }), 'common.saved', eg).then(function () { return openCard(sid2, false); }, function () {}); return; }
+        if (eg) { var sid2 = card.student.id; U.run(HS.post('/api/c/enroll', { studentId: sid2, groupId: eg.dataset.enrolG, billFrom: HS.defaultBillFrom ? HS.defaultBillFrom(HS.data.get('groups', eg.dataset.enrolG)) : undefined }), 'common.saved', eg).then(function () { return openCard(sid2, false); }, function () {}); return; }
         if (e.target.closest('[data-wa]')) {
           HS.get('/api/c/wa?studentId=' + encodeURIComponent(card.student.id) + '&kind=monthly&lang=' + HS.lang).then(function (r) {
             if (r.to) window.open('https://wa.me/' + r.to + '?text=' + encodeURIComponent(r.text), '_blank', 'noopener');

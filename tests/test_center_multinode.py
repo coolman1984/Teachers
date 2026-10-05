@@ -1,6 +1,6 @@
 """Partitioned centre nodes: deterministic attendance, receipt ranges, additive handout stock."""
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from cluster import Cluster
 import center
 import domain as D
@@ -46,6 +46,34 @@ class CenterTwoPcTest(unittest.TestCase):
                 self.assertEqual(len(peer.store.rows('payments')), 2)
                 self.assertEqual(peer.store.row('materials', 'mat1')['stock'], 4)
                 self.assertTrue(peer.journal.verify(all_signatures=True)['ok'])
+        finally:
+            cluster.close()
+
+    def test_offline_free_trials_in_different_sessions_charge_all_but_the_earliest(self):
+        """Two PCs cannot see each other's trial, so both may record one in a different session. After syncing both
+        rows stay (nothing is lost) but only the earliest trial of the student in the group is free, on every PC."""
+        cluster = Cluster(2)
+        try:
+            a, b = cluster.peers
+            today = date.today()
+            days = [(today - timedelta(days=3)).isoformat(), (today - timedelta(days=1)).isoformat()]
+            a.commit('Synthetic centre', [
+                {'e': 'teachers', 'id': 't1', 'op': 'put', 'row': {'name': 'Synthetic Teacher'}},
+                {'e': 'students', 'id': 's9', 'op': 'put', 'row': {'name': 'Synthetic Trial', 'code': '10009', 'gradeCode': 'S1'}},
+                {'e': 'groups', 'id': 'g1', 'op': 'put', 'row': {'name': 'Synthetic Group', 'teacherId': 't1', 'subjectId': 'sub1', 'fee': 50,
+                    'feeType': 'session', 'slots': [{'day': D.weekday(today - timedelta(days=3)), 'start': '10:00', 'end': '11:00'},
+                                                     {'day': D.weekday(today - timedelta(days=1)), 'start': '10:00', 'end': '11:00'}]}}])
+            cluster.converge()
+            for peer, day in zip((a, b), days):    # offline: each PC sees no earlier trial
+                ctx = center.Ctx(peer.store, peer.journal, peer.node.id, peer.name, '127.0.0.1', peer.name, None, ALL)
+                r = center.checkin(ctx, 's9', D.session_id('g1', day, '10:00'), now=datetime.combine(date.fromisoformat(day), datetime.min.time().replace(hour=10)), trial=True)
+                self.assertTrue(r['trial'])
+            cluster.converge()
+            ens = [{'id': 'en9', 'studentId': 's9', 'groupId': 'g1', 'from': days[0], 'status': 'active', 'teacherId': 't1'}]
+            for peer in (a, b):
+                self.assertEqual(len([x for x in peer.store.rows('attendance') if x.get('trial')]), 2)     # both visits kept
+                info = center.balances(peer.store, ens, today)['en9']
+                self.assertEqual((info['owed'], info['units']), (50, 1))       # the earlier trial is free, the later one is charged
         finally:
             cluster.close()
 
