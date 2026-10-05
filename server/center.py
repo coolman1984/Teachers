@@ -1208,6 +1208,28 @@ def dashboard(store, scopes=None, d=None):
             'risk': len(risk_list(store, scopes, limit=2000))}
 
 
+@cached_read
+def student_balances(store, scopes=None, d=None):
+    """The money position of every active enrolment the caller may see, summed per student, for the students list and
+    the debts list. Computed from attendance and receipts on every data version (never a stored running balance)."""
+    d = d or _today()
+    day = d.isoformat()
+    ens = store.rows('enrollments', "(status IS NULL OR status='active') AND (to_date IS NULL OR to_date='' OR to_date>=?)", (day,), scopes)
+    bals = balances(store, ens, d)
+    per, oldest = {}, {}
+    for e in ens:
+        b = bals.get(e['id'])
+        if not b:
+            continue
+        per[e['studentId']] = round(per.get(e['studentId'], 0) + b['balance'], 2)
+    with store.lock:   # the last payment date tells how long a debt has been waiting
+        for sid, last in store.conn.execute("SELECT student_id, MAX(date) FROM payments WHERE deleted=0 AND kind='fee' GROUP BY student_id"):
+            oldest[sid] = last
+    return {'students': per, 'lastPaid': {k: v for k, v in oldest.items() if k in per},
+            'enrollments': {k: {f: v[f] for f in ('balance', 'feeType', 'unit', 'due') if f in v} | ({'sessionsLeft': v['sessionsLeft']} if 'sessionsLeft' in v else {})
+                            for k, v in bals.items()}}
+
+
 ADVICE_ORDER = {'bad': 0, 'warn': 1, 'info': 2, 'ok': 3}
 
 

@@ -24,16 +24,27 @@
       (setting('receiptFooter') ? '<p class="r-foot">' + HS.esc(setting('receiptFooter')) + '</p>' : '') +
       '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>';
   }
-  HS.printReceipt = function (p) {
+  /* ID cards: 10 per A4 sheet (85 x 54 mm), the QR holds only the code, which the front-desk scanner types */
+  function cards(list) {
+    var centre = setting('systemName') || HS.t('app.name');
+    return '<div class="ps-cards">' + list.map(function (s) {
+      return '<div class="id-card"><div class="c-top"><b>' + HS.esc(centre) + '</b><span>' + HS.esc(HS.t('card.title')) + '</span></div>' +
+        '<div class="c-body"><div class="c-qr">' + qr(String(s.code || '')) + '</div><div class="c-txt"><b class="c-name">' + HS.esc(s.name) + '</b>' +
+        '<span>' + U.grade(s.gradeCode, s.system, s.track) + '</span><span class="c-code" dir="ltr">' + HS.esc(s.code || '') + '</span></div></div></div>';
+    }).join('') + '</div>';
+  }
+  HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
+  HS.printReceipt = function (p) { printSheet(receipt(p)); };
+  function printSheet(html) {
     var el = document.createElement('div');
     el.id = 'print-sheet';
-    el.innerHTML = receipt(p);
+    el.innerHTML = html;
     document.body.appendChild(el);
     document.body.classList.add('printing');
     var done = function () { document.body.classList.remove('printing'); el.remove(); window.removeEventListener('afterprint', done); };
     window.addEventListener('afterprint', done);
     setTimeout(function () { window.print(); }, 60);
-  };
+  }
 
   HS.views.print = HS.withData({
     render: function () {

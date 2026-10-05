@@ -2,6 +2,16 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## GitHub synchronization lint prerequisite (2026-10-05)
+
+**Why:** the owner requested publishing the committed work and synchronizing GitHub main.
+**What:** remove an unused browser-test import so the mandatory Python lint gate can pass.
+**Lessons:** verify an isolated committed snapshot when another session is editing the workspace;
+publish only the reviewed commits and preserve uncommitted work and private local files.
+**Evidence:** frontend 18 passed; gateway 15 passed; Python lint passed. Browser discovery
+skipped 16 tests because the configured Chromium path was unavailable. The engine, centre,
+sample and two-PC verification gate was run against the isolated committed snapshot.
+
 ## The front desk works (2026-10-05)
 
 **What:** `door.js` – big search (code, scanner, name, mobile), student card with risk, today's candidate sessions,

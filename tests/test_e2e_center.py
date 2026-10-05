@@ -4,7 +4,7 @@ import os
 import unittest
 from datetime import date
 
-from test_e2e_browser import CHROMIUM, BrowserBase, SKIP
+from test_e2e_browser import BrowserBase, SKIP
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'server'))
@@ -74,6 +74,35 @@ class DoorTest(BrowserBase):
         pg.wait_for_selector('.drawer', state='detached')   # the page's CSP forbids wait_for_function strings
         present = {a['studentId'] for a in self.c.get('/api/state')['attendance'] if a['status'] in ('present', 'late')}
         self.assertTrue({'e2e-s0', 'e2e-s1', 'e2e-s2'} <= present)
+        self.assertEqual(self.errors, [])
+
+    def test_students_new_enrol_follow_up(self):
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/students')
+        pg.wait_for_selector('tr[data-id]')
+        pg.click('[data-new]')
+        pg.wait_for_selector('[data-sform] [name=name]')
+        pg.fill('[data-sform] [name=name]', 'Synthetic Newcomer')
+        pg.select_option('[data-sform] [name=gradeCode]', 'S2')
+        pg.select_option('[data-sform] [name=system]', 'bac')
+        self.assertFalse(pg.is_disabled('[data-sform] [name=track]'))   # 2nd year Baccalaureate has tracks
+        pg.select_option('[data-sform] [name=track]', 'med')
+        pg.fill('[data-sform] [name=parentMobile]', '٠١٠١٢٣٤٥٦٧٨')     # Arabic digits are normalised by the server
+        pg.click('.drawer [data-save]')
+        pg.wait_for_selector('.drawer [data-enrol]')                  # the new file opens on the Groups tab
+        st = next(s for s in self.c.get('/api/state')['students'] if s['name'] == 'Synthetic Newcomer')
+        self.assertEqual((st['gradeCode'], st['system'], st['track'], st['parentMobile']), ('S2', 'bac', 'med', '01012345678'))
+        self.assertTrue(st['code'])
+        pg.click('.drawer [data-enrol]')
+        pg.click('.dialog [data-g="e2e-g"]')
+        pg.wait_for_selector('.drawer [data-transfer]')
+        self.assertTrue(any(e['studentId'] == st['id'] and e['groupId'] == 'e2e-g' for e in self.c.get('/api/state')['enrollments']))
+        pg.click('.drawer [data-tab="follow"]')
+        pg.fill('.drawer [data-fu] [name=reason]', 'Asked about the timetable')
+        pg.select_option('.drawer [data-fu] [name=outcome]', 'reached')
+        pg.click('.drawer [data-fu] [type=submit]')
+        pg.wait_for_selector('.drawer .timeline li')
+        self.assertIn('Asked about the timetable', pg.inner_text('.drawer .timeline'))
         self.assertEqual(self.errors, [])
 
     def test_phone_has_tab_bar_and_command_centre(self):

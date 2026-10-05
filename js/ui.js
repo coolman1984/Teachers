@@ -60,6 +60,15 @@
   U.dt = function (s) { if (!s) return '–'; var d = new Date(s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d) + ' ' + HS.fmt.time(d); };
   U.day = function (s) { if (!s) return '–'; var d = new Date(String(s).length <= 10 ? s + 'T00:00:00' : s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d); };
   U.today = function () { var d = new Date(); return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); };
+  /* a tiny line of values (0-100) for marks and trends; no library */
+  U.spark = function (values, w, h) {
+    w = w || 160; h = h || 36;
+    if (!values || values.length < 2) return '';
+    var max = Math.max.apply(null, values.concat([100])), step = (w - 4) / (values.length - 1);
+    var pts = values.map(function (v, i) { return (2 + i * step).toFixed(1) + ',' + (h - 2 - (v / max) * (h - 4)).toFixed(1); });
+    var last = pts[pts.length - 1].split(',');
+    return '<svg class="sparkline" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true"><polyline points="' + pts.join(' ') + '"/><circle cx="' + last[0] + '" cy="' + last[1] + '" r="3"/></svg>';
+  };
   U.num = function (n) { return n === null || n === undefined || n === '' ? '<span class="faint">–</span>' : '<span class="num">' + HS.fmt.num(n) + '</span>'; };
 
   U.confirm = function (o) {
