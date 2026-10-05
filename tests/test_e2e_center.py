@@ -140,6 +140,42 @@ class DoorTest(BrowserBase):
         self.assertEqual(ens, {'e2e-s0', 'e2e-s1'})
         self.assertEqual(self.errors, [])
 
+    def test_money_shift_income_expense_reversal_and_count(self):
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/money?tab=shift')
+        mine = self.c.get('/api/c/shift')
+        if mine.get('shift') and mine['shift'].get('status') == 'open':   # another scenario may have opened it
+            self.c.post('/api/c/shift/close', {'shiftId': mine['shift']['id'], 'counted': mine['expected']})
+            pg.reload()
+        pg.click('[data-openshift]')
+        pg.fill('#sh-o', '500')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.shift-card')
+        pg.click('[data-income]')
+        pg.click('.dialog [data-seg="kind"] [data-v="other"]')
+        pg.fill('#in-a', '100')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-void]')
+        pg.click('[data-expense]')
+        pg.fill('#ex-a', '30')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-evoid]')
+        pg.click('[data-void]')
+        pg.fill('#cf-reason', 'Typed by mistake')
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('.badge.bad:has-text("Reversal")')
+        s = self.c.get('/api/c/shift')
+        self.assertEqual(s['expected'], 470)                 # 500 + 100 - 100 (reversal) - 30
+        pg.click('[data-close-shift]')
+        pg.fill('[data-note="200"]', '2'); pg.fill('[data-note="50"]', '1'); pg.fill('[data-note="20"]', '1')
+        self.assertTrue(pg.is_hidden('[data-reason]'))       # no difference -> no reason needed
+        pg.evaluate("window.print = () => {}")               # the shift report would open the print dialog
+        pg.click('.dialog [data-ok]')
+        pg.wait_for_selector('[data-openshift]')
+        closed = [x for x in self.c.get('/api/c/shifts') if x['id'] == s['shift']['id']][0]
+        self.assertEqual((closed['status'], closed['countedCash'], closed['diff']), ('closed', 470, 0))
+        self.assertEqual(self.errors, [])
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')

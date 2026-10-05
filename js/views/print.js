@@ -45,6 +45,18 @@
       st.map(function (s, i) { return '<tr><td>' + (i + 1) + '</td><td dir="ltr">' + HS.esc(s.code || '') + '</td><td>' + HS.esc(s.name) + '</td>' + boxes.map(function () { return '<td class="box"></td>'; }).join('') + '</tr>'; }).join('') +
       '</tbody></table>');
   };
+  /* the shift report after closing the drawer: expected, counted, the difference and its reason, totals by method */
+  HS.printShift = function (s, r) {
+    var row = function (k, v) { return '<tr><th>' + HS.esc(HS.t(k)) + '</th><td>' + v + '</td></tr>'; }, m = plain;
+    var methods = Object.keys(s.byMethod || {}).map(function (k) { return row('pay.method.' + k, m(U.money(s.byMethod[k]))); }).join('');
+    printSheet('<div class="ps-receipt"><div class="r-head"><b>' + HS.esc(setting('systemName') || HS.t('app.name')) + '</b><span>' + HS.esc(HS.t('shift.report')) + '</span></div>' +
+      '<div class="r-no" dir="ltr">' + HS.esc(s.shift.no) + '</div><table>' +
+      row('f.user', HS.esc(s.shift.user || '')) + row('shift.openedAt', HS.esc(m(U.dt(s.shift.openedAt)))) + row('shift.opening', m(U.money(s.shift.openingCash))) +
+      row('shift.cashIn', m(U.money(s.cashIn))) + row('shift.cashOut', m(U.money(s.cashOut))) + methods +
+      row('shift.receipts', String(s.receipts)) + row('shift.expected', '<b>' + m(U.money(r.expected)) + '</b>') + row('shift.counted', '<b>' + m(U.money(r.counted)) + '</b>') + '</table>' +
+      '<div class="r-total">' + HS.esc(HS.t('shift.diff')) + ' ' + m(U.money(r.diff)) + '</div>' +
+      '<p class="r-foot">' + HS.esc(HS.t('shift.sign')) + '</p></div>');
+  };
   HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
   HS.printReceipt = function (p) { printSheet(receipt(p)); };
   function printSheet(html) {

@@ -154,9 +154,11 @@
     var html = '<div class="dialog" role="dialog" aria-modal="true" aria-label="' + HS.esc(o.title) + '"' + (o.wide ? ' style="width:min(56rem,100%)"' : '') + '>' +
       '<header><h2>' + HS.esc(o.title) + '</h2><button class="icon-btn" data-close aria-label="' + HS.esc(HS.t('common.close')) + '">' + HS.icon('x') + '</button></header>' +
       '<div class="body">' + o.body + '</div>' + (o.footer ? '<footer>' + o.footer + '</footer>' : '') + '</div>';
-    var el = HS.overlay.open(html);
-    el.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', HS.overlay.close); });
-    return el;
+    var o = HS.overlay.open(html);
+    o.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', HS.overlay.close); });
+    // the dialog element itself, not the shared #overlay: listeners a page adds die with the dialog instead of
+    // piling up on the overlay and firing for the next dialog (found by the money browser test)
+    return o.querySelector('.dialog') || o;
   };
 
   /* ---------- numbers count up (respects reduced motion) ---------- */
