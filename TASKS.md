@@ -157,6 +157,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [ ] Try printed sheets and real phone photos at the centre
 - [ ] P9.2 AI question generator (optional key)
 - [ ] P9.3 Top students image, certificates, teacher page
+  - [x] Top students picture (1080 x 1350 PNG, centre colours, medals, first + father's name by default) and certificates for the first three (A4 print) - only from an exam shown to parents, never published by itself (review G05)
 - [ ] P9.4 Video protection (ask the owner first)
 
 ## Phase P10 – Docs and delivery

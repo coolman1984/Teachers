@@ -150,6 +150,62 @@
     });
   }
 
+  /* ---------- honours: the top students as a picture to share, and certificates to print (review G05) ----------
+     Only from an exam the teacher showed to parents (published), never sent anywhere by itself; first names only by default. */
+  function honours(ex, rows) {
+    if (ex.published !== true) { HS.toast(HS.t('hon.unpublished'), 'bad', 5000); return; }
+    var top = rankOf(rows).sat.slice(0, 10).map(function (r) { return { name: r.name, score: Number(r.score), rank: rankOf(rows).rank[r.id] }; });
+    if (!top.length) { HS.toast(HS.t('ex.noMarks'), 'bad'); return; }
+    var first = true;
+    var el = HS.dialog({ title: HS.t('hon.title'), wide: true, body: '<p class="muted">' + HS.esc(HS.t('hon.b')) + '</p>' +
+        '<label class="row" style="gap:.4rem"><input type="checkbox" data-first checked> ' + HS.esc(HS.t('hon.firstOnly')) + '</label>' +
+        '<div class="hon-preview"><canvas data-canvas width="1080" height="1350" aria-label="' + HS.esc(HS.t('hon.title')) + '"></canvas></div>',
+      footer: '<button class="btn" data-cert>' + HS.icon('printer', 'sm') + HS.esc(HS.t('hon.certs', { n: Math.min(3, top.length) })) + '</button>' +
+        '<button class="btn primary" data-png>' + HS.icon('download', 'sm') + HS.esc(HS.t('hon.download')) + '</button>' });
+    var cv = el.querySelector('[data-canvas]');
+    function shown(n) { return first ? String(n).trim().split(/\s+/).slice(0, 2).join(' ') : n; }   // first + father's name
+    function draw() {
+      var cx = cv.getContext('2d'), W = 1080, H = 1350, rtl = HS.lang === 'ar', css = getComputedStyle(document.documentElement);
+      var brand = '#13294b', signal = (css.getPropertyValue('--signal') || '#f2a900').trim() || '#f2a900';
+      var font = '"HS Plex Arabic","HS Plex","Segoe UI",Tahoma,sans-serif';
+      cx.direction = rtl ? 'rtl' : 'ltr';
+      cx.fillStyle = brand; cx.fillRect(0, 0, W, H);
+      cx.fillStyle = signal; cx.fillRect(0, 0, W, 18); cx.fillRect(0, H - 18, W, 18);
+      cx.textAlign = 'center'; cx.fillStyle = '#fff';
+      cx.font = '600 40px ' + font; cx.fillText(((HS.data.state || {}).settings || {}).systemName || HS.t('app.name'), W / 2, 110);
+      cx.font = '800 76px ' + font; cx.fillStyle = signal; cx.fillText(HS.t('hon.headline'), W / 2, 210);
+      cx.font = '600 40px ' + font; cx.fillStyle = '#fff'; cx.fillText(ex.title, W / 2, 280);
+      cx.font = '400 32px ' + font; cx.fillStyle = '#c9d4ea'; cx.fillText([HS.data.teacherName(ex.teacherId), ex.date].filter(Boolean).join('  ·  '), W / 2, 330);
+      var y = 420, rowH = (H - 470) / Math.max(5, top.length);
+      top.forEach(function (r, i) {
+        var mid = y + i * rowH + rowH / 2, medal = r.rank === 1 ? '#f2c94c' : r.rank === 2 ? '#d7dde8' : r.rank === 3 ? '#e0a46b' : 'rgba(255,255,255,.18)';
+        cx.fillStyle = 'rgba(255,255,255,' + (i % 2 ? '.04' : '.08') + ')'; cx.fillRect(70, mid - rowH / 2 + 6, W - 140, rowH - 12);
+        var cxX = rtl ? W - 130 : 130;
+        cx.beginPath(); cx.arc(cxX, mid, 34, 0, Math.PI * 2); cx.fillStyle = medal; cx.fill();
+        cx.fillStyle = r.rank <= 3 ? brand : '#fff'; cx.font = '800 36px ' + font; cx.textAlign = 'center'; cx.fillText(String(r.rank), cxX, mid + 13);
+        cx.fillStyle = '#fff'; cx.font = '700 42px ' + font; cx.textAlign = rtl ? 'right' : 'left';
+        cx.fillText(shown(r.name), rtl ? W - 190 : 190, mid + 15, W - 520);
+        cx.textAlign = rtl ? 'left' : 'right'; cx.fillStyle = signal; cx.font = '800 42px ' + font;
+        cx.direction = 'ltr'; cx.fillText(HS.fmt.num(r.score) + ' / ' + HS.fmt.num(ex.maxScore), rtl ? 110 : W - 110, mid + 15); cx.direction = rtl ? 'rtl' : 'ltr';
+      });
+    }
+    draw();
+    el.querySelector('[data-first]').addEventListener('change', function (e) { first = e.target.checked; draw(); });
+    el.querySelector('[data-png]').addEventListener('click', function () {
+      cv.toBlob(function (b) { U.download(HS.t('hon.file', { t: ex.title }) + '.png', b, 'image/png'); HS.toast(HS.t('hon.saved')); }, 'image/png');
+    });
+    el.querySelector('[data-cert]').addEventListener('click', function () {
+      var centre = ((HS.data.state || {}).settings || {}).systemName || HS.t('app.name');
+      HS.printHTML(top.filter(function (r) { return r.rank <= 3; }).map(function (r) {
+        return '<div class="cert"><div class="cert-in"><div class="ps-org">' + HS.esc(centre) + '</div><h1>' + HS.esc(HS.t('hon.certTitle')) + '</h1>' +
+          '<p>' + HS.esc(HS.t('hon.certFor')) + '</p><h2>' + HS.esc(r.name) + '</h2>' +
+          '<p>' + HS.esc(HS.t('hon.certText', { rank: r.rank, exam: ex.title, score: HS.fmt.num(r.score), max: HS.fmt.num(ex.maxScore) })) + '</p>' +
+          '<div class="cert-sign"><span>' + HS.esc(HS.t('hon.teacher')) + ': ' + HS.esc(HS.data.teacherName(ex.teacherId)) + '</span><span>' + HS.esc(HS.t('hon.manager')) + '</span></div>' +
+          '<p class="cert-date">' + HS.esc(ex.date || '') + '</p></div></div>';
+      }).join(''));
+    });
+  }
+
   function openSheet(id) {
     HS.get('/api/c/exam?id=' + encodeURIComponent(id)).then(function (res) {
       var ex = res.exam, max = Number(ex.maxScore) || 0, can = HS.can('marks.enter');
@@ -175,6 +231,7 @@
         '<div data-sheet>' + (rows.length ? tableHTML() : U.empty('users', HS.t('roll.empty'), HS.t('roll.empty.b'))) + '</div>',
         footer: (HS.can('exams.manage') ? '<button class="btn" data-publish aria-pressed="' + (ex.published === true) + '">' + HS.icon(ex.published === true ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(ex.published === true ? 'ex.shown' : 'ex.hidden')) + '</button>' : '') +
           '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ex.print')) + '</button>' +
+          '<button class="btn" data-honours>' + HS.icon('star', 'sm') + HS.esc(HS.t('hon.btn')) + '</button>' +
           (ex.questions && (ex.answerKey || []).length ? '<button class="btn" data-bubbles>' + HS.icon('doc', 'sm') + HS.esc(HS.t('omr.print')) + '</button>' +
             (can ? '<button class="btn" data-omr>' + HS.icon('camera', 'sm') + HS.esc(HS.t('omr.read')) + '</button>' : '') : '') +
           (HS.can('messages.send') && HS.can('contacts.view') ? '<button class="btn" data-send>' + HS.icon('chat', 'sm') + HS.esc(HS.t('ex.send')) + '</button>' : '') +
@@ -232,6 +289,7 @@
           p.addEventListener('click', function (e) {
             if (e.target.closest('[data-print]')) { HS.printResults(ex, rows, rankOf(rows).rank); return; }
             if (e.target.closest('[data-bubbles]')) { bubbleMenu(ex, rows); return; }
+            if (e.target.closest('[data-honours]')) { honours(ex, rows); return; }
             if (e.target.closest('[data-omr]')) { readSheets(ex, rows, function () { HS.panel.close(); setTimeout(function () { openSheet(id); }, 260); }); return; }
             var pub = e.target.closest('[data-publish]');
             if (pub) {   // marks reach the parents' page only after the teacher says so (a half-entered exam never shows)

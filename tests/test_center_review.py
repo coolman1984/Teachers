@@ -372,6 +372,39 @@ class DoorReviewTest(BrowserBase):
         self.assertTrue(wait_until(lambda: self.c.get('/api/remote')['on'] is False))
         self.assertEqual(self.errors, [])
 
+    def test_g05_top_students_picture_and_certificates(self):
+        self.c.post('/api/commit', {'label': 'exam', 'ops': [{'e': 'exams', 'id': 'rv-hx', 'op': 'put', 'row': {
+            'title': 'Honours Quiz', 'teacherId': 'rv-t', 'groupIds': ['rv-g'], 'date': date.today().isoformat(), 'kind': 'monthly', 'maxScore': 20}}]})
+        self.c.post('/api/c/marks', {'examId': 'rv-hx', 'items': [{'studentId': f'rv-s{i}', 'score': 20 - i} for i in range(5)]})
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/exams'); pg.reload()
+        pg.wait_for_selector('text=Honours Quiz')
+        pg.click('text=Honours Quiz')
+        pg.wait_for_selector('.drawer [data-honours]')
+        pg.click('.drawer [data-honours]')
+        pg.wait_for_selector('.toast.bad')                                       # not shown to parents yet: refused
+        self.assertEqual(pg.query_selector('.dialog [data-canvas]'), None)
+        pg.click('.drawer [data-publish]')
+        self.assertTrue(wait_until(lambda: next(x for x in self.c.get('/api/state')['exams'] if x['id'] == 'rv-hx').get('published') is True))
+        pg.click('.drawer [data-honours]')
+        pg.wait_for_selector('.dialog [data-canvas]')
+        painted = pg.evaluate("(() => { const c = document.querySelector('.dialog [data-canvas]'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;"
+                              " let n = 0; for (let i = 0; i < d.length; i += 4000) if (d[i] + d[i+1] + d[i+2] > 600) n++; return n; })()")
+        self.assertGreater(painted, 20)                                           # white text was drawn on the navy picture
+        with pg.expect_download() as dl:
+            pg.click('.dialog [data-png]')
+        with open(dl.value.path(), 'rb') as f:
+            data = f.read()
+            self.assertEqual(data[:8], b'\x89PNG\r\n\x1a\n')
+        if os.environ.get('HS_SHOTS'):
+            open(os.path.join(os.environ['HS_SHOTS'], 'honours.png'), 'wb').write(data)
+        pg.evaluate('window.print = () => {}')
+        pg.click('.dialog [data-cert]')
+        pg.wait_for_selector('#print-sheet .cert', state='attached')
+        self.assertEqual(len(pg.query_selector_all('#print-sheet .cert')), 3)
+        self.assertIn('Review Student 0', pg.inner_text('#print-sheet'))
+        self.assertEqual(self.errors, [])
+
 
 if __name__ == '__main__':
     unittest.main()

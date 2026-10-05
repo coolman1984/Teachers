@@ -2,6 +2,13 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Top students picture and certificates (review G05, plan P9.3 - 2026-10-05)
+
+**What:** the exam panel's "Top students" draws a 1080 x 1350 picture on a canvas (centre name, exam, teacher, the first ten with
+medals and marks) to download and share, and prints certificates for the first three. **Privacy:** only from an exam already
+shown to parents; nothing is posted by itself; first and father's name only by default. **Evidence:**
+`test_center_review.test_g05_*` (refused before publishing, picture drawn and downloaded as PNG, three certificates printed).
+
 ## Bubble sheets: print, photograph, check, save (review G01, G02, plan P9.1 - 2026-10-05)
 
 **Why:** marking a weekly MCQ quiz for 40 students by hand takes a teacher an evening; the plan asked for sheets read by a phone.
