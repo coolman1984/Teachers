@@ -1,4 +1,4 @@
-// Builds dist/hessa-gateway.js: the worker and the driver page in ONE file, so it can be pasted in the Cloudflare
+// Builds dist/hessa-gateway.js: the worker and the parent page in ONE file, so it can be pasted in the Cloudflare
 // dashboard without installing anything.   node build.js
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
@@ -20,4 +20,5 @@ src = src.replace('let EMBEDDED_ASSETS = null;', 'const EMBEDDED_ASSETS = ' + JS
 mkdirSync(join(here, 'dist'), { recursive: true });
 writeFileSync(join(here, 'dist', 'hessa-gateway.js'), src);
 copyFileSync(join(here, 'schema.sql'), join(here, 'dist', 'schema.sql'));
+copyFileSync(join(here, 'migrate-v1.sql'), join(here, 'dist', 'migrate-v1.sql'));
 console.log('built dist/hessa-gateway.js', (src.length / 1024).toFixed(0) + ' KB,', Object.keys(assets).length, 'files');

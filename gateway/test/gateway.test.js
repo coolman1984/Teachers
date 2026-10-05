@@ -38,6 +38,38 @@ test('the token itself is never stored', async () => {
   }
 });
 
+test('replacing a link revokes every older link of that child and a stale PC cannot revive it', async () => {
+  const env = newEnv(), newer = 'Tk_newerabcdefghijklmnop';
+  const old = await putCard(env);
+  await putCard(env, {}, newer);
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
+  await putCard(env); // an old disconnected PC finally uploads its old card
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
+  assert.equal((await call(env, 'GET', '/api/card/' + newer)).status, 200);
+  const row = await env.DB.prepare('SELECT * FROM revoked_links WHERE token_hash = ?').bind(old).first();
+  assert.ok(row);
+});
+
+test('explicit revocation survives cleanup and cannot be overwritten by a stale upload', async () => {
+  const env = newEnv();
+  const th = await putCard(env);
+  await office(env, 'PUT', '/office/cards', { remove: [th] });
+  await env.DB.prepare('UPDATE cards SET expires_at = ?').bind(Math.floor(Date.now() / 1000) - 40 * 86400).run();
+  await worker.scheduled({}, env);
+  await putCard(env);
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
+});
+
+test('deleted students revoke links published by a different office PC', async () => {
+  const env = newEnv();
+  await putCard(env);
+  const response = await office(env, 'PUT', '/office/cards', { revokeStudents: ['st1'] });
+  assert.equal(response.status, 200);
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
+  await putCard(env);
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
+});
+
 test('a replaced link says "stopped" (410) and is cleaned up later; an expired one says so', async () => {
   const env = newEnv();
   const th = await putCard(env);
@@ -53,8 +85,9 @@ test('a replaced link says "stopped" (410) and is cleaned up later; an expired o
   await env.DB.prepare('UPDATE cards SET expires_at = ?').bind(Math.floor(Date.now() / 1000) - 8 * 86400).run();
   await worker.scheduled({}, env);
   assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM cards').first()).n, 0);
-  await putCard(env, { expiresAt: Math.floor(Date.now() / 1000) - 10 });
-  const ex = await call(env, 'GET', '/api/card/' + TOKEN);
+  const expiredToken = 'Tk_expiredabcdefghijklmn';
+  await putCard(env, { expiresAt: Math.floor(Date.now() / 1000) - 10 }, expiredToken);
+  const ex = await call(env, 'GET', '/api/card/' + expiredToken);
   assert.equal(ex.status, 410);
   assert.equal((await ex.json()).expired, true);
 });
@@ -98,6 +131,21 @@ test('older office programs: the inbox is always empty and ack is accepted', asy
   const box = await (await office(env, 'GET', '/office/inbox?limit=100')).json();
   assert.deepEqual(box, { events: [], photos: [] });
   assert.equal((await office(env, 'POST', '/office/ack', { events: [], photos: [] })).status, 200);
+});
+
+test('an existing v1 mailbox upgrades without losing cards or revocation history', async () => {
+  const { readFileSync } = await import('node:fs');
+  const env = newEnv(), th = await sha256Hex(TOKEN);
+  env.DB.db.exec('DROP INDEX cards_student; ALTER TABLE cards RENAME COLUMN student_id TO trip_id');
+  await env.DB.prepare("INSERT INTO cards VALUES (?, ?, ?, 0, NULL, ?)").bind(th, 'st1', '{"name":"Synthetic preserved child"}', 1).run();
+  const revoked = 'ab'.repeat(32);
+  await env.DB.prepare('INSERT INTO revoked_links VALUES (?, ?)').bind(revoked, 1).run();
+  env.DB.db.exec(readFileSync(new URL('../migrate-v1.sql', import.meta.url), 'utf8'));
+  const result = await (await call(env, 'GET', '/api/card/' + TOKEN)).json();
+  assert.equal(result.card.name, 'Synthetic preserved child');
+  assert.ok(await env.DB.prepare('SELECT * FROM revoked_links WHERE token_hash = ?').bind(revoked).first());
+  await putCard(env, {}, 'Tk_migratedabcdefghijklmn');
+  assert.equal((await call(env, 'GET', '/api/card/' + TOKEN)).status, 410);
 });
 
 test('rate limits: 60 requests per token and 300 per address in ten minutes', async () => {

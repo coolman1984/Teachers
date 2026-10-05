@@ -2,6 +2,50 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Integrate all outstanding branches and enforce the actual safety boundaries (2026-10-05)
+
+**User/outcome:** a nontechnical centre team must trust that attendance, receipts and parent links represent what was saved.
+The acceptance criteria and four-branch inventory are in `docs/INTEGRATION.md`. Both Claude heads were already included in
+main; the ten ccr commits are retained as ancestors of the integration branch. There were no open GitHub issues or PRs.
+Earlier uncommitted work in the previous workspace was preserved, with its published fixes checked against this history.
+
+**Found before fixing:** a stale gateway upload could reactivate a replaced parent link; changing the gateway address left
+unchanged cards unpublished; payment retries accepted changed amounts and truncated/reordered family batches; a scoped student
+file exposed siblings outside its teacher scope; attendance rosters carried money and parent token material. New regression
+tests failed on each of these before correction. A final role review also proved the assistant could bypass the screen's
+money restriction through `/api/state`. The phone acceptance sweep found overflow in Arabic Settings and English Devices.
+
+**Changes:** permanent gateway token tombstones, atomic replacement protection and deleted-student revocation independent of
+local publishing caches; invalidate the publishing cache when the gateway URL changes. Ship and test a nondestructive v1 D1
+migration. Match retries to the normalised saved receipt, collector and complete ordered family batch. Scope sibling/follow-up
+queries; hide parent token material on staff responses. Financial permissions now apply to rosters, state, incremental updates,
+scoped assistant student files, sibling door cards and follow-up balances/risk. Money-free risk calculation excludes the debt
+signal, preserving attendance and marks follow-up. Match the browser's balance request/tab rules to the server permissions.
+Wrap Settings feedback and Devices actions so large-font phone users can still reach them. Include integration regressions in
+CI and require both office and browser gates before a Windows release build. Keep money append-only and add no runtime dependency.
+Run joining, device management and backup-safety browser tests in the browser CI job too, where Playwright is installed;
+the office runner must not silently skip those screens as the only coverage.
+
+**Lessons/mistakes:** an idempotency key identifies a saved operation; it must not report success for different input. Permanent
+revocation cannot depend on an expiring card or a single PC's cache. Test incremental state with a real changed receipt rather
+than a full-reload fallback, and test a nonempty risk/family response. A scoped user still needs financial permissions. A local
+test command initially named a nonexistent `AdviceTest`; its loader error was corrected by running the actual review module in
+the complete office gate. No result from that failed invocation is counted as a successful gate.
+
+**Limits:** the private owner workbook is absent; live tunnel/gateway accounts, Windows installation and real printer/phone
+hardware remain deployment acceptance tasks. Synthetic bubble photos and Chromium do not prove real-world camera accuracy.
+The optional AI question bank, teacher public page and hosted videos remain the explicit product backlog.
+
+**Verification:** the complete office command selected 280 cases and completed with exit 0 (the private workbook case is
+skipped). The initial pre-final office run reported 279 cases, OK with one skip; the additional case closes the assistant
+state/delta bypass. The strengthened seven-role checks passed separately, including a real changed-receipt delta, a nonempty
+sibling card, a scoped assistant and a nonempty risk response. Final browser suite: 34/34 in 169.918 s; all 21 routes fit both
+languages on a 360 px phone, and the attendance update reached the other screen within three seconds. Thirty card lookups,
+cards and check-ins took 0.89 s with 420 students/24 groups. Bubble marking: 960/960 on six synthetic degraded photos.
+Frontend: 25/25; gateway: 16/16; CI selectors/installer manifest: 6/6. Pyflakes, installer preflight, gateway bundle build/syntax
+and `git diff --check` passed. Python emitted existing resource warnings in old test fixtures and an SVG byte-string escape
+warning; neither failed a check. Windows installation itself was not run.
+
 ## Top students picture and certificates (review G05, plan P9.3 - 2026-10-05)
 
 **What:** the exam panel's "Top students" draws a 1080 x 1350 picture on a canvas (centre name, exam, teacher, the first ten with

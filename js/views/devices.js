@@ -273,7 +273,7 @@
     selfRefresh: true,
     render: function () {
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.devices')) + '</h1><p data-sub>' + HS.esc(HS.t('page.devices.d')) + '</p></div>' +
-        '<div class="row"><button class="btn" data-share>' + HS.icon('sync', 'sm') + HS.esc(HS.t('dev.share')) + '</button>' +
+        '<div class="row wrap"><button class="btn" data-share>' + HS.icon('sync', 'sm') + HS.esc(HS.t('dev.share')) + '</button>' +
         '<button class="btn" data-verify>' + HS.icon('shield', 'sm') + HS.esc(HS.t('dev.verify')) + '</button></div></div>' +
         '<div class="toolbar" data-tabs></div><div data-body><div class="skeleton" style="height:12rem"></div></div>';
     },

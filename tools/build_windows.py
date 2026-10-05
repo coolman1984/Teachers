@@ -40,7 +40,7 @@ def compile_program(v4):
 
 
 # every file the installer or the release page ships; checked before the long compile so a missing one fails in a second
-SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/build.js', 'gateway/src/worker.js',
+SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/migrate-v1.sql', 'gateway/build.js', 'gateway/src/worker.js',
            'installer/hessa.iss', 'server/hs_main.py', 'tools/make_assets.py', 'tools/make_icon.py')
 
 
@@ -76,7 +76,7 @@ def main():
     run(['node', os.path.join('gateway', 'build.js')])
     gw = os.path.join(dist, 'gateway')
     os.makedirs(gw, exist_ok=True)
-    for src in ('gateway/dist/hessa-gateway.js', 'gateway/dist/schema.sql', 'docs/GATEWAY_SETUP.md'):
+    for src in ('gateway/dist/hessa-gateway.js', 'gateway/dist/schema.sql', 'gateway/dist/migrate-v1.sql', 'docs/GATEWAY_SETUP.md'):
         shutil.copy(os.path.join(ROOT, src), gw)
     shutil.copy(os.path.join(ROOT, 'docs', 'REMOTE_ACCESS.md'), dist)   # the owner finds the remote-work guide next to the program
     run([iscc(), f'/DAppVersion={VERSION}', f'/DAppPublisher={DEVELOPER}', f'/DAppCopyright={COPYRIGHT}', os.path.join('installer', 'hessa.iss')])

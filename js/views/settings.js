@@ -73,7 +73,7 @@
       block(HS.t('ap.paper'), HS.t('ap.paper.d'), seg('receiptPaper', ['80', '58', 'a5'], 'ap.paper.', d.receiptPaper) +
         '<div class="row wrap" style="margin-top:.6rem;gap:.6rem">' + seg('autoReceipt', ['off', 'on'], 'ap.auto.', d.autoReceipt) +
         '<button type="button" class="btn sm" data-testprint>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ap.testPrint')) + '</button></div>') +
-      '<div class="row" style="padding-top:1rem"><button class="btn" data-reset>' + HS.icon('refresh', 'sm') + HS.esc(HS.t('ap.reset')) + '</button><span class="faint">' + HS.esc(HS.t('ap.saved.local')) + '</span></div>';
+      '<div class="row wrap" style="padding-top:1rem"><button class="btn" data-reset>' + HS.icon('refresh', 'sm') + HS.esc(HS.t('ap.reset')) + '</button><span class="faint">' + HS.esc(HS.t('ap.saved.local')) + '</span></div>';
   }
   function preview() {
     return '<aside class="card"><header><h3>' + HS.esc(HS.t('ap.preview')) + '</h3></header>' +

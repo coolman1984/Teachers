@@ -2129,5 +2129,6 @@
     'hq.devices.5.a': 'Open Devices & Sync and press Remove on that PC. It can no longer share or receive data. Everything it recorded stays in the history. Then change the passwords of the people who used it.',
     'hq.devices.6.q': 'Does every PC have to join?',
     'hq.devices.6.a': 'No. A PC that joins keeps its own copy and works when the centre PC is off. A PC that only needs to look at the data can simply open the centre PC’s web address in its browser and sign in.',
+    'err.paymentChanged': 'This payment was already saved with different details. Check the original receipt before starting a new payment.',
   };
 })();

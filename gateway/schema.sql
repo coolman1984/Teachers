@@ -11,3 +11,6 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS rate (key TEXT NOT NULL, window INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (key, window));
+-- Revocations outlive disposable cards; an offline PC must never revive a replaced link.
+CREATE TABLE IF NOT EXISTS revoked_links (token_hash TEXT PRIMARY KEY, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS cards_student ON cards (student_id);

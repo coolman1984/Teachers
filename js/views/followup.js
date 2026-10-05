@@ -156,6 +156,7 @@
       var q = (ctx && ctx.route && ctx.route.q) || {};
       if (q.tab && TABS.indexOf(q.tab) >= 0) F.tab = q.tab;
       var tabs = TABS.filter(function (t) { return t !== 'debts' || HS.can(['money.view', 'money.collect']); });
+      if (tabs.indexOf(F.tab) < 0) F.tab = tabs[0];
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.followup')) + '</h1><p>' + HS.esc(HS.t('page.followup.d')) + '</p></div></div>' +
         '<div class="tabs" role="tablist" style="margin-bottom:1rem">' + tabs.map(function (t) { return '<button role="tab" data-ftab="' + t + '" aria-selected="' + (t === F.tab) + '">' + HS.esc(HS.t('fu.tab.' + t)) + '</button>'; }).join('') + '</div>' +
         (F.tab === 'calls' ? '<div class="toolbar"><select class="input" data-f="teacher" style="width:auto">' + opt('', HS.t('f.teacherId') + ': ' + HS.t('common.all'), F.teacher) + D.list('teachers').map(function (t) { return opt(t.id, t.name, F.teacher); }).join('') + '</select>' +

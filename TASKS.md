@@ -7,7 +7,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P0.1 Field research → `docs/01-research-report.md`
 - [x] P0.2 Product spec (approved by the owner 2026-10-04) → `docs/02-product-spec.md`
 - [x] P0.3 Fork the Yousef-Transportation engine (9f5ef29), rename to Hessa (HS, ports 8095/8463, own AppId)
-- [x] P0.4 Data model (`store.ENTITIES`), permissions/profiles (`auth.py`), rules (`domain.py`), operations (`center.py`), API (`app.py`), parent-card client (`gateway_client.py`) – written, NOT tested
+- [x] P0.4 Data model (`store.ENTITIES`), permissions/profiles (`auth.py`), rules (`domain.py`), operations (`center.py`), API (`app.py`), parent-card client (`gateway_client.py`) – tested by the centre, role, gateway and network suites
 - [x] P0.5 Execution plan for the next agents → `docs/EXECUTION_PLAN.md`
 
 ## Phase P1 – Make the fork run again
@@ -132,7 +132,7 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)
 - [x] P6.2 Sequential WhatsApp/SMS sender (HS.waQueue, never bulk, every send logged, not twice the same day) + per-kind default texts
 - [x] P6.3 Teacher settlements (formula in words, approve / changed-after-approval, prefilled payout, printed statement)
-- [ ] P6.4 Reports + profitability + presentation
+- [x] P6.4 Reports + profitability + presentation
   - [x] Month figures, daily charts, breakdowns, profitability with one decision per group, drawer differences, 4-slide presentation, print
   - [x] Excel export of the report: 8 sheets (summary, per teacher, per method, expenses, attendance per day, money per day, profitability, drawer differences) in the reader's language, same scoped numbers as the screen (review B05)
 - [x] P6.5 School support groups statement (`GET /api/c/school`: students, visits, paid incl. reversals, sessions, treasury → teacher → school split, limit checks; screen + A4 print + Excel from the group panel; review B06)
@@ -174,3 +174,16 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
   - [x] Centre browser acceptance: `test_acceptance` + `test_e2e_*` + `test_center_review` in a CI browser job
   - [ ] Installer/release verification on Windows (manual, see F01/F02 above)
+
+## Branch integration review (2026-10-05)
+- [x] Audit all four remote branches: both Claude heads are ancestors of main; the ccr head adds ten commits to main
+- [x] Preserve the earlier workspace's uncommitted files; their parent-link repairs are already represented in published history
+- [x] Permanent gateway revocations, deleted-student revocation without a local card cache, unchanged-card republish on URL change; fresh/old D1 schema migration tests
+- [x] Payment retries compare the complete saved request; family retries cannot silently truncate or reorder the saved batch
+- [x] Student siblings and follow-ups obey teacher scopes; roster money obeys financial permissions; link secrets are removed from screen responses
+- [x] Assistant state/delta, sibling door cards and follow-up responses hide finances; financial tabs/request permissions agree
+- [x] Settings feedback and device actions fit a 360 px screen in both languages with the largest font
+- [x] Include integration regressions in CI; Windows releases also require the browser job to pass
+- [x] Record branch inventory, acceptance criteria, fixes and verification evidence in docs/INTEGRATION.md and DEVELOPMENT_HISTORY.md
+
+The integration pull request's GitHub status records whether the merge has completed; use a merge commit to preserve all branch ancestry.

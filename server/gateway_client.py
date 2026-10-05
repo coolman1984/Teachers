@@ -142,8 +142,8 @@ class Client:
     def status(self):
         return self.call('GET', '/office/status')
 
-    def put_cards(self, cards, remove=()):
-        return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove)})
+    def put_cards(self, cards, remove=(), revoke_students=()):
+        return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove), 'revokeStudents': list(revoke_students)})
 
 
 # --------------------------------------------------------------------------- the card a parent reads
@@ -305,7 +305,10 @@ class GatewaySync:
             cards.append({'tokenHash': h, 'studentId': st['id'], 'body': body, 'cancelled': cancelled, 'expiresAt': exp})
         current = {r['portalHash'] for r in self.store.rows('students', "portal_hash IS NOT NULL AND portal_hash<>''")}
         stale = sorted(self.known - current)          # an old link (replaced, or the student was removed): the gateway must forget it
-        if cards or stale:
+        # Signed soft deletions are shared by every office PC; revocation cannot depend on this PC's cache.
+        with self.store.lock:
+            removed = [r[0] for r in self.store.conn.execute("SELECT id FROM students WHERE deleted=1 AND portal_hash IS NOT NULL AND portal_hash<>''")]
+        if cards or stale or removed:
             cl = self.client()
             for i in range(0, len(cards), 100):
                 cl.put_cards(cards[i:i + 100])
@@ -316,6 +319,8 @@ class GatewaySync:
                 for h in stale[i:i + 100]:
                     self.known.discard(h)
                     self.pushed.pop(h, None)
+            for i in range(0, len(removed), 100):
+                cl.put_cards([], revoke_students=removed[i:i + 100])
             self._save_known()
         self._pushed_version, self._pushed_at = v, time.time()
 
