@@ -43,7 +43,7 @@ from journal import canonical, now
 from version import VERSION as APP_VERSION
 
 PROTOCOL = 1
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 INVITE_MINUTES = 15
 OFFLINE_ERRORS = (ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError, TimeoutError, socket.timeout, OSError)
 
@@ -702,7 +702,7 @@ class SyncService:
             return self._session(json.loads(body or b'{}'), ip)
         if p == '/sync/hello' and method == 'POST':  # a new PC looks for the administrator PC in the network
             return 200, {'authority': self.node.is_authority and not self.node.info.get('backup'), 'name': self.node.name,
-                         'cluster': self.node.info.get('cluster_id')}, 'application/json', {}
+                         'cluster': self.node.info.get('cluster_id'), 'node': self.node.id}, 'application/json', {}
         if p == '/sync/join' and method == 'POST':
             return self._join(json.loads(body or b'{}'), ip)
         if p == '/sync/join-status' and method == 'POST':
@@ -837,6 +837,26 @@ class SyncService:
         return {'code': encode_code(ips[0] if ips else '0.0.0.0', self.port, secret, self.node.cert_fp), 'expires': exp,
                 'addresses': ips, 'port': self.port}
 
+    # ------------------------------------------------------------ the "adding a PC" window (owner opens it on the centre PC)
+    def adding_until(self):
+        """When the window in which ONE new PC may join with the address only closes ('' = closed). The centre holds children's
+        names and parents' phone numbers, so a PC must never be able to join just because it is on the network."""
+        until = self.journal.meta('adding_until') or ''
+        return until if until and until >= now() else ''
+
+    def open_adding(self, actor):
+        if not self.node.is_authority or self.node.info.get('backup'):
+            raise PermissionError('Only the centre PC (the first PC that was set up) can add PCs.')
+        until = (datetime.now() + timedelta(minutes=INVITE_MINUTES)).isoformat(timespec='seconds')
+        self.journal.set_meta('adding_until', until)
+        self.auth.log(actor, '', 'pc-adding-open', self.node.name, f'Adding a PC was opened until {until}')
+        return {'until': until}
+
+    def close_adding(self, actor, why='closed'):
+        if self.journal.meta('adding_until'):
+            self.journal.set_meta('adding_until', None)
+            self.auth.log(actor, '', 'pc-adding-closed', self.node.name, 'Adding a PC was ' + why)
+
     def _join(self, d, ip):
         fields = {k: str(d.get(k) or '') for k in ('node', 'name', 'pub', 'cert_fp', 'port')}
         if d.get('open'):
@@ -870,8 +890,8 @@ class SyncService:
         return 200, {'request': rid, 'confirm': code, 'authority': {'node': self.node.id, 'name': self.node.name}}, 'application/json', {}
 
     def _open_join(self, fields, ip):
-        """A new PC joins with the administrator PC's address only: it is added at once, no code and no approval
-        (the owner's choice for a small, trusted team; Devices & Sync -> Remove takes a PC out again)."""
+        """A new PC joins with the administrator PC's address only - no code - but only while the owner has opened "Add a PC"
+        on this PC (15 minutes, one PC per opening). Devices & Sync -> Remove takes a PC out again."""
         if not self.node.is_authority or self.node.info.get('backup'):
             return 403, {'error': 'This is not the administrator PC. Choose the administrator PC.'}, 'application/json', {}
         try:
@@ -890,6 +910,10 @@ class SyncService:
                 return 400, {'error': 'This PC was removed from the system or is already registered.'}, 'application/json', {}
             return 200, {'request': r['id'], 'secret': r['secret'], 'confirm': '', 'status': 'approved',
                          'authority': {'node': self.node.id, 'name': self.node.name}}, 'application/json', {}
+        if not self.adding_until():
+            self.journal.alert('pairing', f'A PC at {ip} tried to join while adding a PC was not open.', '', 'warning', key=f'pairing|{ip}')
+            return 403, {'error': 'This centre PC is not adding new PCs right now. On the centre PC open Devices & Sync, press "Add a PC", then try again.'}, \
+                'application/json', {}
         rid, secret = secrets.token_hex(8), secrets.token_hex(16)
         port = fields['port'] if fields['port'].isdigit() else str(self.port)
         name = fields['name'][:60] or ip
@@ -898,6 +922,7 @@ class SyncService:
                                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', (rid, '', fields['node'], name, fields['pub'], fields['cert_fp'],
                                                                              f'{ip}:{port}', ip, '', 'pending', now(), secret))
         self.decide(rid, True, {'display': 'Automatic (new PC)', 'id': ''})
+        self.close_adding('(new PC)', f'closed because {name} joined')   # one PC per opening: adding the next one is a new, deliberate step
         return 200, {'request': rid, 'secret': secret, 'confirm': '', 'status': 'approved',
                      'authority': {'node': self.node.id, 'name': self.node.name}}, 'application/json', {}
 
@@ -997,17 +1022,40 @@ class SyncService:
             list(ex.map(probe, hosts))
         return sorted(found, key=lambda f: f['address'])
 
+    def parse_address(self, address):
+        """(host, sync port) from what a person types: 192.168.1.10, ADMIN-PC, 192.168.1.10:8443 or the web address of Settings."""
+        a = str(address or '').strip()
+        web = '://' in a  # the web address shown in Settings (http://…:<web port>/): the PCs share on the sync port
+        a = a.split('://', 1)[-1].split('/', 1)[0].strip()
+        h, _, p = a.rpartition(':')
+        host, port = (h, int(p)) if h and p.isdigit() and not web else ((h or a) if web else a, self.port)
+        if not host or ' ' in host:
+            raise ValueError('Type the address of the administrator PC, for example 192.168.1.10.')
+        return host, port
+
+    def probe(self, address):
+        """Is there an administrator PC at this address? Used by the join screen before the person presses Join."""
+        host, port = self.parse_address(address)
+        for prt in dict.fromkeys([int(port), self.port]):
+            c = Connection(self, host, prt, '', None, timeout=6)
+            try:
+                r = c.request('POST', '/sync/hello', {})
+            except (Offline, SyncError):
+                continue
+            finally:
+                c.close()
+            if r.get('node') == self.node.id:
+                raise ValueError('That address is this PC itself. Type the address of the centre PC (the PC where Hessa was set up first).')
+            if not r.get('authority'):
+                raise ValueError('The program runs on that PC, but it is not the administrator PC. Ask for the address of the administrator PC (the first PC that was set up).')
+            return {'ok': True, 'name': r.get('name') or host, 'address': f'{host}:{prt}'}
+        raise ValueError('Nothing answers at that address. Check the address, that the administrator PC is switched on with the program running, and that both PCs are on the same network.')
+
     def join_open(self, address, device_name):
         """Joins the administrator PC at this address: added at once, no code, no approval."""
         if self.node.role != 'unconfigured' or self.auth.has_users():
             raise ValueError('This PC is already set up.')
-        a = str(address or '').strip()
-        web = '://' in a  # the web address shown in Settings (http://…:<web port>/): the PCs share on the sync port
-        a = a.split('://', 1)[-1].split('/', 1)[0]
-        h, _, p = a.rpartition(':')
-        host, port = (h, int(p)) if h and p.isdigit() and not web else ((h or a) if web else a, self.port)
-        if not host:
-            raise ValueError('Type the address of the administrator PC, for example 192.168.1.10.')
+        host, port = self.parse_address(address)
         if device_name:
             self.node.set_name(device_name)
         fields = {'node': self.node.id, 'name': self.node.name, 'pub': self.node.pub.hex(), 'cert_fp': self.node.cert_fp, 'port': str(self.port)}
@@ -1019,7 +1067,7 @@ class SyncService:
                     r = c.request('POST', '/sync/join', {**fields, 'open': True})
                     port, fp = prt, c.peer_fp
                     break
-                except (Offline, SyncError):
+                except Offline:      # nothing answered on the typed port: try the usual sync port. A real refusal (SyncError) is final.
                     c.close()
                     if prt == self.port or attempt:
                         raise
@@ -1139,7 +1187,7 @@ class SyncService:
                        'port': self.port, 'addresses': local_ips(), 'vv': self.journal.vv()},
                 'nodes': out, 'summary': self.summary(), 'missing_files': sorted(self.missing)[:200],
                 'journal': self.journal.stats(), 'last_verify': self.journal.meta('last_verify'), 'alerts': self.journal.alerts(),
-                'key_saved': self.journal.meta('key_saved'),
+                'key_saved': self.journal.meta('key_saved'), 'adding_until': self.adding_until(),
                 'requests': self.join_requests() if self.node.is_authority else []}
 
     def _housekeeping(self):

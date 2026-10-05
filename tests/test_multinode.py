@@ -1207,6 +1207,7 @@ class T38_OpenJoin(unittest.TestCase):
         h.close()
         self.assertTrue(hello['authority'])
         bc = self.B.client()
+        self.ac.post('/api/devices/adding-open', {})      # the owner opens "Add a PC" first (one PC per opening)
         r = bc.post('/api/join', {'address': self.A.sync_address, 'code': '', 'name': 'Store PC'})
         self.assertEqual(r['status'], 'approved')
         wait_until(lambda: self.B.status()['hasUsers'], 60, what='accounts on the new PC')
@@ -1236,6 +1237,8 @@ class T38_OpenJoin(unittest.TestCase):
         """Review 2.4: the first answer got lost - asking again with the same identity returns the same approved
         request instead of 'already registered'; a different key under that identity is refused."""
         ident = {'node': 'abcdef012345', 'name': 'Lost Answer PC', 'pub': '11' * 32, 'cert_fp': '22' * 32, 'port': '8443', 'open': True}
+        self.assertEqual(self._sync_post('/sync/join', ident)[0], 403)     # adding a PC is closed: refused, nothing registered
+        self.ac.post('/api/devices/adding-open', {})
         st1, r1 = self._sync_post('/sync/join', ident)
         st2, r2 = self._sync_post('/sync/join', ident)
         self.assertEqual((st1, st2), (200, 200), (r1, r2))

@@ -1602,10 +1602,21 @@ def student_balances(store, scopes=None, d=None):
 ADVICE_ORDER = {'bad': 0, 'warn': 1, 'info': 2, 'ok': 3}
 
 
-def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id=None):
+BACKUP_STALE_HOURS = 72     # a PC that is switched off for the weekend is normal; three days without a backup is not
+
+
+def _stamp(text):
+    try:
+        return datetime.fromisoformat(text) if text else None
+    except (TypeError, ValueError):
+        return None
+
+
+def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id=None, system=None):
     """The advisor on the overview: the few things that need a person today, most urgent first, each with the page
     that fixes it. Only advice the user may act on or see is returned (money advice needs a money permission), and
-    a teacher-scoped user only hears about his own groups. Pure reads: a GET must never change anything."""
+    a teacher-scoped user only hears about his own groups. `system` (what the server knows about backups and sharing between
+    PCs) adds the items only an administrator can act on. Pure reads: a GET must never change anything."""
     can = set(perms or ()).intersection
     d = d or _today()
     now = now or datetime.now()
@@ -1615,6 +1626,30 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
     def add(id_, level, page, icon, **vars_):
         out.append({'id': id_, 'level': level, 'page': page, 'icon': icon, 'vars': vars_})
 
+    # 0. the system itself, for the people who can fix it: backups, sharing between PCs, the record check
+    if system:
+        bk = system.get('backup')
+        if bk is not None and can({'backups.manage'}):
+            last = _stamp(bk.get('last'))
+            if bk.get('error'):
+                add('backupFailed', 'bad', 'settings?tab=data', 'lock', e=str(bk['error'])[:160])
+            if bk.get('has_data'):       # an empty centre has nothing to protect yet and is not nagged
+                if not last:
+                    add('backupNone', 'bad', 'settings?tab=data', 'lock')
+                elif bk.get('unsaved') and now - last > timedelta(hours=BACKUP_STALE_HOURS):   # data changed since, and no backup for days
+                    add('backupOld', 'warn', 'settings?tab=data', 'lock', n=(now - last).days)
+                if not bk.get('folders'):
+                    add('backupSingleDisk', 'info', 'settings?tab=data', 'shield')
+        sy = system.get('sync')
+        if sy and can({'users.manage'}):
+            if sy.get('problems'):
+                add('syncProblem', 'bad', 'devices?tab=warnings', 'sync', n=int(sy['problems']))
+            if sy.get('conflicts'):
+                add('conflictsWaiting', 'warn', 'devices?tab=conflicts', 'merge', n=int(sy['conflicts']))
+            if sy.get('multi') and sy.get('authority') and not sy.get('key_saved'):
+                add('keyUnsaved', 'warn', 'devices', 'lock')
+            if sy.get('verify_ok') is False:
+                add('dataCheckBad', 'bad', 'settings?tab=data', 'shield')
     groups = [g for g in store.rows('groups', 'active=1 OR active IS NULL', (), scopes)]
     # 1. setting up an empty centre, in the order the work is done
     if scopes is None:

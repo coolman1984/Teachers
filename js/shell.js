@@ -18,6 +18,7 @@
     { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1 },
     { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'r', phase: 1 },
     { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 1 },
+    { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1 },
     { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 'c', phase: 1 },
     { id: 'help', icon: 'help', group: 'control', perm: null, key: 'h', phase: 1 }
   ];
@@ -71,6 +72,7 @@
           '<button class="icon-btn menu-btn" data-act="menu" aria-label="' + HS.esc(HS.t('top.menu')) + '">' + HS.icon('menu') + '</button>' +
           '<div class="crumbs" id="crumbs"></div>' +
           '<span class="grow"></span>' +
+          '<a class="sync-pill" id="sync-pill" role="status" hidden></a>' +
           '<span class="conn-pill" id="conn-pill" role="status"' + (HS.data && HS.data.connected === false ? '' : ' hidden') + '>' + HS.icon('alert', 'sm') + '<span>' + HS.esc(HS.t('top.offline')) + '</span></span>' +
           '<button class="search-trigger" data-act="palette" data-tour="search">' + HS.icon('search', 'sm') + '<span>' + HS.esc(HS.t('top.search')) + '</span><i class="kbd">Ctrl K</i></button>' +
           '<span class="grow" style="flex:0 0 0"></span>' +

@@ -77,6 +77,29 @@
     }).join('');
   }
 
+  /* ---------- is everything safe? backups, sharing between PCs, the record check (only what this user may act on) ---------- */
+  var SYNC_TONE = { ok: 'ok', pending: 'info', offline: 'warn', problem: 'bad' };
+  function statusHTML(st) {
+    var rows = [], day = 36 * 3600 * 1000;
+    function row(icon, label, value, tone, page) { rows.push('<li><a class="st-row ' + tone + '" href="#/' + HS.esc(page) + '">' + HS.icon(icon, 'sm') + '<span class="grow">' + HS.esc(label) + '</span><span class="badge ' + tone + '">' + value + '</span></a></li>'); }
+    if (st && st.backup) {
+      var last = st.backup.last, old = last && Date.now() - new Date(last).getTime() > 2 * day;
+      row('lock', HS.t('st.backup'), HS.esc(last ? U.ago(last) : HS.t('st.backup.none')), !last ? 'bad' : old ? 'warn' : 'ok', 'settings?tab=data');
+      row('shield', HS.t('st.second'), HS.esc(HS.t(st.backup.folders ? 'st.second.on' : 'st.second.off')), st.backup.folders && !st.backup.error ? 'ok' : 'warn', 'settings?tab=data');
+    }
+    if (st && st.sync) {
+      var sy = st.sync;
+      row('sync', HS.t('st.sync'), HS.esc(sy.state === 'single' || !sy.multi && sy.state !== 'problem' ? HS.t('st.sync.single') : HS.t('dev.light.' + sy.state)), sy.state === 'single' || !sy.multi && sy.state !== 'problem' ? 'ok' : SYNC_TONE[sy.state] || '', 'devices');
+      if (sy.conflicts) row('merge', HS.t('st.conf'), HS.fmt.num(sy.conflicts), 'warn', 'devices?tab=conflicts');
+      row('check', HS.t('st.verify'), HS.esc(sy.verify_ok === false ? HS.t('st.verify.bad') : sy.verify_at ? HS.t('st.verify.ok', { when: U.ago(sy.verify_at) }) : HS.t('st.verify.none')),
+        sy.verify_ok === false ? 'bad' : sy.verify_at ? 'ok' : '', 'settings?tab=data');
+    }
+    if (st && st.gateway) row('globe', HS.t('st.gateway'), HS.esc(HS.t(st.gateway.configured ? 'st.gateway.on' : 'st.gateway.off')), st.gateway.configured ? 'ok' : '', 'settings?tab=parents');
+    if (!rows.length) return '';
+    return '<section class="card"><header><span class="tile-ic">' + HS.icon('shield') + '</span><h3>' + HS.esc(HS.t('st.title')) + '</h3></header><p class="muted" style="margin:-.4rem 0 .6rem">' + HS.esc(HS.t('st.sub')) +
+      '</p><ul class="st-list">' + rows.join('') + '</ul></section>';
+  }
+
   /* ---------- sessions now and next ---------- */
   function hm(s) { var p = String(s || '').split(':'); return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0); }
   function nowHTML(sessions) {
@@ -168,7 +191,7 @@
           '<div class="grid cols-2"><section class="card"><header><h3>' + HS.esc(HS.t('ov.trend')) + '</h3></header><div data-chart="att"></div></section>' +
             (money ? '<section class="card"><header><h3>' + HS.esc(HS.t('ov.trend.money')) + '</h3></header><div data-chart="money"></div></section>' : '') + '</div>' +
         '</div><div class="stack">' +
-          '<div class="desk-only">' + actions() + '</div>' + guideHTML() +
+          '<div class="desk-only">' + actions() + '</div>' + guideHTML() + '<div data-status></div>' +
           '<section class="card"><header><h3>' + HS.esc(HS.t('ov.tips.title')) + '</h3></header><div class="stack" style="gap:.8rem">' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('search') + '<span>' + HS.esc(HS.t('ov.tip.search')) + ' <i class="kbd">Ctrl K</i></span></div>' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('keyboard') + '<span>' + HS.esc(HS.t('ov.tip.keys')) + ' <i class="kbd">?</i></span></div>' +
@@ -200,6 +223,9 @@
           if (root.isConnected === false) return;
           root.querySelector('[data-now]').innerHTML = U.empty('alert', U.errorText(e), '', '<button class="btn" data-retry>' + HS.esc(HS.t('common.retry')) + '</button>');
         });
+        HS.get('/api/c/status').then(function (st) {
+          var box = root.querySelector('[data-status]'); if (box && root.isConnected !== false) box.innerHTML = statusHTML(st);
+        }, function () { var box = root.querySelector('[data-status]'); if (box) box.innerHTML = ''; });
         HS.get('/api/c/advice').then(function (list) {
           if (root.isConnected === false) return;
           root.querySelector('[data-advice]').innerHTML = advisorHTML(list);

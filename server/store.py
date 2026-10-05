@@ -122,9 +122,34 @@ WINDOW_DAYS = 75
 
 # Merge rules for changes made at the same time on two PCs (see DISTRIBUTED_SYNC_ARCHITECTURE.md, conflict matrix).
 COUNTERS = {'materials': {'stock'}}  # handouts sold on two PCs at the same time: both sales count
+PHONE_FIELDS = {'mobile', 'parentMobile', 'parentMobile2'}      # only for people with "contacts.view", also inside the history
+LOG_HIDDEN = {'portalHash', 'portalNonce'}                      # parent-link secrets are never shown to anybody
+
+
+def mask_audit_row(r, hide):
+    """The history keeps the real values (nothing is ever lost); what a screen shows is cut down to what that user may see."""
+    for k in ('changes', 'before', 'after'):
+        raw = r.get(k)
+        if not raw:
+            continue
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(d, dict) or not (set(d) & hide):
+            continue
+        for f in set(d) & hide:
+            d[f] = ['•••', '•••'] if k == 'changes' else '•••'
+        r[k] = canonical(d)
+
 RESOLVERS = {
     'shifts': {'status': 'rank:open,closed'},
-    'sessions': {'status': 'rank:planned,cancelled,held'},  # if students attended, the session was held
+    'sessions': {'status': 'rank:planned,cancelled,held', 'note': 'follow:status'},  # if students attended, the session was held
+    # a derived or paired field always travels with the field it belongs to: two PCs renaming the same student at the same time
+    # must not leave the search key of one name beside the name of the other, and the owner is asked about the name only
+    'students': {'nameKey': 'follow:name', 'consentAt': 'follow:consent', 'portalHash': 'follow:portalNonce'},
+    'teachers': {'nameKey': 'follow:name'},
+    'groups': {'feeHistory': 'follow:fee'},
 }
 SPECS = {e: {'table': t, 'fields': [(js, col, kind) for js, col, kind, _ in f], 'counters': COUNTERS.get(e, set()),
              'resolvers': RESOLVERS.get(e, {})} for e, (t, _, f) in ENTITIES.items()}
@@ -680,11 +705,15 @@ class Store:
     def log_activity(self, user, ip, events):
         self.journal.log_activity(user, ip, events[:500])
 
-    def query_log(self, kind, q='', user='', typ='', scope='', frm='', to='', limit=200, offset=0, scopes=None, node='', admin=True):
+    def query_log(self, kind, q='', user='', typ='', scope='', frm='', to='', limit=200, offset=0, scopes=None, node='', admin=True, contacts=True, entity='', rid=''):
         if kind == 'activity':
             self.journal.flush_activity()
-        return self.journal.query('audit' if kind == 'audit' else 'activity', q, user, typ, scope, frm, to, node, limit, offset, scopes,
-                                  business_only=not admin)
+        res = self.journal.query('audit' if kind == 'audit' else 'activity', q, user, typ, scope, frm, to, node, limit, offset, scopes,
+                                 business_only=not admin, phones_hidden=not contacts, entity=entity, rid=rid)
+        if kind == 'audit':
+            for r in res['rows']:
+                mask_audit_row(r, LOG_HIDDEN | (set() if contacts else PHONE_FIELDS))
+        return res
 
     # ------------------------------------------------------------ conflicts and convergence
     def conflicts(self):

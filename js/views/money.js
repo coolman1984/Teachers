@@ -219,9 +219,7 @@
       return which === 'receipts' ? [p.no, p.date, p.at, stName(p.studentId), HS.t('pay.kind.' + p.kind), D.groupName(p.groupId), HS.t('pay.method.' + p.method), p.ref, p.amount, p.by]
         : [p.no, p.date, HS.t('exp.cat.' + p.category), D.teacherName(p.teacherId), HS.t('pay.method.' + p.method), p.amount, p.note, p.by];
     }));
-    var text = '﻿' + lines.map(function (l) { return l.map(function (v) { v = v === undefined || v === null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\r\n');
-    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
-    a.download = 'hessa-' + which + '-' + R.from + '_' + R.to + '.csv'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    U.download('hessa-' + which + '-' + R.from + '_' + R.to + '.csv', U.csv(lines), 'text/csv;charset=utf-8');
   }
   function shiftsTab(pane) {
     pane.innerHTML = '<div class="skeleton" style="height:10rem"></div>';

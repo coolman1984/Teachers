@@ -64,12 +64,12 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P5.5 Money (shift, receipts, expenses, shifts, handouts)
   - [x] Banknote counter close with reason and printed report; reversals; CSV export; desk profile reaches its own shift
 - [x] P5.6 Exams & marks (Enter moves down, A = absent, paste a column, live ranking with ties, stats, print, results queue)
-- [ ] P5.7 Overview
+- [x] P5.7 Overview
   - [x] Live scoped dashboard numbers and sample-centre controls
   - [x] Command centre: greeting, count-up figures, quick actions, sessions now/next, 28-day SVG trends, getting-started checklist
   - [x] Advisor: `GET /api/c/advice` ranked, permission- and scope-aware advice with a page for each (test_23 + design family test)
   - [x] Phones: bottom tab bar, connection-lost pill, home-screen manifest + icons, "Open on phone" QR dialog
-  - [ ] System status card (backup age, sync, parent links) – needs a cheap `/api/c/status`
+  - [x] System status card "Is everything safe?" (backup age, second copy, sharing, record check, parent links) from `/api/c/status`, only what the user may act on
 
 ## Field edge cases (Egypt market re-check 2026-10-05, catalogue in `docs/01-research-report.md` §6)
 - [x] E1 Price rise mid-year is not retroactive (server-written `feeHistory`, "applies from" in the group form, earlier prices shown)
@@ -84,6 +84,23 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
   - [x] Sibling payment screen (door card lists the family, one dialog, one commit, one printed sheet)
 - [x] E10a Free trial session at the door (once per group, never charged)
 - [x] E10b Temporary (Ramadan) timetable (`tempSlots`, clash-checked, sessions follow it); extra session (`session/add`, clash-refused); school name in door search results
+
+## Admin and data safety (learned from Mr.Ayman-HR, 2026-10-05)
+- [x] A1 Devices & Sync page and the light in the top bar (PCs, to decide, warnings, record check, administrator key, backup administrator PC)
+- [x] A2 First start: join the centre PC (find or type the address, live check, first copy, "same PC or a new one?" for a copied folder)
+- [x] A3 Adding window: the owner opens 15 minutes for ONE new PC (stricter than BAMS, whose door stays open)
+- [x] A4 Update safety (`server/upgrade.py`): verified snapshot before an update, refusal of data from a newer program, startup problem note; fixed `_archive_copy` that left `center.db` behind
+- [x] A5 Activity log: Changes and Logins & security tabs, filters, spreadsheet export, readable before → after (the old page crashed: `HS.pageHead` never existed)
+- [x] A6 History hides parents' numbers without `contacts.view` and never shows parent-link secrets (the old log leaked numbers)
+- [x] A7 Settings → Data: second backup folder, "Check my data now", the five promises, update history
+- [x] A8 Overview "Is everything safe?" card and admin advisor items (no/old/failed backup, one disk only, sharing problems, decisions waiting, key not saved, check failed)
+- [x] A9 History of one record and "Undo this change" (student file, links from the Activity log); undo is a new change
+- [x] A10 Merge: `follow:` rules (derived fields are never a conflict of their own); resolving a name conflict recomputes the search key
+- [x] A11 Spreadsheet formula protection and one download helper (`U.csv`, `U.download`); phone overflow of wide tables fixed (`.stack > *`)
+- [x] A12 Help topics "Several PCs and sharing" and the new safety answers (EN + Formal Arabic); administrator guide
+- [x] A13 Decision: BAMS "office mode" (thin PC) is **not** ported - a browser on the centre PC's address already is that; the Add-a-PC dialog explains the choice
+- [ ] A14 History button in the group panel and Settings lists (API `GET /api/audit?entity=&id=` is ready)
+- [ ] A15 The detail sentences of the Logins & security list come from the server in English (the event names are translated)
 
 ## Phase P6 – Differentiators 1
 - [x] P6.1 Follow-up / early warning + debts (`/api/c/absent` computes absentees; advisor offers to tell parents)

@@ -132,12 +132,14 @@ class Registers:
                     return False
         return True
 
-    def flags(self, groups, win, is_deleted, counters=None):
-        """Things a person should look at, derived from the converged state (identical on every PC)."""
+    def flags(self, groups, win, is_deleted, counters=None, followers=()):
+        """Things a person should look at, derived from the converged state (identical on every PC).
+        followers: derived fields that always travel with another field (resolver 'follow:'). They are never a decision of
+        their own - the person is asked about the leading field only."""
         out = {}
         conflicts = {}
         for fld, es in groups.items():
-            if fld in META or len(es) < 2:
+            if fld in META or len(es) < 2 or fld in followers:
                 continue
             values = {e.val for e in es}
             if len(values) > 1:
@@ -273,4 +275,5 @@ class BusinessFolder:
             for js, col, _ in spec['fields']:
                 if js in spec['counters']:
                     counters[js] = row[col] if row else None
-        return self.reg.set_flags(tbl, rid, self.reg.flags(groups, win, self.reg.deleted(groups, win), counters))
+        followers = {f for f, rule in spec['resolvers'].items() if str(rule).startswith('follow:')}
+        return self.reg.set_flags(tbl, rid, self.reg.flags(groups, win, self.reg.deleted(groups, win), counters, followers))

@@ -79,7 +79,7 @@ test('the home-screen manifest is linked and its icons exist', () => {
 test('centre navigation uses server permissions and supported routes', () => {
   const HS = startup('en');
   assert.deepEqual(Array.from(HS.pages, p => p.id),
-    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'settings', 'help']);
+    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'devices', 'settings', 'help']);
   HS.me = { perms: ['students.manage'] };
   const routes = [];
   HS.go = route => routes.push(route);
@@ -284,4 +284,161 @@ test('one-click enrolment uses the same late-join default as the dialog (next mo
   assert.equal(at('2026-12-28')(month), '2027-01-01');       // across the year end
   assert.equal(at('2026-10-28')(session), undefined);        // only monthly groups have a first billed month
   assert.equal(at('2026-10-28')(null), undefined);
+});
+
+test('devices page shows PCs and decisions escaped once, admin-only controls, and the light follows the user', async () => {
+  for (const lang of ['en', 'ar']) {
+    const HS = startup(lang); HS.lang = lang;
+    HS.data.state = { students: [], groups: [], teachers: [], rooms: [], subjects: [] }; HS.data.reindex && HS.data.reindex();
+    HS.me = { username: 'owner', perms: ['users.manage'] };
+    const now = new Date().toISOString().slice(0, 19);
+    const dev = { me: { name: 'Centre <PC>', role: 'authority', backup: false, port: 8463, addresses: ['192.168.1.10'] }, summary: { state: 'ok', online: 1, peers: 1, files_missing: 0 },
+      nodes: [{ id: 'a', name: 'Centre <PC>', self: true, authority: true, status: 'active', enrolled_at: now },
+              { id: 'b', name: 'R&D door', self: false, authority: false, status: 'active', enrolled_at: now, status_now: { state: 'online', agree: true, last_ok: now } }],
+      alerts: [{ key: 'k', kind: 'divergence', severity: 'error', last_ts: now, detail: 'Data <differs>', count: 2 }], missing_files: [], last_verify: { ts: now, ok: true }, key_saved: '', adding_until: '', requests: [] };
+    const conf = [{ entity: 'students', id: 's1', title: 'Students', name: 'Ann & Bob', kind: 'conflict', detail: { name: [
+      { value: 'Ann', win: true, by: { actor: 'A&B', node_name: 'Desk', ts: now } }, { value: 'Anne', win: false, by: { actor: 'Tea', node_name: 'Door', ts: now } }] } }];
+    HS.$ = () => null;                              // no DOM here: the top-bar light has nothing to paint
+    HS.get = async url => url === '/api/devices' ? dev : conf;
+    HS.post = async () => ({});
+    const nodes = { '[data-sub]': {}, '[data-tabs]': {}, '[data-body]': {} };
+    const root = { isConnected: true, querySelector: sel => nodes[sel], addEventListener() {} };
+    HS.views.devices.mount(root, { route: { q: {} } });
+    await new Promise(r => setImmediate(r));
+    const html = nodes['[data-body]'].innerHTML;
+    assert.ok(html.includes('R&amp;D door'), lang); assert.ok(!html.includes('&amp;amp;'), lang);
+    assert.ok(html.includes('data-add') && html.includes('data-key'), 'the centre PC can add a PC and must save the key');
+    assert.ok(html.includes('data-revoke="b"') && !html.includes('data-revoke="a"'), 'a PC can remove the others, never itself');
+    assert.ok(html.includes('192.168.1.10'));
+    assert.ok(nodes['[data-sub]'].innerHTML.includes('Centre &lt;PC&gt;'));
+    assert.ok(nodes['[data-tabs]'].innerHTML.includes('(1)'), 'one warning is counted on its tab');
+    // the decisions tab: names and values escaped once, one button per value
+    const n2 = { '[data-sub]': {}, '[data-tabs]': {}, '[data-body]': {} };
+    HS.views.devices.mount({ isConnected: true, querySelector: sel => n2[sel], addEventListener() {} }, { route: { q: { tab: 'conflicts' } } });
+    await new Promise(r => setImmediate(r));
+    assert.ok(n2['[data-body]'].innerHTML.includes('Ann &amp; Bob') && n2['[data-body]'].innerHTML.includes('A&amp;B'));
+    assert.ok(!n2['[data-body]'].innerHTML.includes('&amp;amp;'));
+    assert.equal((n2['[data-body]'].innerHTML.match(/data-keep=/g) || []).length, 2);
+    // a backup centre PC cannot save the key or remove the centre PC
+    dev.me.backup = true; dev.nodes[0].self = false; dev.nodes[0].status_now = { state: 'online' }; dev.nodes[1].self = true;
+    const n3 = { '[data-sub]': {}, '[data-tabs]': {}, '[data-body]': {} };
+    HS.views.devices.mount({ isConnected: true, querySelector: sel => n3[sel], addEventListener() {} }, { route: { q: {} } });
+    await new Promise(r => setImmediate(r));
+    assert.ok(!n3['[data-body]'].innerHTML.includes('data-key') && !n3['[data-body]'].innerHTML.includes('data-add'));
+    assert.ok(!n3['[data-body]'].innerHTML.includes('data-revoke="a"'));
+  }
+});
+
+test('the sync light: administrators see every state, others only a problem, a single PC shows nothing', () => {
+  const HS = startup('en'); HS.lang = 'en'; const el = { hidden: true, className: '', innerHTML: '', title: '', setAttribute(k, v) { this[k] = v; }, removeAttribute(k) { delete this[k]; } };
+  HS.$ = sel => sel === '#sync-pill' ? el : null;
+  const light = state => { HS.sync = state ? { state } : null; HS.emit('sync', HS.sync); return el; };
+  HS.me = { perms: ['users.manage'] };
+  assert.equal(light('single').hidden, true);
+  assert.equal(light('ok').hidden, false); assert.ok(el.className.includes('s-ok') && el.href === '#/devices');
+  assert.ok(light('offline').innerHTML.includes('Working on this PC'));
+  HS.me = { perms: ['students.view'] };
+  assert.equal(light('ok').hidden, true); assert.equal(light('offline').hidden, true);
+  assert.equal(light('problem').hidden, false); assert.ok(el.innerHTML.includes('Tell the administrator') && el.href === undefined);
+});
+
+test('the history is readable in both languages: fields, values, hidden numbers, ids as names - escaped once', async () => {
+  for (const lang of ['en', 'ar']) {
+    const HS = startup(lang); HS.lang = lang; const A = HS.audit;
+    HS.get = async () => ({ version: 1, teachers: [{ id: 't1', name: 'Mr <T>' }], students: [], groups: [], rooms: [], subjects: [] }); await HS.data.load();
+    const upd = { op: 'update', entity: 'students', entity_id: 's1', changes: JSON.stringify({ name: ['Ann', 'Anne'], nameKey: ['ann', 'anne'], parentMobile: ['•••', '•••'], active: [true, false], teacherId: [null, 't1'] }) };
+    const rows = A.rows(upd);
+    assert.deepEqual(Array.from(rows, r => r.f), ['name', 'parentMobile', 'active', 'teacherId'], 'derived fields (nameKey) are not shown');
+    const html = A.detailHTML(upd);
+    assert.ok(html.includes(HS.esc(A.field('name'))) && html.includes(HS.t('act.col.before')) && html.includes(HS.t('act.col.after')));
+    assert.ok(html.includes('Mr &lt;T&gt;') && !html.includes('&amp;lt;'), 'the id shows as the name, escaped once');
+    assert.ok(html.includes(HS.t('act.hidden.s')) && !html.includes('01'), 'a hidden phone says so and shows nothing');
+    assert.ok(html.includes(HS.t('common.no')) && html.includes(HS.t('dev.empty')));
+    assert.ok(A.summary(upd).includes(A.field('name')));
+    assert.equal(A.summary({ op: 'insert' }), HS.t('act.sum.added')); assert.equal(A.summary({ op: 'delete' }), HS.t('act.sum.deleted'));
+    const ins = { op: 'insert', entity: 'payments', entity_id: 'p', after: JSON.stringify({ id: 'p', no: 'A-1', amount: 150, method: 'cash', note: '', voidOf: null, feeHistory: [{ from: '2026-01-01', fee: 1 }] }) };
+    const inRows = A.rows(ins);
+    assert.deepEqual(Array.from(inRows, r => r.f), ['no', 'amount', 'method', 'feeHistory'], 'empty fields and bookkeeping are left out');
+    assert.ok(A.detailHTML(ins).includes('150') && A.detailHTML(ins).includes(HS.t('pay.method.cash')) && A.detailHTML(ins).includes(HS.t('act.opaque')));
+    assert.equal(A.name(ins), 'A-1');
+    assert.ok(A.lines(upd).some(l => l.includes('→')), 'the spreadsheet gets "before → after" text');
+    assert.equal(A.entity('payments'), HS.t('ent.payments')); assert.equal(A.entity('mystery'), 'mystery'); assert.equal(A.field('mystery'), 'mystery');
+  }
+});
+
+test('a spreadsheet never runs a typed name as a formula, and keeps numbers, phones and Arabic', () => {
+  const HS = startup('en'); const csv = HS.ui.csv([['=HYPERLINK("http://x")', '+2010123456', '-5', '@cmd', 'علي, حسن', 'plain']]);
+  assert.ok(csv.startsWith('﻿'));
+  const line = csv.slice(1);
+  assert.ok(line.startsWith('"\'=HYPERLINK(""http://x"")"'), line);
+  assert.ok(line.includes(',+2010123456,-5,\'@cmd,"علي, حسن",plain'), line);
+});
+
+test('the activity log: tabs follow the permissions, entries are escaped once, hidden numbers and failures are marked', async () => {
+  for (const lang of ['en', 'ar']) {
+    const HS = startup(lang); HS.lang = lang;
+    HS.data.state = { students: [], groups: [], teachers: [], rooms: [], subjects: [] }; HS.data.reindex && HS.data.reindex();
+    const nodes = {}, listeners = {};
+    const el = sel => nodes[sel] || (nodes[sel] = { innerHTML: '', hidden: false });
+    const root = { isConnected: true, querySelector: el, addEventListener(t, fn) { listeners[t] = fn; } };
+    const entry = { ts: '2026-10-05T10:00:00', user: 'A&B', node_name: 'Door <PC>', label: 'Rename <student>', entity: 'students', entity_id: 's1', op: 'update',
+      changes: JSON.stringify({ name: ['Ann', 'Anne'], parentMobile: ['•••', '•••'] }), before: null, after: null, kind: 'data' };
+    const calls = [];
+    HS.get = async url => { calls.push(url); return url.startsWith('/api/security')
+      ? { total: 2, rows: [{ ts: '2026-10-05T09:00:00', user: 'boss', ip: '10.0.0.5', event: 'login-failed', target: 'x<y', detail: 'bad', node_name: 'Centre' },
+                           { ts: '2026-10-05T08:00:00', user: 'boss', ip: '10.0.0.5', event: 'login', target: 'boss', detail: '', node_name: 'Centre' }], users: ['boss'], nodes: [{ id: 'n', name: 'Centre' }] }
+      : { total: 150, rows: [entry], users: ['A&B'], nodes: [{ id: 'n1', name: 'Door <PC>' }, { id: 'n2', name: 'Desk' }] }; };
+    HS.me = { perms: ['logs.view'], admin: false };
+    HS.views.activity.mount(root);
+    await new Promise(r => setImmediate(r));
+    let body = nodes['[data-body]'].innerHTML;
+    assert.equal(nodes['[data-tabs]'].innerHTML, '', 'a person who may only read the changes sees no tabs');
+    assert.ok(body.includes('Rename &lt;student&gt;') && body.includes('A&amp;B') && body.includes('Door &lt;PC&gt;'), lang);
+    assert.ok(!body.includes('&amp;amp;') && !body.includes('<student>'));
+    assert.ok(body.includes('data-more') && body.includes(HS.esc(HS.t('act.count', { shown: '1', total: '150' }))), 'more entries can be loaded');
+    assert.ok(body.includes(HS.t('act.hidden.s')), 'a hidden phone is marked');
+    assert.ok(nodes['[data-f=node]'].innerHTML.includes('Door &lt;PC&gt;') && nodes['[data-f=node]'].hidden === false, 'two PCs: the PC filter is offered');
+    assert.ok(calls[0].startsWith('/api/audit?limit=100&offset=0'));
+    // an administrator with the security permission gets the second tab
+    HS.me = { perms: ['logs.view', 'logs.security', 'users.manage'], admin: true };
+    HS.views.activity.mount(root); await new Promise(r => setImmediate(r));
+    assert.ok(nodes['[data-tabs]'].innerHTML.includes('data-tab="security"'));
+    listeners.click({ target: { closest: s => s === '[data-tab]' ? { dataset: { tab: 'security' } } : null } });
+    await new Promise(r => setImmediate(r));
+    body = nodes['[data-body]'].innerHTML;
+    assert.ok(calls.some(c => c.startsWith('/api/security?')));
+    assert.ok(body.includes(HS.esc(HS.t('sec.login-failed'))) && body.includes('x&lt;y') && !body.includes('&amp;lt;'));
+    assert.ok(body.includes('is-bad') && body.includes(HS.esc(HS.t('act.fail.n', { n: '1' }))), 'refused attempts stand out and are counted');
+    // filters go to the server, empty results explain themselves
+    HS.get = async () => ({ total: 0, rows: [], users: [], nodes: [] });
+    listeners.input({ target: { closest: s => s === '[data-f]' ? { dataset: { f: 'typ' }, value: 'login-blocked' } : null } });
+    await new Promise(r => setImmediate(r));
+    assert.ok(nodes['[data-body]'].innerHTML.includes(HS.esc(HS.t('act.none.f'))));
+  }
+});
+
+test('the overview status card shows only what the server sent, with a tone for each line and a place to fix it', async () => {
+  for (const lang of ['en', 'ar']) {
+    const HS = startup(lang); HS.lang = lang;
+    HS.data.state = { settings: {}, groups: [], rooms: [], teachers: [], students: [], attendance: [] };
+    HS.prefs.data = {}; HS.prefs.save = () => {}; HS.me = { username: 'owner', perms: ['overview.view', 'backups.manage', 'users.manage', 'gateway.manage'] };
+    const els = {}, root = { isConnected: true, addEventListener() {}, querySelector: s => els[s] || (els[s] = { innerHTML: '', textContent: '' }) };
+    const now = new Date().toISOString().slice(0, 19);
+    let status = { backup: { last: null, folders: 0, error: '' }, sync: { state: 'ok', multi: true, conflicts: 2, verify_ok: false, verify_at: now, pcs: 2 }, gateway: { configured: false } };
+    HS.get = async url => url.includes('status') ? status : url.includes('advice') ? [] : { date: '2026-10-05', checkedIn: 0, sessions: [], students: 0, risk: 0, trend: [], moneyTrend: [] };
+    HS.views.overview.mount(root); await new Promise(r => setImmediate(r));
+    let html = els['[data-status]'].innerHTML;
+    assert.ok(html.includes(HS.t('st.title')) && html.includes(HS.t('st.backup.none')) && html.includes(HS.t('st.second.off')), lang);
+    assert.ok(/st-row bad[^>]*href="#\/settings\?tab=data"/.test(html), 'no backup at all is a red line that leads to the fix');
+    assert.ok(html.includes('href="#/devices?tab=conflicts"') && html.includes('>2<'), 'two changes wait for a decision');
+    assert.ok(html.includes(HS.t('st.verify.bad')) && html.includes(HS.t('st.gateway.off')));
+    status = { backup: { last: now, folders: 1, error: '' }, sync: { state: 'single', multi: false, conflicts: 0, verify_ok: true, verify_at: now, pcs: 1 } };
+    HS.views.overview.mount(root); await new Promise(r => setImmediate(r));
+    html = els['[data-status]'].innerHTML;
+    assert.ok(!html.includes('st-row bad') && !html.includes('st-row warn'), 'everything in order: no warning colours');
+    assert.ok(html.includes(HS.t('st.sync.single')) && html.includes(HS.t('st.second.on')) && !html.includes(HS.t('st.gateway')), 'one PC says so; the parent links line is only for those who manage them');
+    status = {};
+    HS.views.overview.mount(root); await new Promise(r => setImmediate(r));
+    assert.equal(els['[data-status]'].innerHTML, '', 'a person with no system permissions gets no card');
+  }
 });

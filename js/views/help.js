@@ -17,7 +17,8 @@
     { id: 'settlements', icon: 'chart', page: 'settlements', perm: 'settlements.view', n: 3 },
     { id: 'reports', icon: 'present', page: 'reports', perm: 'reports.view', n: 2 },
     { id: 'phone', icon: 'globe', page: 'overview', n: 3 },
-    { id: 'safety', icon: 'shield', page: 'settings', n: 4 }
+    { id: 'devices', icon: 'sync', page: 'devices', perm: 'users.manage', n: 6 },
+    { id: 'safety', icon: 'shield', page: 'settings', n: 6 }
   ];
   HS.helpTopic = function (page) { return TOPICS.filter(function (t) { return t.id === page; })[0] ? page : 'start'; };
 

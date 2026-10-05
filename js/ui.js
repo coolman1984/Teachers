@@ -57,6 +57,14 @@
   U.empty = function (icon, title, text, action) {
     return '<div class="empty"><div class="art">' + HS.icon(icon, 'lg') + '</div><h3>' + HS.esc(title) + '</h3>' + (text ? '<p>' + HS.esc(text) + '</p>' : '') + (action || '') + '</div>';
   };
+  U.ago = function (ts) {
+    if (!ts) return HS.t('dev.never');
+    var min = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+    if (min < 1) return HS.t('dev.ago.now');
+    if (min < 60) return HS.t('dev.ago.min', { n: HS.fmt.num(min) });
+    if (min < 1440) return HS.t('dev.ago.hour', { n: HS.fmt.num(Math.round(min / 60)) });
+    return HS.t('dev.ago.day', { n: HS.fmt.num(Math.round(min / 1440)) });
+  };
   U.dt = function (s) { if (!s) return '–'; var d = new Date(s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d) + ' ' + HS.fmt.time(d); };
   U.day = function (s) { if (!s) return '–'; var d = new Date(String(s).length <= 10 ? s + 'T00:00:00' : s); return isNaN(d) ? HS.esc(s) : HS.fmt.date(d); };
   U.today = function () { var d = new Date(); return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); };
@@ -117,7 +125,7 @@
 
   U.confirm = function (o) {
     return new Promise(function (resolve) {
-      var el = HS.dialog({ title: o.title, body: '<p>' + HS.esc(o.body || '') + '</p>' + (o.reason ? '<div class="field"><label for="cf-reason">' + HS.esc(o.reason) + '</label><input class="input" id="cf-reason" autocomplete="off"></div>' : ''),
+      var el = HS.dialog({ title: o.title, body: (o.bodyHtml ? o.bodyHtml : '<p>' + HS.esc(o.body || '') + '</p>') + (o.reason ? '<div class="field"><label for="cf-reason">' + HS.esc(o.reason) + '</label><input class="input" id="cf-reason" autocomplete="off"></div>' : ''),
         footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn ' + (o.danger ? 'danger' : 'primary') + '" data-ok>' + HS.esc(o.ok || HS.t('common.done')) + '</button>' });
       var done = false;
       el.querySelector('[data-ok]').addEventListener('click', function () {
@@ -200,6 +208,22 @@
         return '<tr style="--i:' + Math.min(i, 14) + '"' + (opts.rowAttr ? ' ' + opts.rowAttr(r) : '') + (opts.click ? ' tabindex="0" role="button" style="cursor:pointer;--i:' + Math.min(i, 14) + '"' : '') + '>' +
           cols.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + c.cell(r) + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>';
+  };
+
+  /* ---------- a file for the person to keep: a spreadsheet (CSV, opens in Excel with Arabic intact) ---------- */
+  U.download = function (name, text, type) {
+    var url = URL.createObjectURL(new Blob([text], { type: type || 'text/plain;charset=utf-8' })), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  };
+  U.csv = function (lines) {
+    return '\ufeff' + lines.map(function (l) {
+      return l.map(function (v) {
+        v = v === undefined || v === null ? '' : String(v);
+        if (/^[=+\-@\t\r]/.test(v) && !/^[-+]?\d+(\.\d+)?$/.test(v) && !/^\+\d[\d ]+$/.test(v)) v = "'" + v;      // a name that starts with = must never run as a spreadsheet formula
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      }).join(',');
+    }).join('\r\n');
   };
 
   /* ---------- run a save with the standard feedback ---------- */
