@@ -94,7 +94,8 @@
         '<div data-stats>' + statsHTML(rows, max) + '</div>' +
         (can ? '<div class="tip">' + HS.icon('keyboard') + '<span>' + HS.esc(HS.t('ex.keys')) + '</span></div>' : '') +
         '<div data-sheet>' + (rows.length ? tableHTML() : U.empty('users', HS.t('roll.empty'), HS.t('roll.empty.b'))) + '</div>',
-        footer: '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ex.print')) + '</button>' +
+        footer: (HS.can('exams.manage') ? '<button class="btn" data-publish aria-pressed="' + (ex.published === true) + '">' + HS.icon(ex.published === true ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(ex.published === true ? 'ex.shown' : 'ex.hidden')) + '</button>' : '') +
+          '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ex.print')) + '</button>' +
           (HS.can('messages.send') && HS.can('contacts.view') ? '<button class="btn" data-send>' + HS.icon('chat', 'sm') + HS.esc(HS.t('ex.send')) + '</button>' : '') +
           (can ? '<button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('ex.saveMarks')) + '</button>' : ''),
         mount: function (p) {
@@ -149,6 +150,16 @@
           });
           p.addEventListener('click', function (e) {
             if (e.target.closest('[data-print]')) { HS.printResults(ex, rows, rankOf(rows).rank); return; }
+            var pub = e.target.closest('[data-publish]');
+            if (pub) {   // marks reach the parents' page only after the teacher says so (a half-entered exam never shows)
+              var cur = D.get('exams', id); if (!cur) return;
+              var on = cur.published !== true;
+              U.run(D.save('exams', id, Object.assign({}, cur, { published: on }), (on ? 'Show exam to parents: ' : 'Hide exam from parents: ') + cur.title), on ? 'ex.shownDone' : 'ex.hiddenDone', pub).then(function () {
+                ex.published = on; pub.disabled = false; pub.setAttribute('aria-pressed', on);
+                pub.innerHTML = HS.icon(on ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(on ? 'ex.shown' : 'ex.hidden'));
+              }, function () {});
+              return;
+            }
             if (e.target.closest('[data-send]')) {
               var who = rows.filter(function (r) { return !r.absent && r.score !== ''; }).map(function (r) { return { id: r.id, name: r.name }; });
               HS.waQueue(who, 'exam', null); return;

@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), security: blank() };
@@ -81,7 +81,9 @@
     [/^No longer a backup administrator PC: the administrator key was deleted here$/, 'backupEnded'],
     [/^This PC is now a backup administrator PC$/, 'backupStarted'],
     [/^The administrator key was handed to the backup administrator PC$/, 'keySent'],
-    [/^PC (.+) \((.+)\) asks to join; confirmation number (\d+)$/, 'pairing']
+    [/^PC (.+) \((.+)\) asks to join; confirmation number (\d+)$/, 'pairing'],
+    [/^Office secret shown$/, 'secretShown'],
+    [/^Setup code shown$/, 'codeShown']
   ];
   var PART = [
     [/^(User name|Name|Job title|Role|Active|Must change password|Notes): (.*) -> (.*)$/, 'field'],

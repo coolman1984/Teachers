@@ -597,14 +597,17 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/version':
             return self.send(200, {'version': STORE.version(), 'me': self.u['ver'], 'mustChange': bool(self.u['must_change']),
                                    'sync': SYNC.summary(), 'gateway': SECRETS.configured})
-        if p in ('/api/gateway', '/api/gateway/code'):
+        if p in ('/api/gateway', '/api/gateway/code', '/api/gateway/secret'):
             self.need('gateway.manage')
             self.need_all_scopes()
-            if p.endswith('/code'):
+            if p.endswith('/code') or p.endswith('/secret'):
                 if not SECRETS.configured:
                     raise center.Problem('err.noGateway', 'Configure parent links first.')
-                return self.send(200, {'code': SECRETS.setup_code()})
-            return self.send(200, GATE.status())
+                # the secret goes to Cloudflare once (docs/GATEWAY_SETUP.md); who looked at it is written in the security log
+                AUTH.log(self.u['display'], self.ip, 'gateway-secret', 'gateway', 'Setup code shown' if p.endswith('/code') else 'Office secret shown')
+                return self.send(200, {'code': SECRETS.setup_code()} if p.endswith('/code') else {'secret': SECRETS.data['officeSecret']})
+            links = len(STORE.rows('students', "portal_hash IS NOT NULL AND portal_hash<>''"))
+            return self.send(200, {**GATE.status(), 'links': links})
         if p == '/api/info':
             urls = lan_urls(CFG['port'])
             if not self.can('settings.view'):
@@ -824,7 +827,7 @@ class Handler(BaseHTTPRequestHandler):
                     SECRETS.save()
                 elif action == 'generate':
                     if SECRETS.configured and not d.get('replace'):
-                        raise BadRequest('Secrets already exist. Replacing them stops every existing parent link until the gateway is updated.')
+                        raise center.Problem('gw.err.exists', 'Secrets already exist. Replacing them stops every existing parent link until the gateway is updated.')
                     SECRETS.generate()
                     GATE.pushed.clear()
                 elif action == 'code':
@@ -833,13 +836,16 @@ class Handler(BaseHTTPRequestHandler):
                 elif action == 'test':
                     st = GATE.client().status()
                     return self.send(200, {'ok': True, **st})
-                elif action == 'pull':
+                elif action in ('send', 'pull'):
+                    GATE._pushed_version = None          # "Send now": every changed card goes out at once
                     GATE.cycle()
-                    return self.send(200, GATE.status())
+                    return self.send(200, {**GATE.status(), 'links': len(STORE.rows('students', "portal_hash IS NOT NULL AND portal_hash<>''"))})
                 else:
                     return self.send(404, {'error': 'Not found'})
             except gwc.GatewayError as e:
-                raise BadRequest(str(e))
+                # the round failed: remember why for the status line, and say it in the person's language
+                GATE.stat['lastError'], GATE.stat['lastErrorKey'], GATE.stat['lastErrorVars'], GATE.stat['lastTry'] = str(e), e.key, e.vars, gwc._now()
+                raise center.Problem(e.key, str(e), **e.vars)
             STORE.log_activity(self.user, self.ip, [{'type': 'security', 'action': 'Mailbox ' + action, 'target': 'gateway'}])
             GATE.kick()
             return self.send(200, GATE.status())
@@ -1025,7 +1031,9 @@ class Handler(BaseHTTPRequestHandler):
         if action == 'student':
             self.need('students.view')
             f = center.student_file(STORE, qs.get('id', ''), sc)
-            f['student'] = self.contact_filter(f['student'])
+            f['student'] = {k: v for k, v in self.contact_filter(f['student']).items() if k not in ('portalHash', 'portalNonce')}
+            f['parentLink'] = {'has': bool(f['student'] and STORE.row('students', f['student']['id']).get('portalHash')),
+                               'gateway': SECRETS.configured, 'canMake': self.can('messages.send')}
             if not self.can('money.view', 'money.collect', 'door.use') and self.u['scopes'] is None:
                 f['payments'] = []
             return self.send(200, f)

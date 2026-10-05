@@ -315,6 +315,35 @@ class DoorReviewTest(BrowserBase):
             self.assertAlmostEqual(widths[paper], mm, delta=1, msg=widths)
         self.assertEqual(self.errors, [])
 
+    def test_c05_parent_link_setup_page_student_tab_and_exam_publish(self):
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/settings?tab=gateway')
+        pg.wait_for_selector('.gw-steps')
+        self.assertEqual(len(pg.query_selector_all('.gw-step')), 4)
+        self.assertTrue(pg.is_disabled('[data-gw="generate"]'))                 # step 2 waits for step 1
+        pg.fill('[data-gw-url] [name=url]', 'http://example.com')               # not https: refused in plain words
+        pg.click('[data-gw-url] button')
+        pg.wait_for_selector('.toast.bad')
+        self.assertIn('https://', pg.inner_text('.toast.bad'))
+        # the student file has the parent-link tab and says what to do when links are not set up
+        pg.evaluate("HS.openStudent('rv-s0', 'parent')")
+        pg.wait_for_selector('.drawer [data-tab="parent"][aria-selected="true"]')
+        self.assertIn('غير مُعدّة', pg.inner_text('.drawer'))
+        pg.click('.drawer [data-x], .drawer [data-close]') if pg.query_selector('.drawer [data-x], .drawer [data-close]') else pg.keyboard.press('Escape')
+        # an exam is hidden from parents until the teacher shows it
+        self.c.post('/api/commit', {'label': 'exam', 'ops': [{'e': 'exams', 'id': 'rv-x', 'op': 'put', 'row': {
+            'title': 'Review Quiz', 'teacherId': 'rv-t', 'groupIds': ['rv-g'], 'date': date.today().isoformat(), 'kind': 'weekly', 'maxScore': 10}}]})
+        pg.goto(self.S.base + '/#/exams'); pg.reload()
+        pg.wait_for_selector('#view')
+        pg.evaluate("HS.data.load()")
+        pg.wait_for_selector('text=Review Quiz')
+        pg.click('text=Review Quiz')
+        pg.wait_for_selector('.drawer [data-publish]')
+        self.assertEqual(pg.get_attribute('.drawer [data-publish]', 'aria-pressed'), 'false')
+        pg.click('.drawer [data-publish]')
+        self.assertTrue(wait_until(lambda: next(x for x in self.c.get('/api/state')['exams'] if x['id'] == 'rv-x').get('published') is True))
+        self.assertEqual([e for e in self.errors if 'status of 400' not in e], [])          # the refused http:// address is the only 400
+
 
 if __name__ == '__main__':
     unittest.main()

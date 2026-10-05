@@ -97,7 +97,7 @@ installer `installer/hessa.iss` (new AppId), entry `server/hs_main.py`.
 | `domain.py` | **new**, pure rules | text/mobile, doc numbers, student codes, grades, timetable clashes, fees, risk, settlement, signals |
 | `center.py` | **new**, operations + reads | door, roll call, enrol/transfer, shifts, receipts, expenses, risk list, student file, exams, settlements, profitability, dashboard, reports, Excel import |
 | `app.py` | engine routes + **new `/api/c/*`**, `/api/delta`, `/api/import/preview` | trip routes removed |
-| `gateway_client.py` | rewritten for **parent cards** (push only) | `card_for(store, student_id)` |
+| `gateway_client.py` | **parent cards** (push only; `check()` reads the mailbox status) | `card_for(store, student_id)`: one child, published marks only, the next 7 days |
 | `formats.py`, `xlsx_read.py`, `xlsx_write.py`, `xlsx.py`, `docx_read.py`, `docx_write.py`, `com_office.py` | engine readers/writers | used by the student import |
 
 Verified: `python3 -c "import app"` starts and creates all 17 tables. Engine tests `test_unit test_convergence test_xlsx`

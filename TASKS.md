@@ -124,9 +124,10 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P6.5 School support groups statement (`GET /api/c/school`: students, visits, paid incl. reversals, sessions, treasury → teacher → school split, limit checks; screen + A4 print + Excel from the group panel; review B06)
 
 ## Phase P7 – Parent link
-- [ ] P7.1 Worker routes
-- [ ] P7.2 Parent page
-- [ ] P7.3 Office side + GATEWAY_SETUP.md + tests
+- [x] P7.1 Worker routes: parents read one card (`GET /api/card/<token>`, every other method 405, the old phone write routes and their tables removed); a replaced link keeps a "stopped" row 30 days (410) so the phone wipes its copy; office: cards, status, empty inbox/ack for compatibility (review C01)
+- [x] P7.2 Parent page: Formal Arabic first + English, light/dark from the phone, 360 px, < 120 KB (test), money per group, next 7 days (temporary timetables included), published marks with rank, last 30 attendance days, payments; service worker keeps the last copy with its age and deletes it on 404/410 (review C02-C04)
+- [x] P7.3 Office side: Settings → Parent links is a 4-step guided setup with live status (links here vs cards on the mailbox, last success, the reason of the last failure in the reader's language), copy office secret (logged), send now, setup code; student file "Parent link" tab (create + copy, create + WhatsApp, replace); exams "Shown to parents" switch (marks hidden until then); `tests/test_gateway_parent.py` drives the real Worker code + Chromium (review C05, C06)
+  - [ ] Try a real Cloudflare account and an old Android phone at the centre
 
 ## Phase P8 – Daily scenario tests (browser)
 - [ ] P8 test_e2e_center.py (8 scenarios, ar + en)

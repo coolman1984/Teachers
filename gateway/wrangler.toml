@@ -15,7 +15,5 @@ database_id = "REPLACE-WITH-THE-ID-FROM-wrangler-d1-create"
 [triggers]
 crons = ["17 3 * * *"]
 
-[vars]
-RETENTION_DAYS = "30"
 
 # Secret (never written in this file):  npx wrangler secret put OFFICE_SECRET

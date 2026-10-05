@@ -458,6 +458,14 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 .log-diff .now { font-weight: 600; }
 .log-ver { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 @media (max-width: 560px) { .sync-pill { padding: .3rem .5rem; } }
+/* Settings → Parent links: the four setup steps, done ones ticked */
+.gw-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
+.gw-step { display: flex; gap: .8rem; align-items: flex-start; }
+.gw-step > .grow { min-width: 0; display: grid; gap: .35rem; }
+.gw-step p { margin: 0; }
+.gw-n { flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+.gw-step.done .gw-n { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.gw-more summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }
 /* an A4 sheet shown inside a dialog before printing (school statement): readable on screen, same order as on paper */
 .print-preview { display: grid; gap: .8rem; }
 .print-preview .ps-head h1 { margin: .2rem 0; font-size: 1.15rem; }

@@ -2,6 +2,30 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The parent's link, from the centre PC to the phone (review C01-C06, P7 - 2026-10-05)
+
+**Why:** the parent page was still the driver page of the trip system (odometer photos, trip events), the gateway still accepted
+phone writes, the setup screen could not show the office secret Cloudflare needs, there was no "Parent link" in the student file,
+and exams had no "show to parents" switch - so every half-entered mark would have reached parents.
+**What:** (1) Worker: parents can only read one card; every write route of the old driver page is gone with its tables; a replaced
+or removed link becomes a "stopped" row for 30 days (410), so the phone shows "this link no longer works" and its service worker
+deletes the saved copy, instead of "not ready yet". (2) A new parent page (Formal Arabic first, English, light/dark, system fonts,
+29 KB): money per group, the next seven days as the timetable really is, published marks with the rank, attendance dots with the
+rate, payments; offline it shows the last copy with its age. (3) The office card adds the week and the amount due, and only marks of
+exams whose teacher pressed "Shown to parents". (4) Settings → Parent links became a guided 4-step setup with a live status line;
+gateway errors carry a dictionary key (`gw.err.*`) so the reason reads in Arabic; showing the office secret or the setup code is
+written in the security log. (5) The student file has a "Parent link" tab: create and copy, create and send by WhatsApp (the same
+"was it sent?" sender), replace.
+**Mistakes found:** the gateway status counted stopped links as cards; the settings test asserted the old form. Playwright's offline
+switch does not reach service-worker requests, so the offline test stops the real gateway instead (closer to a real outage anyway).
+**Lessons:** a link that was revoked must answer differently from a link that never existed, or the phone cannot know to forget.
+**Evidence:** `gateway/test/gateway.test.js` (12: read-only, no token stored, stopped = 410 and cleaned, size < 120 KB, no inline
+styles, bundle); `tests/test_gateway_parent.py` (real Worker code under node + centre server + Chromium at 360 px: one child per
+link, draft marks hidden, no phone numbers, English, an update arrives, the last copy opens when the mailbox is down, a replaced
+link stops and nothing of the child stays on the phone, the centre keeps working when the mailbox is down);
+`test_center_review.test_c05_*` (setup page, student tab, exam switch).
+**Limits:** not yet tried on a real Cloudflare account or an old Android phone (TASKS P7.3 sub-task).
+
 ## Daily work: history buttons, readable security log, month in Excel, school statement, receipt paper (review B04-B08 - 2026-10-05)
 
 **Why:** the review listed what the desk and the owner still did by hand or could not read: no history in the group panel or the
