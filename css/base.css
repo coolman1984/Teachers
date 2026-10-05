@@ -435,6 +435,9 @@ h3.sec { font-size: .8rem; font-weight: 650; color: var(--ink-2); text-transform
 .big-num { font-size: 1.6rem; font-weight: 700; min-height: 3.4rem; }
 .change { font-size: 1.15rem; white-space: nowrap; color: var(--ok); }
 .change.neg { color: var(--bad); }
+.fam-lines { list-style: none; margin: 0 0 .8rem; padding: 0; display: grid; gap: .45rem; }
+.fam-line { display: flex; align-items: center; gap: .7rem; padding: .55rem .7rem; border-radius: var(--r-1); background: var(--surface-2); border: 1px solid var(--line-2); }
+.fam-line input[type=number] { width: 7.5rem; flex: none; }
 .seg.wrap { display: flex; flex-wrap: wrap; }
 .field .lbl { font-weight: 600; font-size: .9rem; }
 .today-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: .55rem; }

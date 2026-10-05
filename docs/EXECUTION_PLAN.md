@@ -112,7 +112,7 @@ Every row also has engine columns: `id, ver, created_at/by, updated_at/by, delet
 | `rooms` | rooms | name, capacity, costPerHour, active, notes | shared |
 | `teachers` | teachers | name, nameKey, mobile, subjectIds[], gradeCodes[], settleModel, rentMonth, rentSession, rentStudent, centerPct, color, bio, slug, active, notes | its own id |
 | `students` | students | code, name, nameKey, gradeCode, system, track, school, gender, mobile, parentName, parentMobile, parentMobile2, familyKey, discountPct, discountReason, exempt, consent, consentAt, joinedAt, active, notes, portalHash, portalNonce, importKey | visible if enrolled with an allowed teacher |
-| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, **feeHistory[{to, fee, type}] (server-written)**, startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
+| `groups` | class_groups | name, teacherId, subjectId, gradeCode, system, track, roomId, slots[{day 0=Sat..6=Fri, start 'HH:MM', end, roomId}], capacity, feeType(session/month/package), fee, packageSessions, **feeHistory[{to, fee, type}] (server-written)**, **tempSlots{from, to, slots[]}** (one temporary timetable, e.g. Ramadan; replaces `slots` between the two days), startDate, endDate, kind(center/school/online/home), color, active, notes | teacherId |
 | `enrollments` | enrollments | studentId, groupId, teacherId, from, to, status(active/moved/left), fee (special fee), note, **billFrom** (first billed day of a month group) | teacherId |
 | `sessions` | sessions | groupId, teacherId, date, start, end, roomId, status(planned/held/cancelled), kind, topic, note | teacherId |
 | `attendance` | attendance | sessionId, studentId, groupId (**the student's home group**), teacherId, date, status(present/late/absent/excused), at, via, makeup, by | teacherId |
@@ -172,7 +172,7 @@ New (center) — GET `/api/c/<action>`:
 | `advice` | – | overview.view | ranked advisor items `[{id, level bad/warn/info/ok, page, icon, vars}]`; texts `adv.<id>.t/.b/.go` |
 
 POST `/api/c/<action>` (JSON body): `checkin {studentId, sessionId, status?, via?}`, `roll {sessionId, marks:{studentId:status}}`,
-`session {sessionId, status, topic?}`, `dayoff {date, reason}` (cancels every session of a day without attendance), `enroll {studentId, groupId, from?, fee?, billFrom?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
+`session {sessionId, status, topic?}`, `session/add {groupId, date, start, end, topic?}` (extra session, kind `extra`, refused on teacher/room clash), `dayoff {date, reason}`, `pay/many {items[{studentId, groupId, amount}], method, ref?}` (family payment, one commit), `credit/move {studentId, from, to, amount?}` (cancels every session of a day without attendance), `enroll {studentId, groupId, from?, fee?, billFrom?}`, `transfer {enrollmentId, groupId, from?, reason?}`,
 `leave {enrollmentId, to?, reason?}`, `shift/open {opening}`, `shift/close {shiftId, counted, reason?}`,
 `pay {studentId?, groupId?, kind, amount, method, ref?, period?, sessions?, materialId?, qty?, note?}`, `void {id, reason}`,
 `expense {category, amount, method, teacherId?, groupId?, note?, date?}`, `expense/void {id, reason}`,
@@ -585,6 +585,9 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
   balance from one enrolment alone, and never drop ended enrolments with money still open from debt lists (`center.open_accounts`).
 - Prices are dated: a group's fee change keeps the old price in `feeHistory` from the day before `feeFrom` (sent on the
   generic-commit op, default today). Only the server writes `feeHistory`. Each visit/month is priced on its own day.
+- A temporary timetable is expanded by `domain.expand_temp` for clash checks (regular before, temporary during, regular after, same group id) and
+  read by `domain.slots_on`; never read `group.slots` directly to know what meets on a day.
+- Free trial rows (`attendance.trial`) are free only if they are the earliest trial of that student in that group (`FREE_TRIAL_ONLY_FIRST`).
 - Inside RTL, `inset-inline-start: 50%` + `translateX(-50%)` pushes the element off screen — centre with `inset-inline` + grid.
 - A scoped teacher user must never receive other teachers' rows — filter on the server (`store._filter`), not in the page.
 - Parent numbers: never in the parent card, never in logs, only with `contacts.view`.

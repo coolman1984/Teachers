@@ -157,6 +157,30 @@ class CenterDomainTest(unittest.TestCase):
         self.assertEqual(D.charges(month, e, {}, 0, date(2026, 11, 2)), (300, 1))
         self.assertEqual(D.charges(month, {**e, 'billFrom': '2026-09-01'}, {}, 0, date(2026, 11, 2)), (600, 2))   # never before joining
 
+    def test_temporary_timetable_replaces_the_weekly_times_only_inside_its_period(self):
+        sat, sun = date(2027, 2, 6), date(2027, 2, 7)           # 6 Feb 2027 is a Saturday (day 0), Ramadan starts a few days later
+        g = {'id': 'g1', 'teacherId': 't1', 'roomId': 'r1', 'startDate': '2026-09-12', 'endDate': '2027-06-24',
+             'slots': [{'day': 0, 'start': '16:00', 'end': '17:30'}],
+             'tempSlots': {'from': '2027-02-08', 'to': '2027-03-09', 'slots': [{'day': 1, 'start': '21:00', 'end': '22:00'}]}}
+        self.assertEqual([x['start'] for x in D.slots_on(g, sat)], ['16:00'])
+        self.assertEqual(D.slots_on(g, date(2027, 2, 13)), [])                    # a regular Saturday during Ramadan: no session
+        self.assertEqual([x['start'] for x in D.slots_on(g, date(2027, 2, 14))], ['21:00'])   # the temporary Sunday session
+        self.assertEqual([x['start'] for x in D.slots_on(g, date(2027, 3, 13))], ['16:00'])   # back to normal afterwards
+        self.assertEqual(D.slots_on(g, sun), [])
+        for bad in (None, {}, {'from': '2027-03-09', 'to': '2027-02-08', 'slots': g['tempSlots']['slots']},
+                    {'from': '2027-02-08', 'to': '2027-03-09', 'slots': []}, {'from': 'x', 'to': 'y', 'slots': g['tempSlots']['slots']}):
+            self.assertIsNone(D.clean_temp(bad))
+        # another group of the same teacher at the temporary time clashes only during the period
+        other = {'id': 'g2', 'teacherId': 't1', 'roomId': 'r2', 'slots': [{'day': 1, 'start': '21:30', 'end': '22:30'}],
+                 'startDate': '2027-03-01', 'endDate': '2027-03-31'}
+        found = [c for c in D.clashes([g, other]) if c['kind'] == 'teacher']
+        self.assertEqual([(c['day'], c['start'], c['end']) for c in found], [(1, '21:30', '22:00')])
+        later = {**other, 'startDate': '2027-03-20', 'endDate': '2027-03-31'}       # after the period: no clash
+        self.assertEqual([c for c in D.clashes([g, later]) if c['kind'] == 'teacher'], [])
+        # the regular Saturday time is still protected before and after the period
+        sat_other = {'id': 'g3', 'teacherId': 't1', 'roomId': 'r3', 'slots': [{'day': 0, 'start': '16:30', 'end': '17:00'}]}
+        self.assertEqual(len([c for c in D.clashes([g, sat_other]) if c['kind'] == 'teacher']), 1)
+
     def test_wallet_balance_and_reversals(self):
         receipts = [{'kind': 'wallet_topup', 'amount': 300, 'method': 'cash'},
                     {'kind': 'fee', 'amount': 120, 'method': 'wallet'},

@@ -1060,6 +1060,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, center.mark_many(c, str(d.get('sessionId')), d.get('marks') or {}))
         if action == 'session':
             return self.send(200, center.set_session_status(c, str(d.get('sessionId')), d.get('status'), d.get('topic')))
+        if action == 'session/add':
+            return self.send(200, center.add_session(c, str(d.get('groupId')), d.get('date'), d.get('start'), d.get('end'), d.get('topic') or ''))
         if action == 'dayoff':
             return self.send(200, center.day_off(c, d.get('date'), d.get('reason') or ''))
         if action == 'enroll':

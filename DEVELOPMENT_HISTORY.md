@@ -2,6 +2,28 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The last edge cases: sibling payment, Ramadan timetable, extra session (2026-10-05)
+
+**Why:** the owner asked for all the remaining steps in one go.
+**What:** (1) The door card's "Pay for brothers and sisters" opens one dialog listing every child and group of the family
+with what each owes; the lines are saved by `pay/many` in one commit with consecutive receipt numbers and one printed
+sheet; cash change and the repeated-reference check work there too. (2) A group can have one temporary timetable (Ramadan,
+exam weeks): between two days it replaces the weekly times, the sessions of those days follow it, and the clash check sees
+the regular times before it, the temporary ones during it and the regular ones after it; the timetable grid shows what is in
+force today. (3) "Extra session" on the group panel adds a one-off session (`kind extra`, deterministic id like any other)
+and refuses a teacher or room that is already busy; a cancelled one at the same time is brought back. (4) The school name
+appears in the door search results, and extra sessions are marked in the day strips. `domain.clashes` now lists a clash
+once even when a split group meets the same group on both sides of its temporary period.
+**Mistakes:** the first test of the temporary timetable expected one clash but a split group produced two for the same
+pair (before and after the period) - the function now deduplicates; my browser scenario clicked through the group panel I
+had left open (the scrim intercepted the click - a test problem, closed the panel like a user would).
+**Evidence:** new tests - domain (temporary timetable and its clashes), API (extra session, temporary timetable saved and
+driving sessions, family lines without contact details) and a Chromium scenario (school in search, family dialog with change,
+saved receipts of one batch, extra session, temporary period incl. the half-filled refusal); screenshots checked in Arabic/night
+at 390 px and English/daylight at 1360 px, no console errors.
+**Limits:** one temporary period per group; the sibling dialog pays groups the children are enrolled in (no handouts or
+wallet); wallet top-up and handout sale on the door card are still open.
+
 ## Review findings on the trial, day-off and reference features (2026-10-05)
 
 **Why:** an automated review (Codex) of the merged PR raised four findings; each was checked against the code and was right.

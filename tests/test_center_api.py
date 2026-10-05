@@ -685,3 +685,55 @@ class CenterMoneyEdgeTest(CenterFixture):
         absent = self.c.get('/api/c/absent')['rows']
         self.assertIn(self.student, {r['studentId'] for r in absent})                   # still counted as absent for follow-up
         self.assertEqual(statuses[self.other_session], 'cancelled')                     # the untouched session was cancelled
+
+    def test_34_extra_session_clashes_are_refused_and_it_works_like_any_session(self):
+        tomorrow = date.today() + timedelta(days=1)
+        r = self.c.post('/api/c/session/add', {'groupId': self.group, 'date': tomorrow.isoformat(), 'start': '18:00', 'end': '19:30', 'topic': 'Revision'})
+        self.assertEqual(r['id'], D.session_id(self.group, tomorrow.isoformat(), '18:00'))
+        day = {x['id']: x for x in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
+        self.assertEqual((day[r['id']]['kind'], day[r['id']]['status'], day[r['id']]['topic']), ('extra', 'planned', 'Revision'))
+        self.error('/api/c/session/add', {'groupId': self.group, 'date': tomorrow.isoformat(), 'start': '18:00', 'end': '19:00'}, 'err.sessionExists')
+        self.error('/api/c/session/add', {'groupId': self.group, 'date': tomorrow.isoformat(), 'start': '19:00', 'end': '20:00'}, 'err.sessionClash')   # same teacher, overlaps
+        self.error('/api/c/session/add', {'groupId': self.group, 'date': tomorrow.isoformat(), 'start': '20:00', 'end': '19:00'}, 'err.sessionTime')
+        self.error('/api/c/session/add', {'groupId': self.group, 'date': '2000-01-01', 'start': '10:00', 'end': '11:00'}, 'err.pastDay',
+                   client=self.scoped_client(['attendance.mark', 'groups.view']))
+        # a cancelled extra session can be brought back
+        self.c.post('/api/c/session', {'sessionId': r['id'], 'status': 'cancelled'})
+        self.c.post('/api/c/session/add', {'groupId': self.group, 'date': tomorrow.isoformat(), 'start': '18:00', 'end': '19:30'})
+        day = {x['id']: x for x in self.c.get('/api/c/today?date=' + tomorrow.isoformat())['sessions']}
+        self.assertEqual(day[r['id']]['status'], 'planned')
+
+    def test_35_temporary_timetable_is_saved_cleaned_and_drives_the_sessions(self):
+        start = date.today() + timedelta(days=10)
+        end = start + timedelta(days=20)
+        temp_day = start + timedelta(days=2)
+        g = self.group_row()
+        g['tempSlots'] = {'from': start.isoformat(), 'to': end.isoformat(), 'slots': [{'day': D.weekday(temp_day), 'start': '21:00', 'end': '22:00'}]}
+        self.put([('groups', self.group, g)])
+        saved = self.group_row()['tempSlots']
+        self.assertEqual((saved['from'], saved['slots'][0]['start']), (start.isoformat(), '21:00'))
+        planned = {x['id'] for x in self.c.get('/api/c/today?date=' + temp_day.isoformat())['sessions']}
+        self.assertIn(D.session_id(self.group, temp_day, '21:00'), planned)
+        self.assertNotIn(D.session_id(self.group, temp_day, '00:00'), planned)           # the regular all-day slot is replaced
+        # an invalid period is dropped instead of being stored
+        g = self.group_row()
+        g['tempSlots'] = {'from': end.isoformat(), 'to': start.isoformat(), 'slots': g['tempSlots']['slots']}
+        self.put([('groups', self.group, g)])
+        self.assertIsNone(self.group_row().get('tempSlots'))
+
+    def test_36_door_card_lists_brothers_and_sisters_with_what_each_owes(self):
+        sib = self.p + '-sib'
+        self.put([('students', sib, {'code': str(23000 + type(self).serial), 'name': 'Sibling ' + self.p, 'gradeCode': 'S1', 'system': 'thanaweya',
+                                     'familyKey': 'fam-' + self.p, 'parentMobile': '01099999999', 'consent': True, 'active': True})])
+        s1 = self.c.get('/api/c/student?id=' + self.student)['student']
+        s1['familyKey'] = 'fam-' + self.p
+        self.put([('students', self.student, s1)])
+        self.c.post('/api/c/enroll', {'studentId': sib, 'groupId': self.group})
+        self.visit(0)
+        self.c.post('/api/c/checkin', {'studentId': sib, 'sessionId': self.session, 'status': 'present'})
+        card = self.c.get('/api/c/card?id=' + self.student)
+        self.assertEqual([x['id'] for x in card['family']], [sib])
+        line = card['family'][0]['lines'][0]
+        self.assertEqual((line['groupId'], line['due']), (self.group, 50))
+        self.assertNotIn('parentMobile', card['family'][0])                  # no contact details for the siblings
+        self.assertEqual(self.c.get('/api/c/card?id=' + sib)['family'][0]['id'], self.student)
