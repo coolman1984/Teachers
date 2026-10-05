@@ -461,6 +461,29 @@ def mark_many(ctx, session_id, marks):
     return {'changes': res['changes']}
 
 
+def absentees(store, d=None, scopes=None):
+    """Today's absent students. Absence is never stored (it is the default), so it is computed: in every session of the
+    day that was really held (somebody checked in, or the roll call was saved), the enrolled students without a
+    present/late mark. A student who came to a make-up of the same group's session is not absent."""
+    d = d or _today()
+    day = d.isoformat()
+    out = []
+    for s in sessions_on(store, d, scopes):
+        if s.get('status') == 'cancelled' or not (s.get('present') or s.get('status') == 'held'):
+            continue
+        for r in roster(store, s['id'], scopes)['rows']:
+            st = r.get('student') or {}
+            if r.get('status') in ('present', 'late', 'excused') or r.get('guest') or not st.get('id'):
+                continue
+            out.append({'studentId': st['id'], 'name': st.get('name'), 'code': st.get('code'), 'groupId': s['groupId'], 'sessionId': s['id'], 'start': s.get('start')})
+    seen, uniq = set(), []
+    for a in out:   # one message per student even if he missed two sessions
+        if a['studentId'] not in seen:
+            seen.add(a['studentId'])
+            uniq.append(a)
+    return {'date': day, 'rows': uniq}
+
+
 def roster(store, session_id, scopes=None):
     """The list of a session: enrolled students with their mark (absent when nothing was recorded) + make-up guests."""
     sess = _find_session(store, session_id)
@@ -1208,6 +1231,23 @@ def dashboard(store, scopes=None, d=None):
             'risk': len(risk_list(store, scopes, limit=2000))}
 
 
+# the messages a parent receives when the centre has not written its own (Settings -> Messages); polite, short, signed
+WA_DEFAULTS = {
+    'absence': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نود إعلامكم بغياب الطالب اليوم {date} عن حصة {group}. نتمنى له دوام الصحة. {center} {link}',
+                'en': 'Hello, parent of {student}. {student} was absent today ({date}) from {group}. We hope all is well. {center} {link}'},
+    'payment': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نذكّركم بلطف بالرسوم المستحقة: {amount} جنيه. شكرًا لتعاونكم. {center} {link}',
+                'en': 'Hello, parent of {student}. A kind reminder of the fees due: {amount} EGP. Thank you. {center} {link}'},
+    'report': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. يمكنكم متابعة الحضور والدرجات والرصيد ({balance} جنيه) من الرابط: {link} — {center}',
+               'en': 'Hello, parent of {student}. Follow attendance, marks and the balance ({balance} EGP) here: {link} — {center}'},
+    'exam': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نتيجة الامتحان متاحة على الرابط: {link} — {center}',
+             'en': 'Hello, parent of {student}. The exam result is available here: {link} — {center}'},
+    'welcome': {'ar': 'أهلًا بالطالب {student} في {center}. مجموعته: {group}. يسعدنا تواصلكم في أي وقت. {link}',
+                'en': 'Welcome {student} to {center}. Group: {group}. You can reach us any time. {link}'},
+    'monthly': {'ar': 'ولي أمر الطالب {student}، الرصيد: {balance} جنيه. {center} {link}',
+                'en': 'Dear parent of {student}, balance: {balance} EGP. {center} {link}'},
+}
+
+
 @cached_read
 def student_balances(store, scopes=None, d=None):
     """The money position of every active enrolment the caller may see, summed per student, for the students list and
@@ -1283,6 +1323,13 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
                      and not s.get('present') and s.get('enrolled')]
             if empty:
                 add('noRollCall', 'warn', 'door', 'clock', n=len(empty))
+    # 4b. today's absentees whose parents have not been told yet (absence is computed, never stored)
+    if can({'messages.send'}) and can({'contacts.view'}) and sess:
+        with store.lock:
+            told = {r[0] for r in store.conn.execute("SELECT student_id FROM followups WHERE deleted=0 AND date=? AND reason='absence'", (day,))}
+        n = len([a for a in absentees(store, d, scopes)['rows'] if a['studentId'] not in told])
+        if n:
+            add('absentees', 'warn', 'followup?tab=messages', 'chat', n=n)
     # 5. students about to leave
     if can({'followup.view'}):
         risky = risk_list(store, scopes, limit=2000)

@@ -428,6 +428,24 @@ class CenterApiTest(unittest.TestCase):
             changed = {**row, key:value}
             self.error('/api/commit', {'ops':[{'e':'teachers','id':self.teacher,'op':'put','ver':row['ver'],'row':changed}]}, 'err.amount')
 
+    def test_24_absentees_are_computed_not_stored(self):
+        third, fourth = self.p + '-s3', self.p + '-s4'
+        self.put([('students', sid, {'code': str(20000 + type(self).serial * 10 + i), 'name': 'Absent Candidate ' + sid, 'gradeCode': 'S1',
+                                     'system': 'thanaweya', 'active': True}) for i, sid in enumerate((third, fourth))])
+        for sid in (third, fourth):
+            self.c.post('/api/c/enroll', {'studentId': sid, 'groupId': self.group})
+        names = lambda: {r['studentId'] for r in self.c.get('/api/c/absent')['rows']}   # noqa: E731
+        self.assertFalse({self.student, third, fourth} & names())        # nobody came yet: the session was not held
+        self.c.post('/api/c/checkin', {'studentId': self.student, 'sessionId': self.session})
+        self.c.post('/api/c/roll', {'sessionId': self.session, 'marks': {fourth: 'excused'}})
+        got = names()
+        self.assertIn(third, got)                                        # enrolled, no mark -> absent (never stored)
+        self.assertNotIn(self.student, got)                              # present
+        self.assertNotIn(fourth, got)                                    # excused is not chased
+        self.assertFalse([a for a in self.c.get('/api/state')['attendance'] if a['studentId'] == third])
+        scoped = self.scoped_client(['followup.view'])
+        self.assertIn(third, {r['studentId'] for r in scoped.get('/api/c/absent')['rows']})
+
     def test_23_advisor_ranks_problems_and_respects_permissions(self):
         clash = self.p + '-clash'
         self.put([('groups', clash, {'name': 'Clash ' + self.p, 'teacherId': self.teacher, 'gradeCode': 'S1', 'feeType': 'session',

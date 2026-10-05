@@ -497,6 +497,16 @@ button.chip { cursor: pointer; }
 .note-cell .input { text-align: center; font-size: 1.15rem; font-weight: 700; }
 .note-cell small { color: var(--ink-3); }
 @media (max-width: 560px) { .notes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.risk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: var(--gap); }
+.risk-card { display: grid; gap: .6rem; padding: 1rem; border-radius: var(--r-2); background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-1);
+  border-top: 4px solid var(--warn); animation: rise var(--t-med) var(--ease) both; animation-delay: calc(var(--i, 0) * 30ms); }
+.risk-card.high { border-top-color: var(--bad); }
+.risk-card.followed { opacity: .72; }
+.risk-card .score { display: grid; place-items: center; width: 3.2rem; height: 3.2rem; border-radius: 50%; background: var(--warn-soft); color: var(--warn); line-height: 1; flex: none; }
+.risk-card.high .score { background: var(--bad-soft); color: var(--bad); }
+.risk-card .score b { font-size: 1.15rem; } .risk-card .score small { font-size: .6rem; }
+.risk-card .meter i { background: var(--warn); } .risk-card.high .meter i { background: var(--bad); }
+.wa-text { font-size: 1rem; line-height: 1.6; }
 .fill { display: flex; align-items: center; gap: .5rem; min-width: 7rem; }
 .fill .meter { flex: 1; margin: 0; }
 .fill.warn .meter i { background: var(--warn); } .fill.bad .meter i { background: var(--bad); } .fill.info .meter i { background: var(--info); }

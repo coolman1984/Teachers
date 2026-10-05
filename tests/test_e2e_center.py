@@ -176,6 +176,29 @@ class DoorTest(BrowserBase):
         self.assertEqual((closed['status'], closed['countedCash'], closed['diff']), ('closed', 470, 0))
         self.assertEqual(self.errors, [])
 
+    def test_absentee_message_is_opened_one_by_one_and_logged(self):
+        # the roll call marks e2e-s2 absent; the Messages tab finds him among today's absentees
+        session = D.session_id('e2e-g', date.today(), '00:00')
+        self.c.post('/api/c/roll', {'sessionId': session, 'marks': {'e2e-s0': 'present', 'e2e-s1': 'present', 'e2e-s2': 'absent'}})
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/followup?tab=messages')
+        pg.wait_for_selector('#m-a')
+        pg.select_option('#m-k', 'absence')
+        pg.select_option('#m-a', 'absent')
+        pg.evaluate("window.open = (u) => { window.__opened = u; return null; }")   # WhatsApp would open in a new tab
+        pg.wait_for_selector('[data-count]:has-text("1")')                     # absentees are computed on the server
+        pg.click('[data-start]')
+        pg.wait_for_selector('.dialog [data-text]')
+        text = pg.input_value('.dialog [data-text]')
+        self.assertIn('Synthetic Student 2', text)
+        self.assertIn('غياب', text)                                            # the Arabic absence template
+        pg.click('.dialog [data-open]')
+        pg.wait_for_selector('.dialog .empty')                                   # one student -> the queue is done
+        self.assertTrue(pg.evaluate('window.__opened').startswith('https://wa.me/201000000000?text='))
+        logged = [f for f in self.c.get('/api/state')['followups'] if f['studentId'] == 'e2e-s2' and f['type'] == 'whatsapp']
+        self.assertEqual([f['reason'] for f in logged], ['absence'])
+        self.assertEqual(self.errors, [])
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')

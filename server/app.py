@@ -915,9 +915,7 @@ class Handler(BaseHTTPRequestHandler):
             lang = 'en' if qs.get('lang') == 'en' else 'ar'
             kind = qs.get('kind', 'monthly')
             templates = cfg.get('waTemplates') or {}
-            defaults = {'en': 'Dear parent of {student}, balance: {balance} EGP. {center} {link}',
-                        'ar': 'ولي أمر الطالب {student}، الرصيد: {balance} جنيه. {center} {link}'}
-            text = (templates.get(kind) or {}).get(lang) or defaults[lang]
+            text = (templates.get(kind) or {}).get(lang) or (center.WA_DEFAULTS.get(kind) or center.WA_DEFAULTS['monthly'])[lang]
             token = gwc.link_token(SECRETS.data.get('linkSecret', ''), sid, st['portalNonce']) if SECRETS.configured and st.get('portalNonce') else ''
             values = {'student': st['name'], 'group': ', '.join([STORE.row('groups', e['groupId'])['name'] for e in file['enrollments'] if STORE.row('groups', e['groupId'])]),
                       'date': center.date.today().isoformat(), 'amount': qs.get('amount', ''),
@@ -991,6 +989,9 @@ class Handler(BaseHTTPRequestHandler):
                 for k in ('todayMoney', 'todayTotal', 'monthMoney', 'monthExpenses', 'owed', 'moneyTrend'):
                     out.pop(k, None)
             return self.send(200, out)
+        if action == 'absent':
+            self.need('followup.view', 'attendance.mark', 'messages.send')
+            return self.send(200, center.absentees(STORE, None, sc))
         if action == 'balances':
             self.need('money.view', 'money.collect', 'followup.view')
             return self.send(200, center.student_balances(STORE, sc))
