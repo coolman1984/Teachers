@@ -56,6 +56,8 @@
   /* One refresh at a time; preserve open editors while accepting other PCs' writes. */
   var timer = null, refreshing = null;
   function repaint() {
+    // busy screens (the door while someone types, the live overview) refresh their own parts instead of a full redraw
+    if (HS.currentView && HS.currentView.selfRefresh && HS.data.state) { D.dirty = false; HS.emit('data-changed', D); return; }
     if (!HS.overlay.isOpen && !HS.panel.count()) { D.dirty = false; HS.rerender(); }
     else D.dirty = true;
   }

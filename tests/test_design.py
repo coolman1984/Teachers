@@ -138,7 +138,7 @@ class LanguageTest(unittest.TestCase):
 
     def test_no_literal_words_in_page_templates(self):
         """Visible words come from the dictionaries; a word typed straight into a template would stay English in Arabic."""
-        allowed = {'Ctrl', 'Esc', 'English', 'العربية', 'Abc', 'أبجد'}  # 'Abc' is a font sample
+        allowed = {'Ctrl', 'Esc', 'Enter', 'English', 'العربية', 'Abc', 'أبجد'}  # key names; 'Abc' is a font sample
         bad = []
         for f in JS_FILES:
             for n, line in enumerate(read('js', *f.split('/')).splitlines(), 1):

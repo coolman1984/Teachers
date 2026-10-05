@@ -2,6 +2,16 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The front desk works (2026-10-05)
+
+**What:** `door.js` – big search (code, scanner, name, mobile), student card with risk, today's candidate sessions,
+one-click or automatic check-in on scan, fees per enrolment, pay dialog that opens the cash shift first, receipt print
+(80 mm, `HS.printReceipt`), today's sessions strip and a roll-call panel (`HS.openRoster`). Pages can declare
+`selfRefresh` so another PC's write no longer redraws the door while someone is typing.
+**Mistakes:** the attendance buttons used the class `present`, already the full-screen presentation overlay – an
+invisible layer covered the page (found by the browser test). A repeated scan only beeped; it now also says so.
+**Evidence:** test_e2e_center 3 OK (Chrome), frontend/startup green, test_center_api + test_design 41 OK.
+
 ## Command centre, advisor and phone shell (2026-10-05)
 
 **Why:** the owner found the app hard to use: nine of the twelve pages were placeholders and the overview was two plain

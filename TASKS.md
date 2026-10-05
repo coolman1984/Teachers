@@ -47,6 +47,11 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 
 ## Phase P5 – Core screens
 - [ ] P5.1 Door
+  - [x] Search by code/scanner/name/mobile, student card, suggested session, auto check-in on scan, repeat-scan warning
+  - [x] Fees per enrolment, pay dialog (opens the cash shift first), e-wallet reference, 80 mm receipt print
+  - [x] Today's sessions strip + roll-call panel (P5.4 basics); live refresh without redrawing the door
+  - [x] Browser tests `tests/test_e2e_center.py` (door flow, roll call, phone tab bar) – 3 OK with local Chrome
+  - [ ] Handout sale, wallet top-up and sounds setting on the card; camera scan verified on HTTPS
 - [ ] P5.2 Students + student panel + cards/receipt printing
   - [x] Editable CSV/Excel import preview and atomic selected save: scoped matching, deduplication, consent, capacity
   - [ ] Owner's actual real-data file test (source/path not yet supplied)

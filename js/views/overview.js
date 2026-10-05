@@ -171,7 +171,10 @@
   /* ---------- the page ---------- */
   var timer = null, counted = false;
   HS.on('route', function (r) { if (r.path !== 'overview') { counted = false; clearInterval(timer); } });
+  var reload = null;
+  HS.on('data-changed', HS.debounce(function () { if (reload && HS.route().path === 'overview') reload(); }, 1500));
   HS.views.overview = HS.withData({
+    selfRefresh: true,
     render: function () {
       var money = HS.can(['money.view', 'reports.view']);
       var kpis = [kpi(0, 'check', 'checked', { live: true, page: 'door' }), kpi(1, 'clock', 'sessions', { page: 'groups?tab=today' }),
@@ -237,6 +240,7 @@
         var s = e.target.closest('[data-session]'); if (s) HS.go('door?session=' + encodeURIComponent(s.dataset.session));
       });
       root.addEventListener('keydown', function (e) { var s = e.key === 'Enter' && e.target.closest('[data-session]'); if (s) HS.go('door?session=' + encodeURIComponent(s.dataset.session)); });
+      reload = load;
       load();
       clearInterval(timer);
       timer = setInterval(load, 30000);   // the figures and the advisor stay fresh on a screen left open at the desk

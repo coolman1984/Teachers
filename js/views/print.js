@@ -1,7 +1,40 @@
-/* Hessa - print: placeholder until its scheduled implementation task. */
+/* Hessa - printing: the thermal receipt (80 mm) after a payment; the print page itself is built in its own task. */
 (function () {
   'use strict';
   var HS = window.HS, U = HS.ui;
+
+  function qr(text) {
+    try { var q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); } catch (e) { return ''; }
+  }
+  function setting(id) { var v = ((HS.data.state && HS.data.state.settings) || {})[id]; return v ? String(v) : ''; }
+  function plain(html) { return String(html).replace(/<[^>]+>/g, ''); }
+
+  function receipt(p) {
+    var st = HS.data.get('students', p.studentId) || {}, row = function (k, v) { return '<tr><th>' + HS.esc(HS.t(k)) + '</th><td>' + v + '</td></tr>'; };
+    return '<div class="ps-receipt"><div class="r-head"><b>' + HS.esc(setting('systemName') || HS.t('app.name')) + '</b><span>' + HS.esc(HS.t('receipt.title')) + '</span></div>' +
+      '<div class="r-no" dir="ltr">' + HS.esc(p.no) + '</div><table>' +
+      row('f.date', HS.esc(plain(U.day(p.date))) + ' ' + U.bdi(p.at || '')) +
+      (st.name ? row('f.name', HS.esc(st.name) + ' <bdi dir="ltr">' + HS.esc(st.code || '') + '</bdi>') : '') +
+      (p.groupId ? row('f.group', HS.esc(HS.data.groupName(p.groupId))) : '') +
+      (p.period ? row('pay.period', U.bdi(p.period)) : '') +
+      row('pay.method', HS.esc(HS.t('pay.method.' + p.method)) + (p.ref ? ' <bdi dir="ltr">' + HS.esc(p.ref) + '</bdi>' : '')) +
+      row('f.user', HS.esc(p.by || '')) + '</table>' +
+      '<div class="r-total">' + plain(U.money(p.amount)) + '</div>' +
+      '<div class="r-qr">' + qr(p.no) + '</div>' +
+      (setting('receiptFooter') ? '<p class="r-foot">' + HS.esc(setting('receiptFooter')) + '</p>' : '') +
+      '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>';
+  }
+  HS.printReceipt = function (p) {
+    var el = document.createElement('div');
+    el.id = 'print-sheet';
+    el.innerHTML = receipt(p);
+    document.body.appendChild(el);
+    document.body.classList.add('printing');
+    var done = function () { document.body.classList.remove('printing'); el.remove(); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    setTimeout(function () { window.print(); }, 60);
+  };
+
   HS.views.print = HS.withData({
     render: function () {
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.print')) + '</h1><p>' +

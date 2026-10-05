@@ -8,6 +8,7 @@
   HS.withData = function (view) {
     var failed = false;
     return {
+      selfRefresh: !!view.selfRefresh,   // the page updates its own parts on 'data-changed' instead of being redrawn
       render: function (ctx) {
         if (HS.data.state) return view.render(ctx);
         if (failed) return U.empty('alert', HS.t('common.error'), '',

@@ -93,7 +93,7 @@
       return '<a href="#/' + p.id + '" data-tab="' + p.id + '">' + HS.icon(p.icon) + '<span>' + HS.esc(HS.t('nav.' + p.id)) + '</span></a>';
     }).join('') + '<button data-act="menu">' + HS.icon('menu') + '<span>' + HS.esc(HS.t('top.more')) + '</span></button></nav>';
   }
-  HS.on('connection', function (ok) { var p = HS.$('#conn-pill'); if (p) p.hidden = ok !== false; });
+  HS.on('connection', function (ok) { var p = shellReady && HS.$('#conn-pill'); if (p) p.hidden = ok !== false; });
 
   HS.shell = {
     start: function () {
@@ -124,6 +124,7 @@
     var view = r.path === 'students' && r.parts[1] === 'import' ? HS.views.importx : HS.views[page.id] || HS.views.soon;
     var old = HS.$('#view'), host = old.cloneNode(false);   // a fresh element: no listeners of the previous page stay behind, and the page-in animation replays
     old.replaceWith(host);
+    HS.currentView = view;
     var ctx = { page: page, route: r, me: HS.me };
     host.innerHTML = view.render(ctx);
     if (view.mount) view.mount(host, ctx);
