@@ -49,9 +49,9 @@ test('startup registers translated centre placeholders in both languages', () =>
       const rendered = view.render({});
       if (id !== 'mailbox') assert.ok(rendered.includes(HS.esc(HS.t('nav.' + id))), id);
       if (id !== 'mailbox') assert.ok(rendered.includes(HS.esc(HS.t('page.' + id + '.d'))), id);
-      if (['mailbox','overview','importx','door','students','groups','money','followup'].indexOf(id)<0) assert.ok(rendered.includes(HS.esc(HS.t('page.pending.body'))), id);
+      if (['mailbox','overview','importx','door','students','groups','money','followup','exams'].indexOf(id)<0) assert.ok(rendered.includes(HS.esc(HS.t('page.pending.body'))), id);
       assert.ok(!rendered.includes('undefined'), id);
-      if (['mailbox','overview','importx','door','students','groups','money','followup'].indexOf(id)<0) view.mount({}, {});
+      if (['mailbox','overview','importx','door','students','groups','money','followup','exams'].indexOf(id)<0) view.mount({}, {});
     }
   }
 });

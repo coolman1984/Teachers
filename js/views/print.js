@@ -57,6 +57,17 @@
       '<div class="r-total">' + HS.esc(HS.t('shift.diff')) + ' ' + m(U.money(r.diff)) + '</div>' +
       '<p class="r-foot">' + HS.esc(HS.t('shift.sign')) + '</p></div>');
   };
+  /* exam results sheet: ranked, with the full mark, for the notice board or the teacher */
+  HS.printResults = function (ex, rows, rank) {
+    var list = rows.slice().sort(function (a, b) { return (rank[a.id] || 1e9) - (rank[b.id] || 1e9) || String(a.name).localeCompare(String(b.name), HS.lang); });
+    printSheet('<div class="ps-head"><div><div class="ps-org">' + HS.esc(setting('systemName') || HS.t('app.name')) + '</div><h1>' + HS.esc(ex.title) + '</h1>' +
+      '<div>' + HS.esc([HS.t('exam.kind.' + ex.kind), plain(U.day(ex.date)), HS.data.teacherName(ex.teacherId), HS.t('ex.max') + ' ' + ex.maxScore].join(' · ')) + '</div></div></div>' +
+      '<table class="ps-list"><thead><tr><th>' + HS.esc(HS.t('f.rank')) + '</th><th>' + HS.esc(HS.t('f.code')) + '</th><th>' + HS.esc(HS.t('f.name')) + '</th><th>' + HS.esc(HS.t('f.score')) + '</th><th>%</th></tr></thead><tbody>' +
+      list.map(function (r) {
+        var pct = !r.absent && r.score !== '' ? Math.round(Number(r.score) * 100 / (ex.maxScore || 1)) + '%' : '';
+        return '<tr><td>' + (rank[r.id] || '') + '</td><td dir="ltr">' + HS.esc(r.code || '') + '</td><td>' + HS.esc(r.name) + '</td><td>' + (r.absent ? HS.esc(HS.t('att.absent')) : HS.esc(r.score)) + '</td><td>' + pct + '</td></tr>';
+      }).join('') + '</tbody></table>');
+  };
   HS.printCards = function (list) { if (list && list.length) printSheet(cards(list)); };
   HS.printReceipt = function (p) { printSheet(receipt(p)); };
   function printSheet(html) {

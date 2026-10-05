@@ -199,6 +199,28 @@ class DoorTest(BrowserBase):
         self.assertEqual([f['reason'] for f in logged], ['absence'])
         self.assertEqual(self.errors, [])
 
+    def test_exam_paste_column_ranks_ties_and_saves(self):
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/exams')
+        pg.click('[data-new]')
+        pg.fill('[data-xform] [name=title]', 'Synthetic weekly test')
+        pg.fill('[data-xform] [name=maxScore]', '20')
+        pg.check('[data-xform] [name=g][value="e2e-g"]')
+        pg.click('.drawer [data-save]')
+        pg.wait_for_selector('.drawer [data-mark]')                             # the marks sheet opens by itself
+        # paste a column copied from Excel: Arabic digits, an absence and a tie
+        pg.evaluate("""() => { const i = document.querySelector('.drawer [data-mark]'); const dt = new DataTransfer();
+          dt.setData('text/plain', '١٨\\r\\n18\\r\\nA\\r\\n'); i.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true})); }""")
+        ranks = pg.eval_on_selector_all('.drawer tr[data-sid] .rank', 'els => els.map(e => e.textContent)')
+        self.assertEqual(sorted(ranks), ['1', '1'])                             # equal marks share first place
+        pg.click('.drawer [data-save]')
+        pg.wait_for_selector('.toast:has-text("Marks saved")')
+        ex = next(x for x in self.c.get('/api/state')['exams'] if x['title'] == 'Synthetic weekly test')
+        res = self.c.get('/api/c/exam?id=' + ex['id'])
+        self.assertEqual(sorted((r['mark'] or {}).get('score') for r in res['rows'] if r['mark'] and not r['mark'].get('absent')), [18, 18])
+        self.assertEqual(sum(1 for r in res['rows'] if r['mark'] and r['mark'].get('absent')), 1)
+        self.assertEqual(self.errors, [])
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')
