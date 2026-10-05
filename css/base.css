@@ -531,6 +531,18 @@ button.chip { cursor: pointer; }
 .split-bar i { display: block; height: 100%; background: var(--signal); }
 .rep-kpis { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
 .slide-list { font-size: 1.3rem; display: grid; gap: .8rem; padding-inline-start: 1.2rem; }
+.help-search { display: flex; align-items: center; gap: .7rem; padding: .3rem .4rem .3rem 1rem; border: 2px solid var(--line); border-radius: var(--r-2); background: var(--surface); margin-bottom: var(--gap); max-width: 46rem; }
+.help-search:focus-within { border-color: var(--signal-line); box-shadow: 0 0 0 4px var(--signal-soft); }
+.help-search .ic { color: var(--ink-3); }
+.help-search .input { border: 0; box-shadow: none; font-size: 1.15rem; background: transparent; }
+.help-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: .5rem; margin-bottom: calc(var(--gap) * 1.5); }
+.help-card { display: flex; align-items: center; gap: .6rem; padding: .7rem .8rem; border-radius: var(--r-2); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 600; font-size: .9rem;
+  transition: transform var(--t-fast) var(--ease), border-color var(--t-fast); }
+.help-card:hover, .help-card.on { transform: translateY(-1px); border-color: var(--signal-line); }
+.help-card .ic { color: var(--brand); }
+.help-topic { scroll-margin-top: calc(var(--topbar-h) + 1rem); }
+.help-topic > header { margin-bottom: .7rem; }
+.help-topic .tile-ic { width: 2.2rem; height: 2.2rem; border-radius: .65rem; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
 .fill { display: flex; align-items: center; gap: .5rem; min-width: 7rem; }
 .fill .meter { flex: 1; margin: 0; }
 .fill.warn .meter i { background: var(--warn); } .fill.bad .meter i { background: var(--bad); } .fill.info .meter i { background: var(--info); }

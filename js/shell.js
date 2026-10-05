@@ -76,7 +76,8 @@
           '<span data-tour="tools" class="row" style="gap:.2rem">' +
           '<button class="icon-btn" data-act="lang" aria-label="' + HS.esc(HS.t('top.lang')) + '" title="' + HS.esc(HS.t('top.lang')) + ' (L)">' + HS.icon('globe') + '</button>' +
           '<button class="icon-btn" data-act="theme" id="theme-btn" aria-label="' + HS.esc(HS.t('top.theme')) + '" title="' + HS.esc(HS.t('top.theme')) + ' (T)"></button>' +
-          '<button class="icon-btn" data-act="keys" aria-label="' + HS.esc(HS.t('top.shortcuts')) + '" title="' + HS.esc(HS.t('top.shortcuts')) + ' (?)">' + HS.icon('keyboard') + '</button>' +
+          '<button class="icon-btn" data-act="help-here" aria-label="' + HS.esc(HS.t('top.helpHere')) + '" title="' + HS.esc(HS.t('top.helpHere')) + '">' + HS.icon('help') + '</button>' +
+          '<button class="icon-btn desk-only" data-act="keys" aria-label="' + HS.esc(HS.t('top.shortcuts')) + '" title="' + HS.esc(HS.t('top.shortcuts')) + ' (?)">' + HS.icon('keyboard') + '</button>' +
           '</span>' +
         '</header>' +
         '<main class="content" id="view" tabindex="-1"></main>' +
@@ -330,6 +331,7 @@
     else if (a === 'theme') HS.prefs.toggleTheme();
     else if (a === 'lang') HS.prefs.toggleLang();
     else if (a === 'keys') showKeys();
+    else if (a === 'help-here') HS.go('help?topic=' + (HS.helpTopic ? HS.helpTopic(HS.route().path) : 'start'));
     else if (a === 'collapse') toggleCollapse();
     else if (a === 'account') openAccount();
     else if (a === 'menu') { var app = HS.$('#app-shell'); app.dataset.menu = app.dataset.menu === '1' ? 0 : 1; }

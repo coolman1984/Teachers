@@ -252,6 +252,18 @@ class DoorTest(BrowserBase):
         pg.wait_for_selector('.present', state='detached')
         self.assertEqual(self.errors, [])
 
+    def test_help_for_this_page_and_arabic_search(self):
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/money')
+        pg.wait_for_selector('[data-mtab]')
+        pg.click('[data-act="help-here"]')                                  # "?" opens the topic of the current page
+        pg.wait_for_selector('#topic-money details[open]')
+        pg.fill('#help-q', 'الوردیه')                                        # Persian yeh + taa marbuta spelled as heh
+        pg.wait_for_timeout(300)
+        visible = pg.eval_on_selector_all('.help-topic details:not([hidden]) summary', 'els => els.map(e => e.textContent)')
+        self.assertTrue(any('وردية' in v for v in visible), visible)
+        self.assertEqual(self.errors, [])
+
     def test_phone_has_tab_bar_and_command_centre(self):
         pg = self.open({'lang': 'ar'}, width=390, height=844)
         pg.wait_for_selector('.tabbar')

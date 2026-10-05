@@ -118,6 +118,18 @@ class LanguageTest(unittest.TestCase):
                 for part in ('t', 'b', 'go'):
                     self.assertIn(f'adv.{i}.{part}', keys, lang)
 
+    def test_every_help_topic_question_is_translated(self):
+        """help.js builds hq.<topic>.<k>.q/.a from its TOPICS list; a missing text would show the raw key."""
+        topics = re.findall(r"\{ id: '([a-z]+)', icon: '[a-z]+', page: '[^']+',(?: perm: [^}]+?,)? n: (\d+) \}", read('js', 'views', 'help.js'))
+        self.assertGreaterEqual(len(topics), 10)
+        for lang in ('en', 'ar'):
+            keys = dict_keys(lang)
+            for tid, n in topics:
+                self.assertIn(f'hq.{tid}', keys, lang)
+                for k in range(1, int(n) + 1):
+                    for part in ('q', 'a'):
+                        self.assertIn(f'hq.{tid}.{k}.{part}', keys, lang)
+
     def test_centre_vocabulary_is_complete(self):
         import sys
         sys.path.insert(0, os.path.join(ROOT, 'server'))

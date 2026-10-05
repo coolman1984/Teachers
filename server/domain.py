@@ -11,7 +11,8 @@ from datetime import date, datetime, timedelta
 _TATWEEL = 'ـ'
 _ZERO_WIDTH = dict.fromkeys(map(ord, '​‌‍‎‏‪‫‬⁦⁧⁨⁩﻿'))
 _AR_DIGITS = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')
-_AR_UNIFY = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ى': 'ي', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
+# Persian yeh/kaf (U+06CC, U+06A9) look identical and come from some Windows keyboards and Excel files
+_AR_UNIFY = str.maketrans({'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ى': 'ي', 'ی': 'ي', 'ک': 'ك', 'ة': 'ه', 'ؤ': 'و', 'ئ': 'ي'})
 _DIACRITICS = re.compile('[ً-ٰٟ]')
 
 # ---------------------------------------------------------------- vocabularies (labels live in js/i18n)

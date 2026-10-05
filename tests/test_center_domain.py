@@ -22,6 +22,7 @@ class CenterDomainTest(unittest.TestCase):
 
     def test_name_comparison_and_digits(self):
         self.assertEqual(D.key_text('  إِيـمان   على، ١٢  '), D.key_text('ايمان علي 12'))
+        self.assertEqual(D.key_text('علی کریم'), D.key_text('علي كريم'))   # Persian yeh and kaf from some keyboards
         self.assertEqual(D.norm_text('أحمد\u200f  علي'), 'أحمد علي')
         self.assertEqual(D.digits('۱۰-٢٠'), '1020')
 
