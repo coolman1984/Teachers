@@ -100,8 +100,8 @@ installer `installer/hessa.iss` (new AppId), entry `server/hs_main.py`.
 | `gateway_client.py` | **parent cards** (push only; `check()` reads the mailbox status) | `card_for(store, student_id)`: one child, published marks only, the next 7 days |
 | `formats.py`, `xlsx_read.py`, `xlsx_write.py`, `xlsx.py`, `docx_read.py`, `docx_write.py`, `com_office.py` | engine readers/writers | used by the student import |
 
-Verified: `python3 -c "import app"` starts and creates all 17 tables. Engine tests `test_unit test_convergence test_xlsx`
-pass (42 tests, 3 skipped). **Nothing in `center.py`/`domain.py` has been executed by a test yet.**
+Verified (2026-10-05): every centre module is executed by tests through real HTTP, several PCs and Chromium - see Part G and
+`TASKS.md`. The old note "nothing in center.py is tested" is history.
 
 ### C3. Data model (`server/store.py` → `ENTITIES`)
 Every row also has engine columns: `id, ver, created_at/by, updated_at/by, deleted, deleted_at/by/txn`.
@@ -194,12 +194,12 @@ Errors: HTTP 400 `{error, key, vars}` from `center.Problem` → the page shows `
 3. P1 cleanup implemented: overview/lists are centre scaffolds; access scopes are teachers. Full lists/settings/overview follow in P3 and P5.
 4. P1.5/P1.6 implemented: centre dictionaries and updated design tests pass.
 5. P1.4 implemented: two-second delta polling with fallback and deferred repaint; Chrome timing verification pending.
-6. `tests/test_e2e_browser.py` tests trip flows → rewrite (P8).
-7. `gateway/public/*` is the driver page → becomes the parent page (P7).
+6. Done 2026-10-05: `tests/test_e2e_browser.py` tests centre flows (E07).
+7. Done 2026-10-05: `gateway/public/*` is the parent page, read only (P7).
 8. `center.dashboard()` calls `risk_list()` on every load (slow for big centres) → cache by data version (P2.6).
-9. `server/app.py` `link_page()` references `/js/quick.js`, which does not exist in this repo → copy it from BAMS or remove personal-link page JS (check BAMS `js/quick.js`).
+9. Fixed 2026-10-05 (A03): `js/quick.js` exists.
 10. Lock order: `center.pay()` holds `store.lock` then `ctx.letter()` takes `journal.lock` (same order as `store._save`). Keep this order everywhere; never take `store.lock` while holding `journal.lock`.
-11. `README.md`, `CLAUDE.md`, `.claude/skills/*`, `docs/DESIGN.md`, guides do not exist yet for Hessa (P10).
+11. Done 2026-10-05: `README.md`, `.claude/skills/hessa/SKILL.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md`, guides per role (P10).
 
 ---
 
@@ -566,13 +566,13 @@ groups with free seats, WhatsApp booking link) pushed as a public card (no stude
 cd /home/user/Teachers
 node --test tests/test_frontend.js                                                # startup asset/order regression
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
+python3 tools/build_windows.py --check                                            # every file the installer ships
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_center_domain test_center_api test_xlsx   # always (~2 min)
-python3 -m unittest test_sample test_multinode                                                          # before a PR (~4 min)
-HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser              # when screens changed
-# Windows: HS_CHROMIUM="C:\Program Files\Google\Chrome\Application\chrome.exe"; pyflakes lives in data/qa-deps (PYTHONPATH)
-cd ../gateway && node --test --no-warnings test/                                                        # when gateway changed
-grep -rn "trip\|Trip\|vehicle\|driver" js server --include=*.js --include=*.py | grep -v "^server/\(sync\|journal\|replica\)"   # must be empty after P1
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_xlsx   # always (~2 min)
+python3 -m unittest test_sample test_multinode test_gateway_parent test_recovery                                  # before a PR (~5 min)
+HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance        # when screens changed
+cd ../gateway && node --test --no-warnings test/gateway.test.js                                                   # when gateway changed
+grep -rn "trip\|Trip\|vehicle\|driver" js server --include=*.js --include=*.py | grep -v "^server/\(sync\|journal\|replica\)"   # only "strip"
 ```
 Run the app: `cd server && python3 app.py` → http://localhost:8095 (first start on the PC itself creates the admin).
 Never run `playwright install`; never edit `server/` or `js/` while multi-PC or browser tests run; kill test servers by PID.
@@ -627,6 +627,8 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | Product name «حِصّة / Hessa» | default: keep |
 | open | Price model in the app (licence check) | default: not in v1 |
 | open | AI key, video hosting | default: features hidden until configured |
+| 2026-10-05 | Remote work (owner: run on the client PC, work from phone or another PC over the internet) | Outbound tunnel (Tailscale recommended, Cloudflare Tunnel alternative), no own relay; remote work off until switched on at the centre, only `remote.use`; a laptop with its own copy covers the PC being off (`docs/REMOTE_ACCESS.md`) |
+| 2026-10-05 | Version | 1.1.0 (continues after the engine's 1.0.2, never lowered) |
 | open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |
 | open | Forgive the debt of a student who left for good | default: no — the debt stays visible, marked “left” |
 | open | Monthly groups during the mid-year break (23 Jan – 4 Feb 2027) | default: full months are charged |

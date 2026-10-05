@@ -2,6 +2,19 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## Documents for every reader, help inside the program, a tested disaster drill, a safer installer (review E10, F01-F10 - 2026-10-05)
+
+**Why:** the people of a centre are not technical; the owner, the desk, a teacher, an assistant and a parent each need one page in
+their words with the screens they will see, and the next technician needs to know where everything is and how to recover.
+**What:** README, DESIGN, OPERATIONS, the hessa skill, five Egyptian-Arabic guides with pictures taken from the real program
+(`tools/make_screens.py`, fictional sample centre), 15 help topics, `test_recovery` (dead disk, restore from the USB copy on a new
+PC), installer in Arabic first with the firewall limited to private networks.
+**Found:** the OPERATIONS draft said "restore from the second folder" - true only after copying the file into the new PC's backup
+folder, and accounts are not part of a restore; the doc now says exactly that, and the test does exactly that.
+**Lessons:** a recovery step is real only when a test performs it; a guide is right only when its button names are copied from the
+dictionary, not remembered.
+**Evidence:** `test_recovery`, `test_ci.InstallerTest`, `test_design` (every help question translated), the guide pictures.
+
 ## Acceptance on a full sample centre: phones, big fonts, two screens, the door peak (review E03-E05, E11 - 2026-10-05)
 
 **Why:** "it works" had only been shown on desktop widths and small fixtures.

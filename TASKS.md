@@ -158,7 +158,16 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [ ] P9.4 Video protection (ask the owner first)
 
 ## Phase P10 – Docs and delivery
-- [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version 0.1.0
+- [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version
+  - [x] `README.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md` (data folders, ports, tools, recovery drills mapped to the tests that prove them, how to add a field/page), `.claude/skills/hessa/SKILL.md` (review F05, F07, F09)
+  - [x] Guides in Egyptian Arabic with pictures of the real screens (fictional sample centre, `tools/make_screens.py` re-takes them): owner, front desk, teacher, assistant, parent (review F06)
+  - [x] Help: 15 topics, 63 questions in both languages - parent links, work from outside, printing, late arrival, handouts at the door, the offline bar, publishing marks (review F08)
+  - [x] Disaster drill as a test: the only PC died, a new PC restores the backup copied from the USB folder - records, receipt, attendance and the computed balance are back (`tests/test_recovery.py`, review E10)
+  - [x] Installer: firewall only for private/domain networks (never public Wi-Fi), Arabic first with English, the finish page says what to do when phones cannot connect (review F03; `InstallerTest`)
+  - [x] Version 1.1.0 in the program, the installer and RELEASE_NOTES (never lowered; review F04); release steps in BUILD_AND_RELEASE.md
+  - [x] Plan, build docs and administrator guide brought up to date with the code (review F10)
+  - [ ] Install on a clean Windows PC, update over an older version, try a real printer and phones (F01, F02 - needs Windows and the centre's devices)
   - [x] Help centre: 11 topics, 46 questions in both languages, Arabic-tolerant search, "?" opens the current page's topic
   - [x] Repair inherited CI selectors for current centre tests; frontend/gateway/lint checks; tag-only installer publication
-  - [ ] Final centre browser acceptance and installer/release verification remain pending
+  - [x] Centre browser acceptance: `test_acceptance` + `test_e2e_*` + `test_center_review` in a CI browser job
+  - [ ] Installer/release verification on Windows (manual, see F01/F02 above)

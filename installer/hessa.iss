@@ -1,4 +1,4 @@
-; Inno Setup script of the Hessa (built by tools/build_windows.py).
+﻿; Inno Setup script of the Hessa (built by tools/build_windows.py).
 ; The same Hessa-Setup.exe installs the program on a new PC and updates it on a PC that already has it:
 ; only the program in Program Files is replaced, the data in %ProgramData%\Hessa is never touched.
 
@@ -41,11 +41,23 @@ WizardStyle=modern
 CloseApplications=no
 
 [Languages]
+; Arabic first (the centre's language); Inno Setup 6 ships Arabic.isl
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[CustomMessages]
+arabic.DesktopIcon=ضع أيقونة على سطح المكتب
+english.DesktopIcon=Put an icon on the desktop
+arabic.AutoStart=التشغيل مع ويندوز (موصى به: يبقي هذا الجهاز متزامنًا مع الأجهزة الأخرى)
+english.AutoStart=Start with Windows (recommended - keeps this PC in sync with the others)
+arabic.Firewall=السماح لأجهزة المركز وهواتفه بالاتصال...
+english.Firewall=Allowing the centre's other PCs and phones to connect...
+arabic.OpenNow=افتح «حصة» الآن
+english.OpenNow=Open Hessa now
+
 [Tasks]
-Name: "desktopicon"; Description: "Put an icon on the desktop"
-Name: "autostart"; Description: "Start with Windows (recommended - keeps this PC in sync with the others)"
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"
+Name: "autostart"; Description: "{cm:AutoStart}"
 
 [Dirs]
 ; data, backups and settings: writable for everybody who uses this PC, kept when the program is updated or removed
@@ -60,9 +72,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Hessa.exe"; Tasks: desktopi
 Name: "{commonstartup}\{#MyAppName}"; Filename: "{app}\Hessa.exe"; Parameters: "--background"; Tasks: autostart
 
 [Run]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden; StatusMsg: "Allowing the other PCs to connect..."
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow program=""{app}\Hessa.exe"" enable=yes profile=any"; Flags: runhidden
-Filename: "{app}\Hessa.exe"; Description: "Open the {#MyAppName} now"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden; StatusMsg: "{cm:Firewall}"
+; only the centre's own (private or domain) network: a PC on a café or public Wi-Fi never lets strangers in
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow program=""{app}\Hessa.exe"" enable=yes profile=private,domain"; Flags: runhidden
+Filename: "{app}\Hessa.exe"; Description: "{cm:OpenNow}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 Filename: "{app}\Hessa.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
@@ -70,7 +83,8 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM Hessa.exe"; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden; RunOnceId: "FirewallRule"
 
 [Messages]
-FinishedLabel=The program is installed. Your data is kept in %ProgramData%\Hessa (also after updates).
+arabic.FinishedLabel=تم تثبيت البرنامج. تُحفظ بياناتك في %ProgramData%\Hessa (وتبقى بعد التحديثات).%n%nإذا لم تتصل الهواتف أو الأجهزة الأخرى: اجعل شبكة المركز «خاصة» (Private) من إعدادات ويندوز ← الشبكة والإنترنت. لا يُسمح بالاتصال على الشبكات العامة حفاظًا على البيانات.
+english.FinishedLabel=The program is installed. Your data is kept in %ProgramData%\Hessa (also after updates).%n%nIf phones or other PCs cannot connect: set the centre's network to Private in Windows Settings → Network & Internet. Public networks are never allowed in, to protect the data.
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

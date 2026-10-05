@@ -47,3 +47,19 @@ class ShippedFilesTest(unittest.TestCase):
         for f in re.findall(r'(docs/[A-Z_]+\.md)', workflow):
             self.assertTrue((ROOT / f).is_file(), f)
         self.assertIn('build_windows.py --check', workflow)   # checked on every push, not only when a tag is built
+
+
+class InstallerTest(unittest.TestCase):
+    """Review F03: the firewall lets in only the centre's own network, and the installer speaks Arabic first."""
+
+    def test_firewall_private_networks_only_and_arabic_first(self):
+        raw = (ROOT / 'installer' / 'hessa.iss').read_bytes()
+        self.assertTrue(raw.startswith(b'\xef\xbb\xbf'), 'UTF-8 with BOM, or Inno Setup misreads the Arabic texts')
+        iss = raw.decode('utf-8-sig')
+        self.assertNotIn('profile=any', iss)
+        self.assertIn('profile=private,domain', iss)
+        langs = re.findall(r'^Name: "(\w+)"; MessagesFile', iss, re.M)
+        self.assertEqual(langs[0], 'arabic')
+        for key in re.findall(r'\{cm:(\w+)\}', iss):
+            self.assertIn('arabic.' + key + '=', iss)
+            self.assertIn('english.' + key + '=', iss)

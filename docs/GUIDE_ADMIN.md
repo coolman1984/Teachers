@@ -1,4 +1,8 @@
-# Administrator guide — work in progress
+# Administrator guide
+
+Day-to-day guides in Egyptian Arabic: [owner](GUIDE_OWNER.md), [front desk](GUIDE_DESK.md), [teacher](GUIDE_TEACHER.md),
+[assistant](GUIDE_ASSISTANT.md), [parent](GUIDE_PARENT.md). Setting up: [parent links](GATEWAY_SETUP.md), [work from outside](REMOTE_ACCESS.md).
+Recovering: [operations](OPERATIONS.md).
 
 Start Hessa on the centre PC and open http://localhost:8095 in Google Chrome.
 Use the administrator account created for your local installation.
