@@ -10,7 +10,8 @@ Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 publish only the reviewed commits and preserve uncommitted work and private local files.
 **Evidence:** frontend 18 passed; gateway 15 passed; Python lint passed. Browser discovery
 skipped 16 tests because the configured Chromium path was unavailable. The engine, centre,
-sample and two-PC verification gate was run against the isolated committed snapshot.
+sample and two-PC gate passed: 153 tests in 408.687 seconds, with two existing skips,
+against the isolated committed snapshot.
 
 ## The front desk works (2026-10-05)
 
