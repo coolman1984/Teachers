@@ -54,6 +54,10 @@ DEFAULTS = {
     'riskCall': 35,                # early warning: "call today" from this score
     'riskHigh': 60,
     'currency': 'EGP',
+    'watchFrom': 8,                # the owner's watch (server/watch.py): working hours, changes outside them are flagged
+    'watchTo': 23,
+    'watchBig': 1000,              # reversals and expenses from this amount are flagged higher
+    'watchOwedUnits': 2,           # attending while owing this many sessions/months and no payment for 30 days
 }
 
 

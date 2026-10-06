@@ -138,10 +138,10 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
                     'via':'sample','makeup':False,'by':'desk1'})
                 if status in D.ATT_PRESENT: visits[(e['studentId'],gid)]+=1
     pay_sequence=0
-    def receipt(student, group, amount, day, kind='fee', **extra):
+    def receipt(student, group, amount, day, kind='fee', who=None, **extra):
         nonlocal pay_sequence
         pay_sequence+=1
-        username='desk1' if pay_sequence%2 else 'desk2'; sh=shifts.get((day.isoformat(),username))
+        username=who or ('desk1' if pay_sequence%2 else 'desk2'); sh=shifts.get((day.isoformat(),username))
         if not sh:
             day=day+timedelta(days=1) if day==first_day else day-timedelta(days=1); sh=shifts[(day.isoformat(),username)]
         method=rng.choices(['cash','vodafone','instapay','fawry'],weights=[70,18,9,3])[0]
@@ -182,6 +182,12 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
     for i in range(4):
         original,row=receipt('smp-s'+str(100+i),'smp-g12',50,today)
         receipt(row['studentId'],row['groupId'],-50,today,voidOf=original,note='Synthetic correction',method=row['method'])
+    # what the owner's watch is for (server/watch.py), so the sample shows it: desk2 takes 300 from a student, reverses it
+    # "by mistake" and takes it again as 200 the same day - the 100 stayed in a pocket, and the student still owes it
+    skim_e=next(e for e in entities['enrollments'].values() if e['studentId']=='smp-s200')
+    first,row=receipt('smp-s200',skim_e['groupId'],300,today,who='desk2')
+    receipt('smp-s200',skim_e['groupId'],-300,today,who='desk2',voidOf=first,note='أُدخل بالخطأ',method=row['method'])
+    receipt('smp-s200',skim_e['groupId'],200,today,who='desk2',method=row['method'])
     expense_seq=0
     def expense(category,amount,day,teacher='',group=''):
         nonlocal expense_seq
@@ -198,8 +204,14 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         pays=[p for p in entities['payments'].values() if p.get('shiftId')==shid]
         expenses=[p for p in entities.get('expenses',{}).values() if p.get('shiftId')==shid]
         if row['status']=='closed':
-            expected=D.shift_expected(200,pays,expenses);diff=5 if len([r for r in entities['shifts'].values() if r.get('diff')])<3 else 0
-            row.update(closedAt=day+'T22:00:00',expectedCash=expected,countedCash=expected+diff,diff=diff,diffReason='فرق تجريبي موثق' if diff else '')
+            # three small "over" drawers, and desk2 closes short twice (the watch flags it as repeated)
+            done=[r for r in entities['shifts'].values() if r.get('diff')]
+            short=[r for r in done if r['diff']<0]
+            recent=day>=(today-timedelta(days=12)).isoformat()      # inside the Watch's default 30 days
+            diff=5 if len(done)-len(short)<3 and username=='desk1' and recent else (-60 if not short else -40) if username=='desk2' and len(short)<2 and recent else 0
+            expected=D.shift_expected(200,pays,expenses)
+            row.update(closedAt=day+'T22:00:00',expectedCash=expected,countedCash=expected+diff,diff=diff,
+                       diffReason=('فرق تجريبي موثق' if diff>0 else 'لا أعرف السبب') if diff else '')
     score_bases={sid:rng.gauss(68,15) for sid in entities['students']}
     for gid,g in entities['groups'].items():
         sessions=group_sessions[gid]

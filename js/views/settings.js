@@ -138,17 +138,18 @@
   }
   function settingFields(tab) {
     var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear','bookingPhone']
-      : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds'];
+      : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds','watchFrom','watchTo','watchBig','watchOwedUnits'];
     return keys.map(function (key) { return { key: key, label: 'set.' + key, help: tab === 'centre' ? null : 'set.' + key + '.h', wide: key === 'receiptFooter',
       type: tab === 'centre' ? (key === 'receiptFooter' ? 'textarea' : 'text') : (key === 'autoCheckin' || key === 'doorSounds' ? 'bool' : 'number') }; });
   }
   // the rules tab in three groups the owner thinks in (the door, school groups, follow-up), each with one line saying what it changes
   var RULE_GROUPS = [{ id: 'door', keys: ['lateMinutes','doorEarlyMinutes','doorLateMinutes','autoCheckin','doorSounds'] },
     { id: 'school', keys: ['schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents'] },
-    { id: 'risk', keys: ['riskCall','riskHigh'] }];
+    { id: 'risk', keys: ['riskCall','riskHigh'] },
+    { id: 'watch', keys: ['watchFrom','watchTo','watchBig','watchOwedUnits'], admin: true }];
   function ruleGroups(settings) {
     var fields = settingFields('rules');
-    return RULE_GROUPS.map(function (g) {
+    return RULE_GROUPS.filter(function (g) { return !g.admin || (HS.me && HS.me.admin); }).map(function (g) {
       var mine = fields.filter(function (f) { return g.keys.indexOf(f.key) >= 0; });
       var plain = mine.filter(function (f) { return f.type !== 'bool'; }), toggles = mine.filter(function (f) { return f.type === 'bool'; });
       return '<section class="form-sec"><header><h3>' + HS.esc(HS.t('set.sec.' + g.id)) + '</h3><p class="muted">' + HS.esc(HS.t('set.sec.' + g.id + '.d')) + '</p></header>' +
@@ -166,7 +167,8 @@
     KINDS.forEach(function (kind) { ['ar','en'].forEach(function (lang) { out[kind + '_' + lang] = (templates[kind] || {})[lang] || ''; }); }); return out;
   }
   var DEFAULTS = { lateMinutes:15, doorEarlyMinutes:90, doorLateMinutes:30, schoolTreasuryPct:15, schoolTeacherPct:80,
-    schoolMaxFee:100, schoolMaxStudents:25, riskCall:35, riskHigh:60, autoCheckin:true, doorSounds:true, currency:'EGP' };
+    schoolMaxFee:100, schoolMaxStudents:25, riskCall:35, riskHigh:60, autoCheckin:true, doorSounds:true, currency:'EGP',
+    watchFrom:8, watchTo:23, watchBig:1000, watchOwedUnits:2 };
   function settingsBody(tab) {
     var settings = Object.assign({}, DEFAULTS, (HS.data.state || {}).settings || {});
     var fields = tab === 'messages' ? templatesFields() : settingFields(tab);

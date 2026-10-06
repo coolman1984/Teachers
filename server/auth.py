@@ -514,6 +514,12 @@ class Auth:
         token = secrets.token_urlsafe(32)
         ts = now()
         with self.lock:
+            # what the person should know right after signing in: when they were last here, and whether somebody has been
+            # trying their password since (shown once on the first screen - "not you? tell the administrator")
+            since = u.get('last_login') or ''
+            failed_since = self.conn.execute("SELECT COUNT(*) FROM security_log WHERE event IN ('login-failed','login-blocked') AND target=? AND ts>?",
+                                             (username, since)).fetchone()[0]
+            welcome = {'last': since, 'lastIp': u.get('last_ip') or '', 'failed': failed_since}
             self.conn.execute('UPDATE users SET failed=0, locked_until=NULL, last_login=?, last_ip=? WHERE id=?', (ts, ip, u['id']))
             self.conn.execute('INSERT INTO sessions (token_hash, user_id, created, last_seen, ip, agent) VALUES (?,?,?,?,?,?)',
                               (_token_hash(token), u['id'], ts, ts, ip, (agent or '')[:300]))
@@ -524,7 +530,7 @@ class Auth:
                                                                           's': {'pw_hash': u['pw_hash'], 'pw_pub': account_pub(password, u['id'])}}])
             except Exception as e:  # noqa: BLE001 - logging in must not fail because of this
                 print('password key not published:', e)
-        return token, self.get(u['id'])
+        return token, {**self.get(u['id']), 'welcome': welcome}
 
     def session(self, token, ip, touch=True):
         """The logged-in user for this cookie token, or None (expired/unknown)."""

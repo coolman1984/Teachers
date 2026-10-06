@@ -192,6 +192,7 @@
           '<div class="grid cols-2"><section class="card"><header><h3>' + HS.esc(HS.t('ov.trend')) + '</h3></header><div data-chart="att"></div></section>' +
             (money ? '<section class="card"><header><h3>' + HS.esc(HS.t('ov.trend.money')) + '</h3></header><div data-chart="money"></div></section>' : '') + '</div>' +
         '</div><div class="stack">' +
+          (HS.me && HS.me.admin && !(HS.me.scopes && HS.me.scopes.length) ? '<div data-watch></div>' : '') +
           '<div class="desk-only">' + actions() + '</div>' + guideHTML() + '<div data-status></div>' +
           '<section class="card"><header><h3>' + HS.esc(HS.t('ov.tips.title')) + '</h3></header><div class="stack" style="gap:.8rem">' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('search') + '<span>' + HS.esc(HS.t('ov.tip.search')) + ' <i class="kbd">Ctrl K</i></span></div>' +
@@ -203,6 +204,21 @@
     },
     mount: function (root) {
       HS.mountSampleControls(root);
+      // the owner's watch in one line: what needs their eyes from the last 7 days (js/views/watch.js)
+      var wbox = root.querySelector('[data-watch]');
+      if (wbox && HS.watch && HS.me && HS.me.admin) {
+        var t = new Date(), f = new Date(t); f.setDate(t.getDate() - 6);
+        var day = function (d) { return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); };
+        HS.watch.load(day(f), day(t)).then(function (w) {
+          if (root.isConnected === false) return;
+          var c = w.summary.critical || 0, h = w.summary.high || 0, clean = !c && !h;
+          wbox.innerHTML = '<a class="card ov-watch lift' + (clean ? ' clean' : '') + '" href="#/watch" style="display:grid;gap:.4rem;text-decoration:none;color:inherit">' +
+            '<header class="row"><span class="tile-ic">' + HS.icon('shield') + '</span><h3 class="grow">' + HS.esc(HS.t('wa.card.t')) + '</h3>' +
+            (clean ? '<span class="badge ok">' + HS.icon('check', 'sm') + '</span>' : '<span class="badge lv critical">' + HS.fmt.num(c + h) + '</span>') + '</header>' +
+            '<p class="muted" style="margin:0">' + HS.esc(clean ? HS.t('wa.card.clean') : HS.t('wa.card.b', { c: c, h: h })) + '</p>' +
+            '<span class="faint">' + HS.esc(HS.t('wa.card.go')) + ' ›</span></a>';
+        }, function () { wbox.innerHTML = ''; });
+      }
       var first = !counted;   // numbers count up once per visit, not on every live refresh
       counted = true;
       function setText(k, html) { var el = root.querySelector('[data-k="' + k + '"]'); if (el) el.innerHTML = html; }

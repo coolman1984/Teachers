@@ -18,6 +18,7 @@
     { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1, extra: true },
     { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1, extra: true },
     { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'r', phase: 1 },
+    { id: 'watch', icon: 'shield', group: 'control', perm: 'users.manage', key: 'w', phase: 1 },   // the owner's watch: administrators
     { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 1 },
     { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1, extra: true },
     { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 'c', phase: 1 },
@@ -121,10 +122,28 @@
       window.addEventListener('hashchange', renderRoute);
       renderRoute();
       if (!HS.prefs.data.welcomed) setTimeout(function () { HS.slides.open(true); }, 500);
+      showWelcome();
     },
     stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); },
     rebuild: function () { if (shellReady) rebuildShell(); }   // after the menu's extra pages change
   };
+
+  /* right after signing in: when you were last here, and whether someone tried your password since ("not you? tell the
+     administrator") - the first thing a careful person wants to know */
+  function showWelcome() {
+    var w = HS.welcome; HS.welcome = null;
+    if (!w || !w.last) return;
+    var bar = document.createElement('div');
+    bar.className = 'welcome-bar' + (w.failed ? ' bad' : '');
+    bar.setAttribute('role', w.failed ? 'alert' : 'status');
+    bar.innerHTML = HS.icon(w.failed ? 'alert' : 'shield') + '<span class="grow">' + HS.esc(HS.t('auth.last', { when: HS.ui.dt(w.last).replace(/<[^>]+>/g, ''), ip: w.lastIp || '–' })) +
+      (w.failed ? ' <b>' + HS.esc(HS.t('auth.failedSince', { n: w.failed })) + '</b>' : '') + '</span><button class="icon-btn" aria-label="' + HS.esc(HS.t('common.close')) + '">' + HS.icon('x', 'sm') + '</button>';
+    var main = HS.$('.main'), view = HS.$('#view');
+    if (!main || !view) return;
+    main.insertBefore(bar, view);
+    bar.querySelector('button').addEventListener('click', function () { bar.remove(); });
+    if (!w.failed) setTimeout(function () { if (bar.parentNode) bar.remove(); }, 12000);
+  }
 
   function refreshThemeButton() {
     var b = HS.$('#theme-btn');
@@ -148,6 +167,7 @@
     if (view.mount) view.mount(host, ctx);
     window.scrollTo(0, 0);
     HS.emit('route', r);
+    if (HS.track) HS.track('page', r.path + (location.hash.indexOf('?') > 0 ? location.hash.slice(location.hash.indexOf('?')) : ''), HS.t('nav.' + page.id));
   }
   HS.rerender = function () { renderRoute(); };
 
@@ -375,6 +395,7 @@
   });
 
   function logout() {
+    if (HS.track) HS.track.flush();        // the last clicks go before the session ends
     HS.post('/api/auth/logout').then(function () { HS.emit('logged-out'); }, function () { HS.emit('logged-out'); });
   }
   function toggleCollapse() {

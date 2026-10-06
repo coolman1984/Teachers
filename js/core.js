@@ -123,6 +123,9 @@
       var ct = r.headers.get('Content-Type') || '';
       var p = opts.blob ? r.blob() : (ct.indexOf('json') >= 0 ? r.json() : r.text());
       return p.then(function (data) {
+        if (method !== 'GET' && !/^\/api\/(log|auth)\b/.test(url) && r.status !== 403) {   // the server logs refusals itself
+          HS.track(r.ok ? 'save' : 'save-failed', url, (body && body.label) || '', r.ok ? '' : String((data && data.error) || r.status).slice(0, 300));
+        }
         if (!r.ok) {
           var msg = (data && data.error) || (typeof data === 'string' && data) || ('HTTP ' + r.status);
           if (r.status === 401 && url.indexOf('/api/auth/') !== 0) HS.emit('logged-out');
@@ -133,6 +136,53 @@
     });
   };
   HS.get = function (url) { return HS.api('GET', url); };
+
+  /* ---------- what people do: every click, page and save goes to the administrator's log (Activity -> Clicks) ----------
+     Only what was clicked (the button's words) and where - never what was typed: no passwords, no amounts, no phones.
+     Sent every few seconds; the server adds the person's name itself, so a page cannot pretend to be somebody else. */
+  var LOGQ = [];
+  function localIso() { var t = new Date(); return t.getFullYear() + '-' + HS.fmt.pad(t.getMonth() + 1) + '-' + HS.fmt.pad(t.getDate()) + 'T' + [t.getHours(), t.getMinutes(), t.getSeconds()].map(HS.fmt.pad).join(':'); }
+  HS.track = function (type, action, target, detail) {
+    if (!HS.me || !window.fetch) return;
+    LOGQ.push({ ts: localIso(), type: type, action: String(action || '').slice(0, 120), target: String(target || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      page: String(location.hash || '#/').slice(0, 120), detail: String(detail || '').slice(0, 500) });
+    if (LOGQ.length >= 40) HS.track.flush();
+  };
+  HS.track.flush = function (beacon) {
+    if (!LOGQ.length) return;
+    var events = LOGQ.splice(0, LOGQ.length), body = JSON.stringify({ events: events });
+    if (beacon && navigator.sendBeacon) { navigator.sendBeacon('/api/log', new Blob([body], { type: 'application/json' })); return; }
+    fetch('/api/log', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) { return r.ok ? r.json() : { ok: r.status === 401 || r.status === 403 }; })   // signed out: nothing more to send
+      .then(function (d) { if (!d || d.ok === false) throw d; })
+      .catch(function () { if (LOGQ.length < 2000) LOGQ.unshift.apply(LOGQ, events); });   // the centre PC is away: keep them for later
+  };
+  HS.track.pending = function () { return LOGQ.length; };
+  HS.track.clear = function () { LOGQ.length = 0; };
+  if (typeof navigator !== 'undefined' && typeof document !== 'undefined' && document.addEventListener) {   // a real browser (not the tests)
+    setInterval(function () { HS.track.flush(); }, 4000);
+    if (typeof addEventListener === 'function') {
+      addEventListener('pagehide', function () { HS.track.flush(true); });
+      addEventListener('error', function (e) { HS.track('js-error', e.message, (e.filename || '') + ':' + (e.lineno || ''), e.error && e.error.stack); });
+    }
+    var SEL = 'button, a[href], [data-act], tr[data-id], [role=tab], summary, label.perm, label.chip, .choice-btn, .switch';
+    document.addEventListener('click', function (e) {
+      var el = e.target && e.target.closest && e.target.closest(SEL);
+      if (!el) return;
+      var ds = el.dataset || {}, act = Object.keys(ds).filter(function (k) { return k !== 'i' && k !== 'k'; })[0];
+      var text = el.getAttribute('aria-label') || el.title || el.textContent || '';
+      var box = el.querySelector && el.querySelector('input[type=checkbox], input[type=radio]');
+      setTimeout(function () {   // a tick box: record whether it ended ticked or not (the permission editor, consent, switches)
+        HS.track('click', act ? act + (ds[act] ? '=' + ds[act] : '') : el.getAttribute('href') || el.tagName.toLowerCase(), text, box ? (box.checked ? 'on' : 'off') : '');
+      }, 0);
+    }, true);
+    document.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el || el.tagName !== 'SELECT') return;
+      var o = el.options[el.selectedIndex], lab = el.labels && el.labels[0] ? el.labels[0].textContent : el.getAttribute('aria-label') || el.name || '';
+      HS.track('click', 'choose ' + (el.name || el.id || ''), lab, o ? o.textContent : '');
+    }, true);
+  }
   HS.post = function (url, body) { return HS.api('POST', url, body === undefined ? {} : body); };
 
   /* ---------- toasts ---------- */

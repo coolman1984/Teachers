@@ -153,7 +153,7 @@ def normalize_ops(store, ops, pc_index=0):
                 number = float(row.get('value'))
             except (TypeError, ValueError):
                 raise Problem('err.setting', 'Check the setting value.')
-            upper = 100 if op['id'] in ('schoolTreasuryPct', 'schoolTeacherPct', 'riskCall', 'riskHigh') else 100000
+            upper = 100 if op['id'] in ('schoolTreasuryPct', 'schoolTeacherPct', 'riskCall', 'riskHigh') else 24 if op['id'] in ('watchFrom', 'watchTo') else 100000
             if not math.isfinite(number) or number < 0 or number > upper or op['id'] == 'schoolMaxStudents' and (number < 1 or number != int(number)):
                 raise Problem('err.setting', 'Check the setting value.')
             row['value'] = number
@@ -216,6 +216,8 @@ def normalize_ops(store, ops, pc_index=0):
                 raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0])
             if row.get('discountPct') not in (None, ''):
                 row['discountPct'] = _number(row['discountPct'], 'err.discount', 'The discount is a percentage from 0 to 100.', 0, 100)
+            if (row.get('discountPct') or row.get('exempt')) and len(D.norm_text(row.get('discountReason'))) < 3:
+                raise Problem('err.discountReason', 'Write why this student pays less (e.g. "second brother", "teacher\'s son").')
         if e == 'teachers':
             with store.lock:
                 other = store.conn.execute('SELECT id FROM teachers WHERE name_key=? AND deleted=0 AND id<>?', (row['nameKey'], op.get('id'))).fetchone()

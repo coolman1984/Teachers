@@ -81,9 +81,10 @@ class SampleGeneratorTest(unittest.TestCase):
                     [e for e in by['expenses'].values() if e['shiftId']==rid])
                 self.assertEqual(sh['expectedCash'],expected)
                 self.assertAlmostEqual(sh['countedCash']-expected,sh['diff'])
-        self.assertEqual(sum(bool(sh.get('diff')) for sh in by['shifts'].values()),3)
+        self.assertEqual(sum((sh.get('diff') or 0)>0 for sh in by['shifts'].values()),3)
+        self.assertEqual(sorted(sh['diff'] for sh in by['shifts'].values() if (sh.get('diff') or 0)<0),[-60,-40])   # desk2, for the watch
         self.assertEqual(sum(sh['status']=='open' for sh in by['shifts'].values()),2)
-        self.assertEqual(sum(bool(p.get('voidOf')) for p in by['payments'].values()),4)
+        self.assertEqual(sum(bool(p.get('voidOf')) for p in by['payments'].values()),5)
 
     def test_week_boundaries_and_sample_id_namespace(self):
         from datetime import timedelta

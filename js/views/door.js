@@ -126,6 +126,7 @@
       var el = HS.dialog({ title: HS.t('pay.title', { name: card.student.name }), body:
         '<div class="tip">' + HS.icon('layers') + '<span><b>' + HS.esc(g.name || '') + '</b> · ' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) + (m.balance < 0 ? ' · ' + HS.esc(HS.t('door.owes')) + ' ' + U.money(-m.balance) : '') + '</span></div>' +
         '<div class="field"><label for="pay-a">' + HS.esc(HS.t('pay.amount')) + '</label><input class="input big-num" id="pay-a" type="number" inputmode="decimal" min="0" step="any" dir="ltr" value="' + HS.esc(suggested) + '"></div>' +
+        '<p class="faint pay-left" data-left hidden aria-live="polite"></p>' +
         '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span><div class="seg wrap" role="group" data-methods>' + METHODS.filter(function (x) { return x !== 'wallet' || card.wallet > 0; }).map(function (x) {
           return '<button type="button" data-m="' + x + '" aria-pressed="' + (x === method) + '">' + HS.esc(HS.t('pay.method.' + x)) + '</button>'; }).join('') + '</div></div>' +
         '<div class="field" data-ref hidden><label for="pay-r">' + HS.esc(HS.t('pay.ref')) + '</label><input class="input" id="pay-r" dir="ltr" autocomplete="off"></div>' +
@@ -149,12 +150,26 @@
         change.className = 'change num' + (g && g < a ? ' neg' : '');
         change.innerHTML = !g ? '' : g < a ? HS.esc(HS.t('pay.short', { a: HS.fmt.num(Math.round((a - g) * 100) / 100) })) : HS.esc(HS.t('pay.change', { a: HS.fmt.num(Math.round((g - a) * 100) / 100) }));
       }
+      // what this payment leaves: still owing (part payment) or money in advance - said before Save, not discovered later
+      var due = Math.max(0, Number(m.due) || 0), left = el.querySelector('[data-left]');
+      function showLeft() {
+        var a = Number(amount.value) || 0, d = Math.round((due - a) * 100) / 100;
+        left.hidden = !a || !due || Math.abs(d) < 0.01;
+        left.className = 'faint pay-left' + (d > 0 ? ' owe' : '');
+        left.textContent = d > 0 ? HS.t('pay.left', { a: HS.fmt.num(d) }) : HS.t('pay.ahead', { a: HS.fmt.num(-d) });
+      }
+      amount.addEventListener('input', showLeft); showLeft();
       given.addEventListener('input', showChange); amount.addEventListener('input', function () { showChange(); confirmBig = false; });
       given.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
       // receipts cannot be edited (only reversed), so a typed extra zero is caught before it is saved
-      var unit = Number(m.unit) || 0, ceiling = Math.max(Number(m.due) || 0, unit) * 3, confirmBig = false;
+      var unit = Number(m.unit) || 0, ceiling = Math.max(Number(m.due) || 0, unit) * 3, confirmBig = false, confirmRef = false;
       function save() {
         var err = el.querySelector('[data-err]'), btn = el.querySelector('[data-ok]'), p = el.querySelector('#pay-p');
+        var refBox = el.querySelector('#pay-r');
+        if (method !== 'cash' && method !== 'wallet' && refBox && !refBox.value.trim() && !confirmRef) {   // an e-wallet payment without its number
+          confirmRef = true; err.hidden = false; beep('warn'); err.textContent = HS.t('pay.noRef'); refBox.focus();
+          return;
+        }
         if (ceiling > 0 && Number(amount.value) > ceiling && !confirmBig) {
           confirmBig = true; err.hidden = false; beep('warn');
           err.textContent = HS.t('pay.big', { a: HS.fmt.num(Number(amount.value)), u: HS.fmt.num(unit || Number(m.due) || 0) });
