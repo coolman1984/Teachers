@@ -104,6 +104,35 @@ class RolesTest(unittest.TestCase):
         self.no(r, 'POST', '/api/c/marks', {'examId': 'rl-x1', 'items': [{'studentId': 'rl-s1', 'score': 9}]})
         self.no(r, 'POST', '/api/c/pay', {'studentId': 'rl-s1', 'groupId': 'rl-g1', 'kind': 'fee', 'amount': 1, 'method': 'cash'})
 
+    def test_assistant_cannot_read_money_through_state_delta_or_followup(self):
+        r = 'Assistant'
+        c = self.people[r]
+        state = c.get('/api/state')
+        self.assertEqual(state['payments'], [], 'loading the shell must not bypass money permissions')
+        self.assertEqual(state['shifts'], [])
+        self.admin.post('/api/c/pay', {'studentId': 'rl-s1', 'groupId': 'rl-g1', 'kind': 'fee', 'amount': 1})
+        delta = c.get('/api/delta?since=' + str(state['version']))
+        self.assertNotIn('full', delta, 'exercise the incremental path, not the full reload fallback')
+        self.assertFalse(delta.get('rows', {}).get('payments'))
+        self.assertFalse(delta.get('rows', {}).get('shifts'))
+        self.no(r, 'GET', '/api/c/balances')
+        students = [s for s in self.admin.get('/api/state')['students'] if s['id'].startswith('rl-')]
+        self.admin.post('/api/commit', {'label': 'synthetic siblings', 'ops': [
+            {'e': 'students', 'id': s['id'], 'op': 'put', 'ver': s['ver'], 'row': {**s, 'familyKey': 'rl-family'}} for s in students]})
+        family = c.get('/api/c/card?id=rl-s1')['family']
+        self.assertEqual([s['id'] for s in family], ['rl-s2'])
+        self.assertNotIn('lines', family[0], 'a sibling card must not reveal balances')
+        self.admin.post('/api/users/save', {'username': 'role.scoped-assistant', 'full_name': 'Synthetic scoped assistant',
+            'password': PASSWORD, 'must_change': False, 'perms': ['students.view', 'door.use'], 'scopes': ['rl-t1']})
+        scoped = self.s.client()
+        scoped.login('role.scoped-assistant', PASSWORD)
+        self.assertEqual(scoped.get('/api/c/student?id=rl-s1')['payments'], [], 'a teacher scope is not a financial permission')
+        self.admin.post('/api/commit', {'label': 'synthetic risk threshold', 'ops': [
+            {'e': 'settings', 'id': 'riskCall', 'op': 'put', 'row': {'value': 0}}]})
+        risky = c.get('/api/c/risk')
+        self.assertTrue(risky, 'exercise a nonempty risk response')
+        self.assertTrue(all('balance' not in item and 'risk.unpaid' not in item['why'] for item in risky))
+
     def test_viewer_only_reads_and_sees_no_phone_numbers(self):
         r = 'Viewer'
         for path, body in (('/api/c/checkin', {'studentId': 'rl-s1', 'sessionId': self.session('1')}),

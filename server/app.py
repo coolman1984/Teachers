@@ -930,10 +930,15 @@ class Handler(BaseHTTPRequestHandler):
             action = p[len('/api/gateway/'):]
             try:
                 if action == 'save':
-                    SECRETS.set_url(d.get('url'))
-                    poll = int(d.get('pollSeconds') or 60)
-                    SECRETS.data['pollSeconds'] = min(600, max(15, poll))
-                    SECRETS.save()
+                    with GATE.lock:
+                        previous = SECRETS.url
+                        SECRETS.set_url(d.get('url'))
+                        poll = int(d.get('pollSeconds') or 60)
+                        SECRETS.data['pollSeconds'] = min(600, max(15, poll))
+                        SECRETS.save()
+                        if previous != SECRETS.url:
+                            GATE.pushed.clear()
+                            GATE._pushed_version = None
                 elif action == 'generate':
                     if SECRETS.configured and not d.get('replace'):
                         raise center.Problem('gw.err.exists', 'Secrets already exist. Replacing them stops every existing parent link until the gateway is updated.')
@@ -1154,6 +1159,8 @@ class Handler(BaseHTTPRequestHandler):
             r = center.roster(STORE, qs.get('session', ''), sc)
             for row in r['rows']:
                 row['student'] = self.contact_filter(row['student'])
+                if not self.can('money.view', 'money.collect'):
+                    row.pop('money', None)
             return self.send(200, r)
         if action == 'student':
             self.need('students.view')
@@ -1162,12 +1169,12 @@ class Handler(BaseHTTPRequestHandler):
             f['student'] = {k: v for k, v in self.contact_filter(f['student']).items() if k not in ('portalHash', 'portalNonce')}
             f['parentLink'] = {'has': bool(f['student'] and STORE.row('students', f['student']['id']).get('portalHash')),
                                'gateway': SECRETS.configured, 'canMake': self.can('messages.send')}
-            if not self.can('money.view', 'money.collect') and self.u['scopes'] is None:
+            if not self.can('money.view', 'money.collect', 'reports.view', 'settlements.view'):
                 f['payments'] = []
             return self.send(200, f)
         if action == 'risk':
             self.need('followup.view')
-            out = center.risk_list(STORE, sc)
+            out = center.risk_list(STORE, sc, include_money=self.can('money.view', 'money.collect'))
             for r in out:
                 r['student'] = self.contact_filter(r['student'])
             return self.send(200, out)
@@ -1210,7 +1217,7 @@ class Handler(BaseHTTPRequestHandler):
             self.need('followup.view', 'attendance.mark', 'messages.send')
             return self.send(200, center.absentees(STORE, None, sc))
         if action == 'balances':
-            self.need('money.view', 'money.collect', 'followup.view')
+            self.need('money.view', 'money.collect')
             return self.send(200, center.student_balances(STORE, sc))
         if action == 'advice':
             self.need('overview.view')
@@ -1236,6 +1243,10 @@ class Handler(BaseHTTPRequestHandler):
             data['students'] = [self.contact_filter(s) for s in data['students']]
         if 'teachers' in data and not self.can('contacts.view'):
             data['teachers'] = [{k: v for k, v in t.items() if k != 'mobile'} for t in data['teachers']]
+        if not self.can('money.view', 'money.collect', 'reports.view', 'settlements.view'):
+            for entity in ('payments', 'expenses', 'shifts', 'settlements'):
+                if entity in data:
+                    data[entity] = []
         return data
 
     def money_filter(self, d):
@@ -1245,14 +1256,21 @@ class Handler(BaseHTTPRequestHandler):
             return d
         for e in d.get('enrollments') or []:
             e.pop('money', None)
+        for sibling in d.get('family') or []:
+            sibling.pop('lines', None)
         d.pop('wallet', None)
+        if 'risk' in d and d.get('student'):
+            d['risk'] = center.risk_for_student(STORE, d['student']['id'], scopes=self.u['scopes'], include_money=False)
         return d
 
     def contact_filter(self, s):
         """Parents' numbers only for people allowed to see them."""
-        if not s or self.can('contacts.view'):
+        if not s:
             return s
-        return {k: v for k, v in s.items() if k not in ('mobile', 'parentMobile', 'parentMobile2')}
+        hidden = {'portalHash', 'portalNonce'}
+        if not self.can('contacts.view'):
+            hidden.update(('mobile', 'parentMobile', 'parentMobile2'))
+        return {k: v for k, v in s.items() if k not in hidden}
 
     def center_post(self, action, d):
         c = self.ctx()

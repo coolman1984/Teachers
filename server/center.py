@@ -1009,12 +1009,30 @@ def _request_key(d):
     return key if re.fullmatch(r'[0-9a-f]{12,32}', key) else ''
 
 
-def _already_paid(ctx, pid):
+def _already_paid(ctx, pid, requested=None):
     old = ctx.store.row('payments', pid) if pid else None
     if old:
         ctx.need('money.collect')
         if old.get('teacherId'):
             ctx.need_teacher(old['teacherId'])
+        if old.get('studentId'):
+            student_file(ctx.store, old['studentId'], ctx.scopes)  # do not return a hidden student's wallet receipt
+        if requested is not None:
+            try:
+                expected = {'studentId': requested.get('studentId') or '', 'kind': requested.get('kind') or 'fee',
+                            'amount': round(float(requested.get('amount')), 2), 'method': requested.get('method') or 'cash',
+                            'ref': D.norm_text(requested.get('ref'))[:60], 'note': D.norm_text(requested.get('note'))[:200]}
+                if expected['kind'] == 'fee':
+                    expected.update(groupId=requested.get('groupId') or '', period=str(requested.get('period') or '')[:7],
+                                    sessions=int(requested.get('sessions') or 0) or None)
+                elif expected['kind'] == 'material':
+                    expected.update(materialId=requested.get('materialId'), qty=max(1, int(requested.get('qty') or 1)))
+                matches = all(old.get(k) == v for k, v in expected.items())
+            except (TypeError, ValueError, OverflowError):
+                matches = False
+            shift = ctx.store.row('shifts', old.get('shiftId'))
+            if not matches or not shift or shift.get('userId') != ctx.user_id:
+                raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
         return {**old, 'again': True}
     return None
 
@@ -1023,7 +1041,7 @@ def _already_paid(ctx, pid):
 def pay(ctx, d):
     key = _request_key(d)
     pid = ('pk' + key) if key else ''
-    again = _already_paid(ctx, pid)   # checked under the operation lock, so two quick retries cannot both save
+    again = _already_paid(ctx, pid, d)   # checked under the operation lock, so two quick retries cannot both save
     if again:
         return again
     row, ops, label = _build_payment(ctx, d)
@@ -1049,8 +1067,14 @@ def pay_many(ctx, d):
         raise BadRequest('Pay each child from his own money in advance')
     key = _request_key(d)
     if key and ctx.store.row('payments', 'pk' + key + 'n0'):   # the answer was lost: give back the first save
-        receipts = [_already_paid(ctx, 'pk' + key + 'n' + str(n)) for n in range(len(items))]
-        receipts = [r for r in receipts if r]
+        first = ctx.store.row('payments', 'pk' + key + 'n0')
+        saved = ctx.store.rows('payments', 'batch=?', (first.get('batch'),))
+        if len(saved) != len(items) or any(not isinstance(it, dict) for it in items):
+            raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
+        receipts = [_already_paid(ctx, 'pk' + key + 'n' + str(n),
+                    {**d, **it, 'kind': 'fee'}) for n, it in enumerate(items)]
+        if not all(receipts):
+            raise Problem('err.paymentChanged', 'This payment was already saved with different details. Check the original receipt before starting a new payment.')
         return {'batch': receipts[0].get('batch'), 'total': round(sum(r['amount'] for r in receipts), 2), 'receipts': receipts, 'again': True}
     built = []
     for it in items:
@@ -1249,7 +1273,7 @@ def cached_read(fn):
 
 
 @cached_read
-def risk_list(store, scopes=None, limit=500):
+def risk_list(store, scopes=None, limit=500, include_money=True):
     """Students who may drop out, highest score first, with reasons - the "call today" list."""
     ens, sess, att, marks, recent = _risk_inputs(store)
     if scopes is not None:
@@ -1265,18 +1289,19 @@ def risk_list(store, scopes=None, limit=500):
             continue
         frm = e.get('from') or ''
         statuses = [att.get((sid, e['studentId']), 'absent') for sid, d in sess.get(g['id'], []) if d >= frm]
-        b = bals.get(e['id']) or {}
+        b = (bals.get(e['id']) or {}) if include_money else {}
         score, why = D.risk(statuses, marks.get((e['studentId'], g.get('teacherId')), []), b.get('balance', 0), b.get('unit', 0),
                             e['studentId'] in recent)
         if score >= cfg['riskCall']:
             out.append({'studentId': e['studentId'], 'student': students.get(e['studentId']), 'groupId': g['id'], 'teacherId': g.get('teacherId'),
-                        'score': score, 'why': why, 'followed': e['studentId'] in recent, 'balance': b.get('balance', 0),
+                        'score': score, 'why': why, 'followed': e['studentId'] in recent,
+                        **({'balance': b.get('balance', 0)} if include_money else {}),
                         'last': statuses[-6:], 'level': 'high' if score >= cfg['riskHigh'] else 'medium'})
     out.sort(key=lambda r: -r['score'])
     return out[:limit]
 
 
-def risk_for_student(store, student_id, d=None, scopes=None):
+def risk_for_student(store, student_id, d=None, scopes=None, include_money=True):
     ens, sess, att, marks, recent = _risk_inputs(store, {student_id})
     groups = {g['id']: g for g in store.rows('groups', scopes=scopes)}
     ens = [e for e in ens if scopes is None or e.get('teacherId') in scopes]
@@ -1288,7 +1313,7 @@ def risk_for_student(store, student_id, d=None, scopes=None):
         if not g:
             continue
         statuses = [att.get((sid, student_id), 'absent') for sid, dd in sess.get(g['id'], []) if dd >= (e.get('from') or '')]
-        b = bals.get(e['id']) or {}
+        b = (bals.get(e['id']) or {}) if include_money else {}
         score, why = D.risk(statuses, marks.get((student_id, g.get('teacherId')), []), b.get('balance', 0), b.get('unit', 0), student_id in recent)
         if score > worst['score']:
             worst = {'score': score, 'why': why, 'groupId': g['id']}
@@ -1334,8 +1359,8 @@ def student_file(store, student_id, scopes=None):
         marks = [m for m in marks if m['teacherId'] in allowed]
     for m in marks:
         m['rank'], m['of'] = exam_rank(store, m['examId'], student_id)
-    fus = store.rows('followups', 'student_id=?', (student_id,))
-    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id)) if st.get('familyKey') else []
+    fus = store.rows('followups', 'student_id=?', (student_id,), scopes)
+    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id), scopes) if st.get('familyKey') else []
     held = {}
     with store.lock:
         for e in ens:
@@ -1824,7 +1849,7 @@ def advice(store, scopes=None, perms=(), d=None, now=None, user_id=None, node_id
             add('absentees', 'warn', 'followup?tab=messages', 'chat', n=n)
     # 5. students about to leave
     if can({'followup.view'}):
-        risky = risk_list(store, scopes, limit=2000)
+        risky = risk_list(store, scopes, limit=2000, include_money=can({'money.view', 'money.collect'}))
         high = len({r['studentId'] for r in risky if r['level'] == 'high' and not r['followed']})
         if high:
             add('riskHigh', 'bad', 'followup', 'bell', n=high)

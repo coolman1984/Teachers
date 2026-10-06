@@ -370,7 +370,7 @@
     mount: function (root, ctx) {
       function paint() { var rows = filtered(); root.querySelector('[data-sum]').innerHTML = summary(rows); root.querySelector('[data-rows]').innerHTML = table(rows); }
       paint();
-      if (HS.can(['money.view', 'money.collect', 'followup.view']) && !money) HS.get('/api/c/balances').then(function (r) { money = r; if (root.isConnected !== false) paint(); }, function () {});
+      if (HS.can(['money.view', 'money.collect']) && !money) HS.get('/api/c/balances').then(function (r) { money = r; if (root.isConnected !== false) paint(); }, function () {});
       if (HS.can('followup.view') && !risky) HS.get('/api/c/risk').then(function (r) { risky = {}; r.forEach(function (x) { if (!risky[x.studentId] || x.level === 'high') risky[x.studentId] = x.level; }); if (root.isConnected !== false) paint(); }, function () {});
       root.addEventListener('input', HS.debounce(function (e) { if (e.target.dataset.f === 'q') { F.q = e.target.value; F.limit = PAGE; paint(); } }, 120));
       root.addEventListener('change', function (e) { var k = e.target.dataset.f; if (k && k !== 'q') { F[k] = e.target.value; F.limit = PAGE; paint(); } });

@@ -65,6 +65,8 @@ async function parent(request, env, url, parts) {
   if (!TOKEN_RE.test(token || '')) throw new Fail(404, 'Not found');
   const th = await sha256Hex(token);
   if (await limited(env, 'ip:' + ip, LIMIT_IP) || await limited(env, 'tk:' + th, LIMIT_TOKEN)) throw new Fail(429, 'Too many requests', { 'Retry-After': '60' });
+  if (await env.DB.prepare('SELECT token_hash FROM revoked_links WHERE token_hash = ?').bind(th).first())
+    throw new Fail(410, 'This link was stopped by the centre', { revoked: true });
   const card = await env.DB.prepare('SELECT body, cancelled, expires_at, updated_at FROM cards WHERE token_hash = ?').bind(th).first();
   if (!card) throw new Fail(404, 'Unknown link');
   if (card.expires_at && card.expires_at < now()) throw new Fail(410, 'This link has expired', { expired: true });
@@ -105,18 +107,30 @@ async function office(request, env, url, parts) {
     const d = json(), stmts = [];
     for (const c of (d.cards || []).slice(0, 500)) {
       const owner = c.studentId;
-      if (!/^[0-9a-f]{64}$/.test(c.tokenHash || '') || !owner) throw new Fail(400, 'Bad card');
+      if (!/^[0-9a-f]{64}$/.test(c.tokenHash || '') || typeof owner !== 'string' || !owner || owner.length > 200) throw new Fail(400, 'Bad card');
       const body = JSON.stringify(c.body || {});
       if (body.length > MAX_CARD) throw new Fail(400, 'Card too large');
-      stmts.push(env.DB.prepare('INSERT INTO cards(token_hash, student_id, body, cancelled, expires_at, updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(token_hash) DO UPDATE SET student_id = excluded.student_id, body = excluded.body, cancelled = excluded.cancelled, expires_at = excluded.expires_at, updated_at = excluded.updated_at')
-        .bind(c.tokenHash, String(owner), body, c.cancelled ? 1 : 0, c.expiresAt || null, now()));
+      // Run together in one transaction: a revoked uploader cannot revoke the replacement, even after cleanup.
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) SELECT token_hash, ? FROM cards WHERE student_id = ? AND token_hash <> ? AND NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?)')
+        .bind(now(), owner, c.tokenHash, c.tokenHash));
+      stmts.push(env.DB.prepare("UPDATE cards SET body = '{}', cancelled = 1, expires_at = ?, updated_at = ? WHERE student_id = ? AND token_hash <> ? AND NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?)")
+        .bind(now() + 30 * 86400, now(), owner, c.tokenHash, c.tokenHash));
+      stmts.push(env.DB.prepare('INSERT INTO cards(token_hash, student_id, body, cancelled, expires_at, updated_at) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM revoked_links WHERE token_hash = ?) ON CONFLICT(token_hash) DO UPDATE SET student_id = excluded.student_id, body = excluded.body, cancelled = excluded.cancelled, expires_at = excluded.expires_at, updated_at = excluded.updated_at')
+        .bind(c.tokenHash, owner, body, c.cancelled ? 1 : 0, c.expiresAt || null, now(), c.tokenHash));
     }
     // a replaced or removed link keeps an empty "stopped" row for 30 days, so the parent reads "this link no longer works"
     // (and the phone drops its saved copy) instead of "not ready yet"; the daily cleanup deletes it afterwards
     for (const h of (d.remove || []).slice(0, 500)) {
       if (!/^[0-9a-f]{64}$/.test(String(h))) continue;
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) VALUES (?,?)').bind(String(h), now()));
       stmts.push(env.DB.prepare("INSERT INTO cards(token_hash, student_id, body, cancelled, expires_at, updated_at) VALUES(?, '', '{}', 1, ?, ?) ON CONFLICT(token_hash) DO UPDATE SET body = '{}', cancelled = 1, expires_at = excluded.expires_at, updated_at = excluded.updated_at")
         .bind(String(h), now() + 30 * 86400, now()));
+    }
+    for (const id of (d.revokeStudents || []).slice(0, 500)) {
+      if (typeof id !== 'string' || !id || id.length > 200) throw new Fail(400, 'Bad student');
+      stmts.push(env.DB.prepare('INSERT OR IGNORE INTO revoked_links(token_hash, at) SELECT token_hash, ? FROM cards WHERE student_id = ?').bind(now(), id));
+      stmts.push(env.DB.prepare("UPDATE cards SET body = '{}', cancelled = 1, expires_at = ?, updated_at = ? WHERE student_id = ?")
+        .bind(now() + 30 * 86400, now(), id));
     }
     if (stmts.length) await env.DB.batch(stmts);
     return reply(200, { ok: true, cards: (d.cards || []).length, removed: (d.remove || []).length });

@@ -18,7 +18,7 @@ class FakeGateway:
     """Records what the office PC asks of the gateway; can be switched off like a dead internet connection."""
 
     def __init__(self):
-        self.cards, self.removed, self.up = {}, [], True
+        self.cards, self.removed, self.revoked_students, self.up = {}, [], [], True
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -42,6 +42,9 @@ class FakeGateway:
                 for h in body.get('remove', []):
                     outer.cards.pop(h, None)
                     outer.removed.append(h)
+                for sid in body.get('revokeStudents', []):
+                    outer.revoked_students.append(sid)
+                    outer.cards = {h: c for h, c in outer.cards.items() if c.get('studentId') != sid}
                 self.reply(200, {'ok': True})
 
             def do_GET(self):
@@ -112,6 +115,29 @@ class ParentLinkTest(unittest.TestCase):
             x for x in self.c.get('/api/state')['students'] if x['id'] == 'pl-2')['ver']}]})
         self.link('pl-1')                                                     # wakes the sender
         wait_until(lambda: h in self.gw.removed, 30, what='the removed student card')
+
+    def test_a_new_gateway_receives_unchanged_cards(self):
+        _, h = self.link('pl-1')
+        wait_until(lambda: h in self.gw.cards, 30, what='the first card')
+        other = FakeGateway()
+        self.addCleanup(other.close)
+        self.c.post('/api/gateway/save', {'url': other.url, 'pollSeconds': 600})
+        self.c.post('/api/gateway/send', {})
+        self.assertIn(h, other.cards, 'moving the mailbox must republish unchanged cards')
+
+    def test_a_removed_student_is_revoked_without_this_pcs_card_cache(self):
+        _, h = self.link('pl-2')
+        wait_until(lambda: h in self.gw.cards, 30, what='the card')
+        self.s.stop()
+        os.remove(os.path.join(self.s.data_dir, 'gateway-cards.json'))
+        self.s.start()
+        self.c = self.s.client()
+        self.c.login(*__import__('harness').ADMIN)
+        row = next(x for x in self.c.get('/api/state')['students'] if x['id'] == 'pl-2')
+        self.c.post('/api/commit', {'label': 'delete', 'ops': [{'e': 'students', 'id': row['id'], 'op': 'del', 'ver': row['ver']}]})
+        self.c.post('/api/gateway/send', {})
+        self.assertIn('pl-2', self.gw.revoked_students)
+        self.assertNotIn(h, self.gw.cards)
 
 
 if __name__ == '__main__':

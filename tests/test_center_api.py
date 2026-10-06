@@ -383,7 +383,15 @@ class CenterApiTest(CenterFixture):
             self.assertNotIn('#', first['url'])
             token = first['url'].rsplit('/', 1)[1]
             row = next(s for s in self.c.get('/api/state')['students'] if s['id'] == self.student)
-            self.assertEqual(row['portalHash'], gwc.token_hash(token))
+            self.assertNotIn('portalHash', row)
+            self.assertNotIn('portalNonce', row)
+            import sqlite3
+            db = sqlite3.connect(os.path.join(self.server.data_dir, 'center.db'))
+            try:
+                saved = db.execute('SELECT portal_hash FROM students WHERE id=?', (self.student,)).fetchone()[0]
+            finally:
+                db.close()
+            self.assertEqual(saved, gwc.token_hash(token))
             replacement = self.c.post('/api/c/portal', {'studentId': self.student, 'replace': True})
             self.assertNotEqual(first['url'], replacement['url'])
             client = self.scoped_client(['messages.send', 'students.view'])

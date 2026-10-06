@@ -71,7 +71,7 @@ reversible; unit test for logic, browser test for each new screen flow, regressi
 
 ---
 
-## Part C — What exists now (verified 2026-10-04, commit `1f295f9`)
+## Part C — Architecture and current implementation (updated 2026-10-05)
 
 ### C1. Origin
 The repository is a fork of the owner's **Trip Orders** engine (`coolman1984/Yousef-Transportation`, commit
@@ -189,15 +189,15 @@ Plus `POST /api/import/preview?name=&grade=&group=` (raw file body) and `GET /ap
 
 Errors: HTTP 400 `{error, key, vars}` from `center.Problem` → the page shows `HS.t(key, vars)`; 403 `{error}`; 409 conflict.
 
-### C7. Known gaps in the current code (fix in task P1)
-1. **P1.1 implemented 2026-10-04:** startup assets now exist in the prescribed order, with centre scaffolds and the shared data wrapper in `ui.js`. Centre navigation and visual verification remain dependent on P1.2.
+### C7. Implementation status and invariants
+1. P1.1: startup assets exist in the prescribed order; the centre pages and shared data wrapper are implemented and browser tested.
 2. P1.2 implemented: centre pages, permission-aware palette, shortcuts, tour and onboarding.
-3. P1 cleanup implemented: overview/lists are centre scaffolds; access scopes are teachers. Full lists/settings/overview follow in P3 and P5.
+3. Lists, settings and the command-centre overview are implemented; account scopes refer to teachers.
 4. P1.5/P1.6 implemented: centre dictionaries and updated design tests pass.
-5. P1.4 implemented: two-second delta polling with fallback and deferred repaint; Chrome timing verification pending.
+5. P1.4: two-second delta polling with fallback and deferred repaint; `test_acceptance` checks propagation in under three seconds without a full-state request.
 6. Done 2026-10-05: `tests/test_e2e_browser.py` tests centre flows (E07).
 7. Done 2026-10-05: `gateway/public/*` is the parent page, read only (P7).
-8. `center.dashboard()` calls `risk_list()` on every load (slow for big centres) → cache by data version (P2.6).
+8. P2.6: scoped risk/dashboard caches are bounded and invalidated by store version; sample tests check response-size and latency budgets.
 9. Fixed 2026-10-05 (A03): `js/quick.js` exists.
 10. Lock order: `center.pay()` holds `store.lock` then `ctx.letter()` takes `journal.lock` (same order as `store._save`). Keep this order everywhere; never take `store.lock` while holding `journal.lock`.
 11. Done 2026-10-05: `README.md`, `.claude/skills/hessa/SKILL.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md`, guides per role (P10).
@@ -569,7 +569,7 @@ node --test tests/test_frontend.js                                              
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 python3 tools/build_windows.py --check                                            # every file the installer ships
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx   # always (~2 min)
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx test_integration   # always (~2 min)
 python3 -m unittest test_sample test_multinode test_gateway_parent test_recovery                                  # before a PR (~5 min)
 HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance        # when screens changed
 cd ../gateway && node --test --no-warnings test/gateway.test.js                                                   # when gateway changed
@@ -636,4 +636,6 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | Joining a month group late: from which day is “next month” the default | default: day 21 |
 
 ### P2 implementation evidence (2026-10-04)
-Domain/API regression modules now exist. Centre operations are covered through real local HTTP; offline journal merging has a separate test_center_multinode module. Real process/proxy partition checks and sample response benchmarks remain pending. Money and attendance must use dedicated /api/c operations, never generic commits.
+Domain/API regression modules cover centre operations through real local HTTP. `test_center_multinode` checks signed offline merging,
+`test_center_network` exercises real process/proxy partitions, and `test_sample` checks response benchmarks. Money and attendance must
+use dedicated /api/c operations, never generic commits. Hardware/account acceptance still follows TASKS.md.
