@@ -426,7 +426,15 @@ class DoorTest(BrowserBase):
         pg = self.open({'lang': 'ar'})
         pg.goto(self.S.base + '/#/money')
         pg.wait_for_selector('[data-mtab]')
-        pg.click('[data-act="help-here"]')                                  # "?" opens the topic of the current page
+        pg.click('[data-act="help-here"]')                                  # "?" opens the guides of this page first
+        pg.wait_for_selector('.guide-cat:first-of-type #guide-expense')
+        pg.click('[data-guide="expense"]')                                  # the coach opens the page and outlines the button
+        pg.wait_for_selector('#coach .coach-card')
+        pg.click('#coach [data-cnext]')
+        pg.wait_for_selector('[data-expense].coach-hot')
+        pg.click('#coach [data-cx]')
+        pg.wait_for_selector('.coach-hot', state='detached')
+        pg.goto(self.S.base + '/#/help?topic=money')                        # questions and answers of a topic
         pg.wait_for_selector('#topic-money details[open]')
         pg.fill('#help-q', 'الوردیه')                                        # Persian yeh + taa marbuta spelled as heh
         pg.wait_for_timeout(300)

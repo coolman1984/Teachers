@@ -754,3 +754,23 @@ class CenterMoneyEdgeTest(CenterFixture):
         self.assertEqual((line['groupId'], line['due']), (self.group, 50))
         self.assertNotIn('parentMobile', card['family'][0])                  # no contact details for the siblings
         self.assertEqual(self.c.get('/api/c/card?id=' + sib)['family'][0]['id'], self.student)
+
+    def test_37_brothers_and_sisters_are_found_by_the_parent_mobile(self):
+        """Nothing on the screens set a family, so "Pay for brothers and sisters" only appeared for the sample centre:
+        students with the same parent mobile (typed any way) are now one family; another number is not."""
+        a, b, other = self.p + '-fa', self.p + '-fb', self.p + '-fo'
+        mobile = '0109' + str(1000000 + type(self).serial)[-7:]
+        self.put([('students', a, {'name': 'Family A ' + self.p, 'gradeCode': 'S1', 'system': 'thanaweya', 'parentMobile': mobile, 'consent': True, 'active': True}),
+                  ('students', b, {'name': 'Family B ' + self.p, 'gradeCode': 'S1', 'system': 'thanaweya', 'parentMobile': '+20 ' + mobile[1:], 'consent': True, 'active': True}),
+                  ('students', other, {'name': 'Other ' + self.p, 'gradeCode': 'S1', 'system': 'thanaweya', 'parentMobile': '0128' + mobile[4:], 'consent': True, 'active': True})])
+        for sid in (a, b, other):
+            self.c.post('/api/c/enroll', {'studentId': sid, 'groupId': self.group})
+        self.assertEqual([x['id'] for x in self.c.get('/api/c/card?id=' + a)['family']], [b])
+        self.assertEqual([x['id'] for x in self.c.get('/api/c/card?id=' + b)['family']], [a])
+        self.assertEqual(self.c.get('/api/c/card?id=' + other)['family'], [])
+        self.assertEqual([x['id'] for x in self.c.get('/api/c/student?id=' + a)['family']], [b])
+        # a new number moves the student out of the family
+        row = self.c.get('/api/c/student?id=' + b)['student']
+        row['parentMobile'] = '0155' + mobile[4:]
+        self.put([('students', b, row)])
+        self.assertEqual(self.c.get('/api/c/card?id=' + a)['family'], [])

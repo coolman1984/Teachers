@@ -392,7 +392,7 @@
     else if (a === 'theme') HS.prefs.toggleTheme();
     else if (a === 'lang') HS.prefs.toggleLang();
     else if (a === 'keys') showKeys();
-    else if (a === 'help-here') HS.go('help?topic=' + (HS.helpTopic ? HS.helpTopic(HS.route().path) : 'start'));
+    else if (a === 'help-here') HS.go('help?view=guides&for=' + HS.route().path);   // the guides of this page first
     else if (a === 'collapse') toggleCollapse();
     else if (a === 'account') openAccount();
     else if (a === 'password') changePassword();

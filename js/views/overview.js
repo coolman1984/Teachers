@@ -17,7 +17,8 @@
     root.addEventListener('click', function (e) {
       var button = e.target.closest('[data-sample]'); if (!button) return;
       var removing = button.dataset.sample === 'delete';
-      U.confirm({ title: HS.t(removing ? 'sample.delete' : 'sample.load'), body: HS.t(removing ? 'sample.deleteConfirm' : 'sample.loadConfirm'), danger: removing })
+      U.confirm({ title: HS.t(removing ? 'sample.delete' : 'sample.load'), body: HS.t(removing ? 'sample.deleteConfirm' : 'sample.loadConfirm'), danger: removing,
+        ok: HS.t(removing ? 'sample.delete' : 'sample.load') })   // the button says what it does (it said "Done")
         .then(function (ok) { if (!ok) return;
           return U.run(HS.post('/api/c/sample' + (removing ? '/delete' : ''), {}), 'common.saved', button).then(function () {
             if (HS.dataTab) HS.dataTab.reset(); return HS.data.load();

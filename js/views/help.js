@@ -36,16 +36,29 @@
   HS.views.help = {
     render: function (ctx) {
       var list = visible(), q = (ctx && ctx.route && ctx.route.q) || {};
-      return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('help.title')) + '</h1><p>' + HS.esc(HS.t('help.sub')) + '</p></div>' +
+      // three ways in: step-by-step guides (default), situations from real centres, questions and answers
+      var view = q.view || (q.topic || q.q ? 'faq' : 'guides');
+      var seg = '<div class="seg help-views" role="tablist">' + ['guides', 'situations', 'faq'].map(function (v) {
+        return '<button type="button" role="tab" data-hview="' + v + '" aria-pressed="' + (v === view) + '">' + HS.icon(v === 'guides' ? 'compass' : v === 'situations' ? 'life' : 'help', 'sm') + HS.esc(HS.t('help.view.' + v)) + '</button>'; }).join('') + '</div>';
+      var head = '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('help.title')) + '</h1><p>' + HS.esc(HS.t('help.sub')) + '</p></div>' +
           '<button class="btn" data-a="tour">' + HS.icon('play', 'sm') + HS.esc(HS.t('help.tour.start')) + '</button>' +
-          '<button class="btn" data-a="slides">' + HS.icon('present', 'sm') + HS.esc(HS.t('help.slides.start')) + '</button></div>' +
-        '<div class="help-search">' + HS.icon('search', 'lg') + '<input class="input" id="help-q" type="search" placeholder="' + HS.esc(HS.t('help.search')) + '" aria-label="' + HS.esc(HS.t('help.search')) + '" value="' + HS.esc(q.q || '') + '"></div>' +
+          '<button class="btn" data-a="slides">' + HS.icon('present', 'sm') + HS.esc(HS.t('help.slides.start')) + '</button></div>' + seg;
+      if (view === 'guides' && HS.guides) return head + '<div class="stack">' + HS.guides.html(q.for || '') + '</div>';
+      if (view === 'situations' && HS.guides) return head + '<div class="stack">' + HS.guides.situationsHTML() + '</div>';
+      return head + '<div class="help-search">' + HS.icon('search', 'lg') + '<input class="input" id="help-q" type="search" placeholder="' + HS.esc(HS.t('help.search')) + '" aria-label="' + HS.esc(HS.t('help.search')) + '" value="' + HS.esc(q.q || '') + '"></div>' +
         '<nav class="help-cards" aria-label="' + HS.esc(HS.t('help.topics')) + '">' + list.map(function (t) {
           return '<a href="#/help?topic=' + t.id + '" data-jump="' + t.id + '" class="help-card' + (q.topic === t.id ? ' on' : '') + '">' + HS.icon(t.icon) + '<span>' + HS.esc(HS.t('hq.' + t.id)) + '</span></a>'; }).join('') + '</nav>' +
         '<div class="stack" id="help-topics">' + list.map(function (t) { return topicHTML(t, q.topic === t.id); }).join('') + '</div>' +
         '<div class="empty" id="faq-none" hidden><div class="art">' + HS.icon('search', 'lg') + '</div><h3>' + HS.esc(HS.t('help.none')) + '</h3><p>' + HS.esc(HS.t('help.none.b')) + '</p></div>';
     },
     mount: function (root, ctx) {
+      root.addEventListener('click', function (e) {
+        var v = e.target.closest('[data-hview]'); if (v) HS.go('help?view=' + v.dataset.hview);
+      });
+      var gid = ctx && ctx.route && ctx.route.q.guide, g = gid && root.querySelector('#guide-' + gid);
+      if (g) { g.open = true; setTimeout(function () { if (g.scrollIntoView) g.scrollIntoView({ block: 'start' }); }, 50); }
+      if (!root.querySelector('#help-q')) { HS.$$('[data-a="tour"]', root).forEach(function (b) { b.addEventListener('click', function () { HS.go('overview'); setTimeout(HS.tour.start, 350); }); });
+        HS.$$('[data-a="slides"]', root).forEach(function (b) { b.addEventListener('click', function () { HS.slides.open(); }); }); return; }
       root.querySelector('[data-a="tour"]').addEventListener('click', function () { HS.go('overview'); setTimeout(HS.tour.start, 350); });
       root.querySelector('[data-a="slides"]').addEventListener('click', function () { HS.slides.open(); });
       var q = root.querySelector('#help-q');

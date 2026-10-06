@@ -122,6 +122,9 @@ def _clean_question(q):
 
 
 # ---------------------------------------------------------------- cleaning generic saves (lists edited in the pages)
+FAMILY_BY_MOBILE = 'tel:'
+
+
 def normalize_ops(store, ops, pc_index=0):
     """Clean names and mobiles on the server, give new students a code, check grades, timetables and the limits of
     school support groups. Refuses duplicates of things that must be unique (a student code, a teacher)."""
@@ -187,6 +190,12 @@ def normalize_ops(store, ops, pc_index=0):
             for f in ('mobile', 'parentMobile', 'parentMobile2'):
                 if row.get(f):
                     row[f] = D.norm_mobile_eg(row[f])[0]
+        if e == 'students' and 'parentMobile' in row:
+            # brothers and sisters = the same parent mobile. Nothing on the screens ever set the family, so the family
+            # payment at the door only worked for the sample centre; a family given by hand (or the sample's) is kept
+            pm, ok = D.norm_mobile_eg(row.get('parentMobile') or '')
+            if not row.get('familyKey') or str(row['familyKey']).startswith(FAMILY_BY_MOBILE):
+                row['familyKey'] = FAMILY_BY_MOBILE + pm if ok and pm else ''
         if e == 'students':
             g = D.check_grade(row.get('gradeCode'), row.get('system'), row.get('track'))
             if g:
@@ -436,13 +445,27 @@ def find_students(store, q, scopes=None, limit=12):
     return out[:limit]
 
 
-def _family_lines(store, st, d, groups, scopes):
-    """The brothers and sisters of the student (same family key) with what each owes per group, so one parent can pay for
-    all of them at once. Only name, code and money - never contact details."""
-    if not st.get('familyKey'):
+def family_of(store, st, scopes, active_only=False):
+    """Brothers and sisters: the same family key, or - for a family taken from the parent's mobile, and for students saved
+    before the key existed - the same parent mobile."""
+    key = st.get('familyKey') or ''
+    pm, ok = D.norm_mobile_eg(st.get('parentMobile') or '')
+    where, args = [], []
+    if key:
+        where.append('family_key=?'); args.append(key)
+    if ok and pm and (not key or key.startswith(FAMILY_BY_MOBILE)):
+        where.append("(parent_mobile=? AND (family_key IS NULL OR family_key='' OR family_key=?))"); args += [pm, FAMILY_BY_MOBILE + pm]
+    if not where:
         return []
+    return store.rows('students', '(' + ' OR '.join(where) + ') AND id<>?' + (' AND (active=1 OR active IS NULL)' if active_only else ''),
+                      tuple(args) + (st['id'],), scopes)
+
+
+def _family_lines(store, st, d, groups, scopes):
+    """The brothers and sisters of the student (same family) with what each owes per group, so one parent can pay for
+    all of them at once. Only name, code and money - never contact details."""
     out = []
-    for sib in store.rows('students', 'family_key=? AND id<>? AND (active=1 OR active IS NULL)', (st['familyKey'], st['id']), scopes):
+    for sib in family_of(store, st, scopes, active_only=True):
         ens = [e for e in active_enrollments(store, sib['id'], d) if scopes is None or e.get('teacherId') in scopes]
         bals = balances(store, ens, d, groups, {sib['id']: sib})
         lines = [{'enrollmentId': e['id'], 'groupId': e['groupId'], 'balance': bals[e['id']]['balance'], 'due': bals[e['id']]['due'],
@@ -1365,7 +1388,7 @@ def student_file(store, student_id, scopes=None):
     for m in marks:
         m['rank'], m['of'] = exam_rank(store, m['examId'], student_id)
     fus = store.rows('followups', 'student_id=?', (student_id,), scopes)
-    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id), scopes) if st.get('familyKey') else []
+    family = family_of(store, st, scopes)
     held = {}
     with store.lock:
         for e in ens:

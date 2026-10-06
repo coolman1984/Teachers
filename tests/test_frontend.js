@@ -487,3 +487,34 @@ test('a new person: the profile list shows the profile whose ticks are shown; re
     assert.equal(HS.roleLabel(''), HS.t('acc.custom'));
   }
 });
+
+test('every step-by-step guide and situation is complete in both languages and names real buttons', () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang; HS.prefs.data = {}; HS.data.state = { settings: {} };
+    const G = HS.guides;
+    assert.ok(G.list.length >= 30 && G.situations.length >= 40);
+    const ids = new Set();
+    const texts = [];
+    for (const g of G.list) {
+      assert.ok(!ids.has(g.id), 'duplicate guide ' + g.id); ids.add(g.id);
+      assert.ok(G.cats.includes(g.cat), g.id);
+      for (const k of ['t', 'd', 'ok']) { assert.ok(HS.has('gd.' + g.id + '.' + k), lang + ' gd.' + g.id + '.' + k); texts.push(HS.t('gd.' + g.id + '.' + k)); }
+      assert.ok(!HS.has('gd.' + g.id + '.' + (g.steps.length + 1)), 'text for a step that does not exist: ' + g.id);
+      g.steps.forEach((s, i) => {
+        assert.ok(G.kinds[s.k], g.id + ' kind ' + s.k);
+        assert.ok(HS.has('gd.' + g.id + '.' + (i + 1)), lang + ' gd.' + g.id + '.' + (i + 1)); texts.push(HS.t('gd.' + g.id + '.' + (i + 1)));
+      });
+    }
+    for (const x of G.situations) { for (const k of ['q', 'a']) { assert.ok(HS.has('sit.' + x[0] + '.' + k), lang + ' sit.' + x[0]); texts.push(HS.t('sit.' + x[0] + '.' + k)); } }
+    for (const t of texts) for (const m of t.matchAll(/\[\[([^\]]+)\]\]/g)) assert.ok(HS.has(m[1]), lang + ': [[' + m[1] + ']] is not a dictionary key');
+    // the library: escaped, permission-aware, nothing missing
+    HS.me = { perms: ['door.use', 'money.collect'] };
+    const html = G.html('door');
+    assert.ok(html.includes('data-guide="checkin"') && html.includes('data-guide="pay"'));
+    assert.ok(!html.includes('data-guide="people"'));                     // administrator guides only for administrators
+    assert.ok(!/undefined|\[\[|gd\.[a-z]+\.\d/.test(html), 'missing text in the guide library');
+    assert.ok(G.rich('<b>[[door.checkin]]</b>').startsWith('&lt;b&gt;<b class="ui-name">«' + HS.esc(HS.t('door.checkin'))));
+    const sit = G.situationsHTML();
+    assert.ok(!/undefined|\[\[|sit\.[a-zA-Z]+\.[qa]/.test(sit));
+  }
+});
