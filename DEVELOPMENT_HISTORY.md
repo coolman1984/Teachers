@@ -1,6 +1,26 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Isolate both PCs in the restore regression (2026-10-06)
+
+**Why/source:** while validating the form integration on `codex/form-layout-sync-20261006`
+(form commit `e69d24c`, base `b0f3950`), the 294-test source gate failed the inherited T30 restore
+scenario. The same failure reproduced in isolation; instrumentation also produced a passing run,
+consistent with a timing race. Each harness proxy blocks only incoming traffic: cutting PC1's
+proxy still lets PC1 send its supposedly offline record to the administrator. A restore may
+legitimately remove a known record absent from the backup; the intended test concerns unseen work.
+**Fix:** cut both endpoints, assert the offline record is absent on the restoring PC before and
+after restore, then reconnect both. Keep the existing convergence, surviving-record and audit
+assertions. No application, restore or sync behaviour changes and no new user-visible strings.
+**Evidence:** corrected T30 passed in three fresh processes (15.720s, 15.739s, 13.848s);
+all 35 multi-PC tests passed in 605.719s. An initial attempt to repeat the same class within one
+unittest process reused class-level databases and caused duplicate-record conflicts; fresh
+processes correctly isolate repetitions. Frontend 26/26, lint, installer preflight and whitespace
+checks passed. Browser execution remains subject to the PR's real Chrome gate before merge.
+**Lesson:** an incoming-port proxy is not a bidirectional network disconnection. Assert isolation
+in a concurrent-restore scenario instead of relying on timing. This supports L1 source validation;
+the field recovery drill remains FS3/L4.
+
 ## Publish the pending form readability improvements (2026-10-06)
 
 **Why/source:** the owner requested push, merge and main synchronization. Existing uncommitted

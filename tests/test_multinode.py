@@ -613,12 +613,18 @@ class T30_Restore(Base):
         a = get_area(ac, 'R2')
         ac.post('/api/commit', {'label': 'oops', 'ops': [{'e': 'teachers', 'id': 'R2', 'op': 'del', 'ver': a['ver']}]})
         self.converged()
+        # Each proxy controls incoming connections only. Cut both endpoints so
+        # pc1 cannot send its offline work to the restoring PC during the backup.
+        self.unplug(0)
         self.unplug(1)
         edit(c1, 'R2', capacity=77) if get_area(c1, 'R2') else None
         c1.post('/api/commit', {'label': 'offline work', 'ops': [area_op('R3', 'Made on pc1 meanwhile')]})
+        self.assertIsNone(get_area(ac, 'R3'), 'offline work must be isolated before restore')
         audit_before = ac.get('/api/audit?limit=1000')['total']
         r = ac.post('/api/backups/restore', {'name': name})
         self.assertTrue(r['safety'].endswith('pre-restore.db'))
+        self.assertIsNone(get_area(ac, 'R3'), 'offline work must remain isolated during restore')
+        self.plug(0)
         self.plug(1)
         self.converged()
         for c in self.clients:
