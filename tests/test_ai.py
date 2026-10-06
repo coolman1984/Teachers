@@ -238,9 +238,11 @@ class AiJourneyTest(AiSetup, unittest.TestCase):
         pg.click('.dialog [data-aigo]')
         pg.wait_for_selector('.dialog [data-aiadd="2"]')
         self.assertEqual(self.c.get('/api/state')['questions'], [])
-        pg.click('.dialog [data-aiadd="0"]')                                           # as it is
-        pg.click('.dialog [data-aiedit="1"]')                                          # corrected first
+        pg.click('.dialog [data-aiedit="1"]')                                          # a correction is started...
         pg.fill('.dialog [data-aied="1"] [data-k=text]', 'Speed equals distance divided by what?')
+        pg.click('.dialog [data-aiadd="0"]')                                           # ...another one is added as it is
+        pg.wait_for_selector('.dialog .qb-done')                                       # the list was drawn again (CI regression)
+        self.assertEqual(pg.input_value('.dialog [data-aied="1"] [data-k=text]'), 'Speed equals distance divided by what?')
         pg.click('.dialog [data-aiadd="1"]')
         pg.click('.dialog [data-aidrop="2"]')                                          # not good enough
         pg.wait_for_selector('.dialog >> text=0 of 3 still to check')

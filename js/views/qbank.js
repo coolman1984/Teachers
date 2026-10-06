@@ -176,6 +176,16 @@
       U.run(HS.post('/api/c/ai/questions', { teacherId: m.teacherId, subjectId: m.subjectId, gradeCode: m.gradeCode, topic: m.topic, count: Number(form.count.value) || 5, lang: x.lang, notes: form.notes.value.trim() }), null, b)
         .then(function (r) { b.disabled = false; found = found.concat(r.questions); paint(); }, function (e) { box.innerHTML = ''; paint(); err.hidden = false; err.textContent = U.errorText(e); });
     });
+    // every keystroke of a correction is kept in the question itself: a list redrawn by another save never wipes it
+    function keep(e) {
+      var ed = e.target.closest('[data-aied]'); if (!ed) return;
+      var q = found[Number(ed.dataset.aied)], t = e.target;
+      if (t.dataset.k) q[t.dataset.k] = t.value;
+      else if (t.dataset.c !== undefined) { var ch = q.choices.slice(); while (ch.length < 5) ch.push(''); ch[Number(t.dataset.c)] = t.value; q.choices = ch; }
+      else if (t.type === 'radio' && t.checked) q.answer = t.value;
+    }
+    box.addEventListener('input', keep);
+    box.addEventListener('change', keep);
     box.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
       var i = Number(b.dataset.aiadd !== undefined ? b.dataset.aiadd : b.dataset.aiedit !== undefined ? b.dataset.aiedit : b.dataset.aidrop), q = found[i]; if (!q) return;
