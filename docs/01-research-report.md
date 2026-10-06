@@ -1,3 +1,6 @@
+<!-- first-sale-contract: 2026-10-06 -->
+> **Owner decision — 6 October 2026:** Read [the first-sale contract](../LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
+
 # تقرير البحث الميداني — سوق برامج السناتر والدروس الخصوصية في مصر (أكتوبر 2026)
 
 > ملحوظة أمانة: مواقع المنافسين وصفحات تقييمات المتاجر كانت محجوبة عن بيئة البحث، فالمعلومات عن المنافسين جاية من نتائج البحث وملخصات صفحاتهم الرسمية. "الآلام" مبنية على الأدلة المتاحة + المعرفة الميدانية، ولازم نأكدها بـ 10 مكالمات مع مدرسين وأصحاب سناتر قبل الإطلاق.
