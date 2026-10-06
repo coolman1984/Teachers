@@ -9,5 +9,10 @@ CREATE TABLE IF NOT EXISTS cards (
   expires_at   INTEGER,                   -- unix seconds
   updated_at   INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pages (         -- a teacher's public page: subjects, groups and free seats, never a student
+  slug       TEXT PRIMARY KEY,
+  body       TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS rate (key TEXT NOT NULL, window INTEGER NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (key, window));

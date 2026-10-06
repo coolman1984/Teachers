@@ -85,7 +85,7 @@
       '<button class="btn sm" type="button">' + HS.esc(HS.t('common.cancel')) + '</button></div></div></aside>';
   }
   function settingFields(tab) {
-    var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear']
+    var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear','bookingPhone']
       : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds'];
     return keys.map(function (key) { return { key: key, label: 'set.' + key,
       type: tab === 'centre' ? (key === 'receiptFooter' ? 'textarea' : 'text') : (key === 'autoCheckin' || key === 'doorSounds' ? 'bool' : 'number') }; });

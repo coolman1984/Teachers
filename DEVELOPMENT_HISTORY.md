@@ -2,6 +2,22 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## A public page for every teacher who wants one (review G06, plan P9.3 - 2026-10-06)
+
+**Why:** parents look for a teacher before they come; today the centre sends timetables as pictures in WhatsApp groups that are old
+the next day. **What:** a "Page name" in the teacher's form (for example `mr-ahmed`) publishes `<gateway>/p/mr-ahmed` on the same
+internet mailbox as the parent cards: the teacher's name, bio and subjects, every active group with its days, times, price and the
+seats still free, and a "Book on WhatsApp" button to the centre's booking number (Settings -> Centre). The centre PC sends the page
+only when something on it changed (a signature per page, kept in `gateway-pages.json`); emptying the name takes the page down.
+**Privacy:** only what a poster on the centre's door would show - never a student, a parent, the teacher's own phone or the
+centre's share. **Decisions:** the address is English letters, numbers and dashes, 3-40 characters, unique (`err.slug`,
+`err.slugTaken`); the page is read-only like the parent card; school groups are not listed.
+**Mistakes:** the first Arabic text for free seats ("متبقٍ 3 مقعد") was wrong grammar - now "المقاعد المتبقية: 3"; an English bio
+in the Arabic page put the full stop on the wrong side - the bio now follows its own direction (`dir="auto"`).
+**Evidence:** `tests/test_gateway_parent.test_d_the_teacher_page` (bad and taken names refused, the page on a real local gateway
+shows the group and 28 free seats of 30, no child names or phone numbers, the page address serves the app, removing the name gives
+404) and `gateway/test/gateway.test.js` (pages stored, read publicly, removed); the page checked on a 360 px phone in both languages.
+
 ## Top students picture and certificates (review G05, plan P9.3 - 2026-10-05)
 
 **What:** the exam panel's "Top students" draws a 1080 x 1350 picture on a canvas (centre name, exam, teacher, the first ten with

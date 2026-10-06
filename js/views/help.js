@@ -19,7 +19,7 @@
     { id: 'phone', icon: 'globe', page: 'overview', n: 3 },
     { id: 'devices', icon: 'sync', page: 'devices', perm: 'users.manage', n: 6 },
     { id: 'safety', icon: 'shield', page: 'settings', n: 6 },
-    { id: 'parents', icon: 'link', page: 'settings?tab=gateway', n: 5 },
+    { id: 'parents', icon: 'link', page: 'settings?tab=gateway', n: 6 },
     { id: 'remote', icon: 'globe', page: 'settings?tab=remote', n: 4 },
     { id: 'printing', icon: 'printer', page: 'settings', n: 3 }
   ];

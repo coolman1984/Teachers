@@ -135,6 +135,17 @@ def normalize_ops(store, ops, pc_index=0):
                         raise Problem('err.amount', 'Write a valid amount.')
                     if not math.isfinite(value) or value < 0 or key == 'centerPct' and value > 100:
                         raise Problem('err.amount', 'Write a valid amount.')
+        if e == 'teachers' and 'slug' in row:
+            # the address of the teacher's public page (<gateway>/p/<slug>): empty = no public page
+            slug = str(row.get('slug') or '').strip().lower()
+            if slug and not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])', slug):
+                raise Problem('err.slug', 'Use 3 to 40 English letters, numbers or dashes for the page address.')
+            if slug:
+                with store.lock:
+                    taken = store.conn.execute('SELECT id FROM teachers WHERE deleted=0 AND slug=? AND id<>?', (slug, op.get('id'))).fetchone()
+                if taken:
+                    raise Problem('err.slugTaken', 'Another teacher already uses this page address.')
+            row['slug'] = slug
         if e in ('students', 'teachers'):
             row['nameKey'] = D.key_text(row.get('name'))
             for f in ('mobile', 'parentMobile', 'parentMobile2'):

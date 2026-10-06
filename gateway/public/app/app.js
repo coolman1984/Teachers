@@ -5,6 +5,8 @@
   var P = window.P, app = document.getElementById('app');
   var m = location.pathname.match(/^\/t\/([A-Za-z0-9_-]{16,64})$/);
   var token = m ? m[1] : '';
+  var pm = location.pathname.match(/^\/p\/([a-z0-9-]{3,40})$/);   // a teacher's public page (no student data at all)
+  var slug = pm ? pm[1] : '';
   var S = { card: null, savedAt: '', sentAt: '' };
 
   function num(n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
@@ -94,12 +96,39 @@
       (kind === 'offline' || kind === 'busy' || kind === 'notyet' ? '<button class="btn" data-refresh>' + P.esc(P.t('retry')) + '</button>' : '') + '</section>';
   }
 
+  /* ---------- a teacher's public page ---------- */
+  var DAYS = { ar: ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'], en: ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] };
+  function teacherPage(t) {
+    var subs = (t.subjects || []).map(function (x) { return P.lang === 'en' && x.nameEn ? x.nameEn : x.name; }).join(' · ');
+    var groups = (t.groups || []).map(function (g) {
+      var grade = P.has('grade_' + g.grade) ? P.t('grade_' + g.grade) : (g.grade || '');
+      var times = (g.slots || []).map(function (sl) { return (DAYS[P.lang] || DAYS.ar)[sl.day] + ' ' + sl.start + '–' + sl.end; }).join('، ');
+      var seats = g.seats === null || g.seats === undefined ? '' : g.seats > 0 ? '<span class="tag present">' + P.esc(P.t('seats', { n: g.seats })) + '</span>' : '<span class="tag absent">' + P.esc(P.t('full')) + '</span>';
+      var book = t.booking && g.seats !== 0 ? '<a class="btn" href="https://wa.me/' + P.esc(t.booking) + '?text=' + encodeURIComponent(P.t('bookText', { group: g.name, teacher: t.name })) + '" rel="noopener">' + P.esc(P.t('book')) + '</a>' : '';
+      return '<li><div class="grow"><b>' + P.esc(g.name) + '</b><small>' + P.esc(grade) + (g.fee ? ' · ' + P.esc(money(g.fee)) + ' ' + P.esc(P.t('fee_' + (g.feeType || 'session'))) : '') + '</small><small>' + P.esc(times) + '</small></div>' +
+        '<div class="grp-side">' + seats + book + '</div></li>';
+    }).join('');
+    app.innerHTML = '<header class="top"><div class="brand"><span class="mark" aria-hidden="true"></span><span>' + P.esc(t.center || P.t('app')) + '</span></div><button class="chip" data-lang>' + P.esc(P.t('lang')) + '</button></header>' +
+      '<div class="who"><h1>' + P.esc(t.name) + '</h1>' + (subs ? '<p>' + P.esc(subs) + '</p>' : '') + '</div>' +
+      (t.bio ? section(P.t('about'), '<p class="bio" dir="auto">' + P.esc(t.bio) + '</p>') : '') +
+      section(P.t('groupsOpen'), groups ? '<ul class="rows">' + groups + '</ul>' : '<p class="empty">' + P.esc(P.t('noGroups')) + '</p>');
+  }
+  function loadPage() {
+    app.innerHTML = '<p class="boot">' + P.esc(P.t('loading')) + '</p>';
+    fetch('/api/page/' + slug, { headers: { Accept: 'application/json' } }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (r.ok && d.page) { S.page = d.page; teacherPage(d.page); } else message(r.status === 429 ? 'busy' : 'nopage');
+      });
+    }, function () { message('offline'); });
+  }
+
   /* ---------- loading ---------- */
   function forget() {
     // a stopped link: nothing of this child stays on the phone (the service worker drops its copy too)
     try { if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ forget: location.pathname }); } catch (e) { /* ignore */ }
   }
   function load() {
+    if (slug) { loadPage(); return; }
     if (!token) { message('bad'); return; }
     if (!S.card) app.innerHTML = '<p class="boot">' + P.esc(P.t('loading')) + '</p>';
     fetch('/api/card/' + token, { headers: { Accept: 'application/json' }, cache: 'no-store' }).then(function (r) {
@@ -113,7 +142,7 @@
     }, function () { if (!S.card) message('offline'); });
   }
   app.addEventListener('click', function (e) {
-    if (e.target.closest('[data-lang]')) { P.setLang(P.lang === 'ar' ? 'en' : 'ar'); if (S.card) draw(); else load(); return; }
+    if (e.target.closest('[data-lang]')) { P.setLang(P.lang === 'ar' ? 'en' : 'ar'); if (S.page) teacherPage(S.page); else if (S.card) draw(); else load(); return; }
     if (e.target.closest('[data-refresh]')) load();
   });
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && S.card) load(); });

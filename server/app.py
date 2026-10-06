@@ -931,10 +931,10 @@ class Handler(BaseHTTPRequestHandler):
                     if SECRETS.configured and not d.get('replace'):
                         raise center.Problem('gw.err.exists', 'Secrets already exist. Replacing them stops every existing parent link until the gateway is updated.')
                     SECRETS.generate()
-                    GATE.pushed.clear()
+                    GATE.pushed.clear(); GATE.pushed_pages = {}
                 elif action == 'code':
                     SECRETS.from_code(d.get('code'))
-                    GATE.pushed.clear()
+                    GATE.pushed.clear(); GATE.pushed_pages = {}
                 elif action == 'test':
                     st = GATE.client().status()
                     return self.send(200, {'ok': True, **st})

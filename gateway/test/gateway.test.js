@@ -153,3 +153,18 @@ test('the single-file bundle serves the parent page without any asset binding', 
   assert.match((await get('/app/style.css')).headers.get('content-type'), /css/);
   assert.equal((await get('/sw.js')).headers.get('service-worker-allowed'), '/');
 });
+
+test('a teacher page: published by the office, read by anyone, never a student, taken down on request', async () => {
+  const env = newEnv();
+  const page = { name: 'Synthetic Teacher', bio: 'Physics', groups: [{ name: 'Physics S1', seats: 3, slots: [{ day: 0, start: '17:00', end: '18:30' }] }], booking: '201000000000' };
+  assert.equal((await office(env, 'PUT', '/office/pages', { pages: [{ slug: 'Bad Slug!', body: page }] })).status, 400);
+  assert.equal((await office(env, 'PUT', '/office/pages', { pages: [{ slug: 'mr-synthetic', body: page }] })).status, 200);
+  const r = await call(env, 'GET', '/api/page/mr-synthetic');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).page.groups[0].seats, 3);
+  assert.equal((await call(env, 'GET', '/p/mr-synthetic')).status, 200);       // the page shell
+  assert.equal((await call(env, 'POST', '/api/page/mr-synthetic', { body: '{}' })).status, 405);
+  assert.equal((await call(env, 'GET', '/api/page/nobody-here')).status, 404);
+  assert.equal((await office(env, 'PUT', '/office/pages', { remove: ['mr-synthetic'] })).status, 200);
+  assert.equal((await call(env, 'GET', '/api/page/mr-synthetic')).status, 404);
+});

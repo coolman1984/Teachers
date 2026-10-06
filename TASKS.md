@@ -156,15 +156,16 @@ Add sub-tasks you discover under the task that caused them. Never delete a line;
 - [x] P9.1 Bubble sheets print + phone reading (review G01, G02): answer key in the exam form (Latin or Arabic letters, live count), A4 sheets at true size named per student (code pre-filled) or blank, Arabic or Latin letters; `js/omr.js` reads photos in the browser (Otsu threshold, corner squares, homography, bubble darkness), flags empty/double rows and unknown codes, a person checks before saving; the server counts the score from the answers (never trusts the page). `tests/test_omr.py`: 960/960 bubbles right over 6 turned, perspective, blurred, noisy photos incl. light pen marks; the whole teacher journey in Chromium
   - [ ] Try printed sheets and real phone photos at the centre
 - [ ] P9.2 AI question generator (optional key)
-- [ ] P9.3 Top students image, certificates, teacher page
+- [x] P9.3 Top students image, certificates, teacher page
   - [x] Top students picture (1080 x 1350 PNG, centre colours, medals, first + father's name by default) and certificates for the first three (A4 print) - only from an exam shown to parents, never published by itself (review G05)
+  - [x] Teacher public page `<gateway>/p/<page-name>` (review G06): the page name in the teacher's form (3-40 English letters, numbers, dashes; unique), bio, subjects, active groups with times, price and free seats, a WhatsApp booking button to the centre's booking number (Settings -> Centre). No student, parent or teacher phone; removing the name takes the page down. `test_gateway_parent.test_d_the_teacher_page` + gateway test
 - [ ] P9.4 Video protection (ask the owner first)
 
 ## Phase P10 – Docs and delivery
 - [ ] P10 README, skill, DESIGN.md, guides (Egyptian Arabic), OPERATIONS.md, help, installer, CI, version
   - [x] `README.md`, `docs/DESIGN.md`, `docs/OPERATIONS.md` (data folders, ports, tools, recovery drills mapped to the tests that prove them, how to add a field/page), `.claude/skills/hessa/SKILL.md` (review F05, F07, F09)
   - [x] Guides in Egyptian Arabic with pictures of the real screens (fictional sample centre, `tools/make_screens.py` re-takes them): owner, front desk, teacher, assistant, parent (review F06)
-  - [x] Help: 15 topics, 63 questions in both languages - parent links, work from outside, printing, late arrival, handouts at the door, the offline bar, publishing marks (review F08)
+  - [x] Help: 15 topics, 74 questions in both languages - parent links, work from outside, printing, late arrival, handouts at the door, the offline bar, publishing marks, the teacher page (review F08, G06)
   - [x] Disaster drill as a test: the only PC died, a new PC restores the backup copied from the USB folder - records, receipt, attendance and the computed balance are back (`tests/test_recovery.py`, review E10)
   - [x] Installer: firewall only for private/domain networks (never public Wi-Fi), Arabic first with English, the finish page says what to do when phones cannot connect (review F03; `InstallerTest`)
   - [x] Version 1.1.0 in the program, the installer and RELEASE_NOTES (never lowered; review F04); release steps in BUILD_AND_RELEASE.md
