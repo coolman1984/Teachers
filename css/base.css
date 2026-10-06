@@ -202,9 +202,39 @@ table.tbl { border-collapse: separate; border-spacing: 0; width: 100%; }
 .tbl tbody tr { animation: rise var(--t-med) var(--ease) both; animation-delay: calc(var(--i, 0) * 25ms); }
 
 /* ---------- forms ---------- */
-.field { display: grid; gap: .35rem; }
+/* spacing follows the proximity rule: a label sits close to its own box (.4rem) and clearly apart from the field above (1.4rem),
+   so each label + box reads as one unit. Put fields inside .fields (one column) or .fields.cols (as many as fit). */
+.field { display: grid; gap: .4rem; align-content: start; }
 .field > label { font-weight: 600; font-size: .9rem; }
-.field .help { color: var(--ink-3); font-size: .82rem; }
+.field .help { color: var(--ink-3); font-size: .82rem; line-height: 1.45; }
+.fields { display: grid; gap: 1.4rem 1.5rem; align-content: start; }
+.fields > * { min-width: 0; }
+.fields .wide { grid-column: 1 / -1; }
+.fields.cols { grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); }
+.fields.pairs { grid-template-columns: repeat(2, minmax(0, 1fr)); }      /* the Arabic and English text of one message side by side */
+@media (max-width: 560px) { .fields.pairs { grid-template-columns: minmax(0, 1fr); } }
+@supports (grid-template-rows: subgrid) {
+  /* fields side by side keep their boxes on one line even when one label wraps to two lines */
+  .fields.cols > .field:not(.toggle):not(.wide) { grid-row: span 3; grid-template-rows: subgrid; row-gap: .4rem; }
+}
+.fields.toggles { gap: .6rem; }
+.field.toggle { display: block; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border: 1px solid var(--line-2); border-radius: var(--r-2);
+  background: var(--surface-2); cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast); }
+.field > label.toggle-row { font-weight: 400; font-size: 1rem; }            /* only the setting's name is bold, not its explanation */
+.toggle-row:hover { border-color: var(--line); }
+.toggle-row:has(input:disabled) { cursor: default; }
+.toggle-text { display: grid; gap: .2rem; min-width: 0; }
+.toggle-text .lbl { font-weight: 600; }
+.notice { padding: .8rem 1rem; border-radius: var(--r-2); background: var(--info-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--info) 25%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.notice:empty { display: none; }
+/* a settings form: groups with a heading and one explaining line, a quiet divider between them, the save button in its own footer */
+.set-form { max-width: 64rem; }
+.form-sec { display: grid; gap: 1.1rem; }
+.form-sec > header { display: grid; gap: .25rem; }
+.form-sec > header p { font-size: .9rem; max-width: 70ch; }
+.form-sec + .form-sec { margin-block-start: 1.6rem; padding-block-start: 1.6rem; border-block-start: 1px solid var(--line-2); }
+.form-foot { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-block-start: 1.6rem; padding-block-start: 1.2rem; border-block-start: 1px solid var(--line-2); }
 .input, select.input, textarea.input {
   width: 100%; min-height: 2.7rem; padding: .5rem .8rem; border-radius: var(--r-1); border: 1px solid var(--line); background: var(--surface);
   color: var(--ink); transition: border-color var(--t-fast), box-shadow var(--t-fast);

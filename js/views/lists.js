@@ -36,7 +36,7 @@
   L.edit = function (entity, id) {
     var cfg = L.config(entity); if (!cfg || !HS.can(cfg.perm)) return;
     var cur = D.get(entity, id), values = cur || { active: true, settleModel: 'centerPct' };
-    HS.panel.open({ title: HS.t('list.' + entity), body: '<form data-list-form>' + U.fields(cfg.fields, values) +
+    HS.panel.open({ title: HS.t('list.' + entity), body: '<form class="fields" data-list-form>' + U.fields(cfg.fields, values) +
       (entity === 'teachers' ? '<p data-terms-preview class="notice" role="status"></p>' : '') + '</form>',
       footer: '<button class="btn primary" data-save>' + HS.esc(HS.t('common.save')) + '</button>' +
         (cur ? '<button class="btn danger" data-delete>' + HS.esc(HS.t('common.delete')) + '</button>' : '') +

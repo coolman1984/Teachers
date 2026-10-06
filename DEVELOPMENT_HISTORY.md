@@ -1,6 +1,27 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Publish the pending form readability improvements (2026-10-06)
+
+**Why/source:** the owner requested push, merge and main synchronization. Existing uncommitted
+form changes were based on `main` at `b0f3950`; prepared on `codex/form-layout-sync-20261006`.
+**What:** separate labels from preceding controls, align responsive settings fields, group rules
+by door/school/follow-up, explain each rule in English and Formal Arabic, associate help with
+controls through `aria-describedby`, and make each switch's whole labelled row clickable.
+Message templates keep paired languages and collapse to one column on phones. Existing list
+drawers use the same spacing. Added the required task and documentation record and corrected
+a missing space between HTML attributes during review. Removed a legal reference from the new
+school-group help so it describes configuration without suggesting regulatory acceptance.
+**Tests:** the supplied frontend regression covers both languages, switch labelling/help,
+list containers, rule sections and paired message fields: 26/26 frontend tests passed.
+Python lint, installer preflight (1.1.0) and whitespace checks passed. The full local source
+gate ran 294 tests (25 skips) and exposed an inherited restore test's incomplete simulated
+partition; a separate test correction follows. Local browser checks skipped all 32 tests
+because the configured browser was absent; GitHub's real Chrome gate is required before merge.
+**Limits/next:** this is source integration for the pilot's usability, not new field acceptance.
+The published `v1.1.0` installer stays tied to its original tag; these subsequent source changes
+need a later installer build to appear in the executable. Private runtime files remain local.
+
 ## Hessa 1.1.0 installer published and verified (2026-10-06)
 
 **Why:** the owner explicitly requested the Windows executable on GitHub. **Source/gate:**

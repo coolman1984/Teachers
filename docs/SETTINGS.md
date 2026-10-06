@@ -16,6 +16,11 @@ Centre and Rules tabs save structured settings rows with their current settingsV
 are validated by the server. Messages edits six kinds in both languages. Templates accept {student}, {group}, {date}, {amount},
 {balance}, {center} and {link}; the preview uses example data and does not send anything.
 
+Forms keep each label close to its control and leave space between fields. Rules are grouped into Door and attendance,
+School groups, and Follow-up alerts, with explanations in English and Formal Arabic. Each switch can be toggled from its
+whole labelled row; help text is linked to the control for assistive technology. Message templates pair Arabic and English
+on larger screens and stack on phones. The receipt footer spans the form's columns. Saving and permissions are unchanged.
+
 Parent links are optional. Gateway status exposes configuration and connection errors, never keys. Generate keys once and copy the
 explicitly revealed setup code only to another authorised centre PC. Keys remain in gateway.json outside the shared database.
 The setup code includes secrets and must never be pasted into source control or public messages. Publishing the parent worker/page

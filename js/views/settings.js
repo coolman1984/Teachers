@@ -123,8 +123,21 @@
   function settingFields(tab) {
     var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear','bookingPhone']
       : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds'];
-    return keys.map(function (key) { return { key: key, label: 'set.' + key,
+    return keys.map(function (key) { return { key: key, label: 'set.' + key, help: tab === 'centre' ? null : 'set.' + key + '.h', wide: key === 'receiptFooter',
       type: tab === 'centre' ? (key === 'receiptFooter' ? 'textarea' : 'text') : (key === 'autoCheckin' || key === 'doorSounds' ? 'bool' : 'number') }; });
+  }
+  // the rules tab in three groups the owner thinks in (the door, school groups, follow-up), each with one line saying what it changes
+  var RULE_GROUPS = [{ id: 'door', keys: ['lateMinutes','doorEarlyMinutes','doorLateMinutes','autoCheckin','doorSounds'] },
+    { id: 'school', keys: ['schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents'] },
+    { id: 'risk', keys: ['riskCall','riskHigh'] }];
+  function ruleGroups(settings) {
+    var fields = settingFields('rules');
+    return RULE_GROUPS.map(function (g) {
+      var mine = fields.filter(function (f) { return g.keys.indexOf(f.key) >= 0; });
+      var plain = mine.filter(function (f) { return f.type !== 'bool'; }), toggles = mine.filter(function (f) { return f.type === 'bool'; });
+      return '<section class="form-sec"><header><h3>' + HS.esc(HS.t('set.sec.' + g.id)) + '</h3><p class="muted">' + HS.esc(HS.t('set.sec.' + g.id + '.d')) + '</p></header>' +
+        '<div class="fields cols">' + HS.ui.fields(plain, settings) + '</div>' + (toggles.length ? '<div class="fields toggles">' + HS.ui.fields(toggles, settings) + '</div>' : '') + '</section>';
+    }).join('');
   }
   var KINDS = ['monthly','absence','late','payment','risk','portal'];
   function templatesFields() {
@@ -141,16 +154,18 @@
   function settingsBody(tab) {
     var settings = Object.assign({}, DEFAULTS, (HS.data.state || {}).settings || {});
     var fields = tab === 'messages' ? templatesFields() : settingFields(tab);
-    return '<form data-settings-form class="card">' + (tab === 'messages' ? '<p class="notice">' + HS.esc(HS.t('msg.variables')) + '</p>' : '') +
-      HS.ui.fields(fields, tab === 'messages' ? templateValues(settings) : settings) +
-      (tab === 'messages' ? '<div class="notice" data-message-preview role="status"></div>' : '') +
-      (HS.can('settings.edit') ? '<button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button>' : '') + '</form>' +
+    var body = tab === 'rules' ? ruleGroups(settings)
+      : '<div class="fields cols' + (tab === 'messages' ? ' pairs' : '') + '">' + (tab === 'messages' ? '<p class="notice wide">' + HS.esc(HS.t('msg.variables')) + '</p>' : '') +
+        HS.ui.fields(fields, tab === 'messages' ? templateValues(settings) : settings) +
+        (tab === 'messages' ? '<div class="notice wide" data-message-preview role="status"></div>' : '') + '</div>';
+    return '<form data-settings-form class="card set-form">' + body +
+      (HS.can('settings.edit') ? '<div class="form-foot"><button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button></div>' : '') + '</form>' +
       (tab === 'centre' ? extrasCard() : '');
   }
   // the basic menu holds the daily work; the owner adds the extra pages one by one when the centre is ready for them
   function extrasCard() {
     var edit = HS.can('settings.edit');
-    return '<form data-extras-form class="card stack" style="margin-top:1rem"><header><span class="tile-ic">' + HS.icon('layers') + '</span><h2>' +
+    return '<form data-extras-form class="card stack set-form" style="margin-top:1rem"><header><span class="tile-ic">' + HS.icon('layers') + '</span><h2>' +
       HS.esc(HS.t('set.extras')) + '</h2></header><p class="faint">' + HS.esc(HS.t('set.extras.d')) + '</p>' +
       HS.EXTRAS.map(function (id) {
         return '<label class="row" style="gap:.6rem;align-items:flex-start"><input type="checkbox" name="' + id + '"' + (HS.extraOn(id) ? ' checked' : '') +
