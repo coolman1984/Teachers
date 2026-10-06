@@ -73,5 +73,8 @@ bdi { unicode-bidi: isolate; }
 .msg h1 { font-size: 1.3rem; }
 .msg p { color: var(--ink-2); }
 .msg.revoked h1, .msg.expired h1 { color: var(--bad); }
+.grp-side { flex: none; display: grid; gap: .35rem; justify-items: end; }
+.grp-side .btn { min-height: 2.2rem; padding: .3rem .9rem; text-decoration: none; display: inline-flex; align-items: center; font-size: .9rem; }
+.bio { white-space: pre-line; color: var(--ink-2); }
 .foot { display: flex; justify-content: center; padding-top: .4rem; }
 @media (prefers-reduced-motion: no-preference) { .card { animation: up .25s ease both; } @keyframes up { from { opacity: 0; transform: translateY(4px); } } }

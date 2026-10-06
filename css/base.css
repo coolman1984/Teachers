@@ -387,6 +387,8 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 .now-time { display: grid; font-weight: 700; min-width: 3.4rem; line-height: 1.2; }
 .now-time small { color: var(--ink-3); font-weight: 500; }
 .now-bar { width: 4px; align-self: stretch; border-radius: 4px; background: var(--c, var(--brand)); flex: none; }
+.now-list .grow .muted { display: block; overflow-wrap: anywhere; }
+.now-time, .now-count { flex: none; }
 .now-count { display: inline-flex; align-items: center; gap: .3rem; font-size: 1.05rem; }
 .meter { height: .4rem; border-radius: 999px; background: var(--line-2); overflow: hidden; margin-top: .35rem; }
 .meter i { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width var(--t-slow) var(--ease); }
@@ -487,6 +489,27 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 /* top students picture (canvas 1080 x 1350, shown smaller) */
 .hon-preview { display: grid; place-items: center; background: var(--surface-2); border-radius: var(--r-2); padding: .6rem; }
 .hon-preview canvas { width: min(100%, 22rem); height: auto; border-radius: .5rem; box-shadow: var(--shadow-2); }
+/* question bank (review G03) */
+.qb-list, .qb-paper { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.qb-item { width: 100%; display: grid; gap: .2rem; text-align: start; font: inherit; color: inherit; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-2); padding: .65rem .8rem; cursor: pointer; }
+.qb-item:hover:not(:disabled) { border-color: var(--brand); }
+.qb-item:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+.qb-text { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-weight: 600; }
+.qb-choices { border: 0; padding: 0; margin: 0; display: grid; gap: .4rem; min-width: 0; }
+.qb-choice { display: grid; grid-template-columns: auto 1fr; gap: .5rem; align-items: center; }
+.qb-paper { counter-reset: qp; margin-block-end: .5rem; }
+.qb-paper li { counter-increment: qp; display: flex; gap: .5rem; align-items: center; border: 1px solid var(--line); border-radius: var(--r-2); padding: .45rem .6rem; min-width: 0; }
+.qb-paper li::before { content: counter(qp); font-weight: 700; color: var(--ink-3); min-width: 1.4rem; text-align: center; }
+.qb-paper .grow { min-width: 0; display: grid; }
+.qb-acts { display: flex; flex: none; }
+.qb-acts .icon-btn { width: 2.2rem; height: 2.2rem; }
+.qb-pick { display: grid; gap: .4rem; max-height: 55vh; overflow: auto; }
+.qb-pickrow > span { display: grid; gap: .2rem; min-width: 0; }
+.qb-done { opacity: .6; }
+.qb-paper li.qb-editing { flex-direction: column; align-items: stretch; }
+.qb-paper li.qb-editing::before { align-self: flex-start; }
+.qb-paper .stack { gap: .4rem; }
+button.link { background: none; border: 0; padding: 0; font: inherit; color: var(--info); text-decoration: underline; cursor: pointer; }
 /* the centre PC cannot be reached: one plain sentence above every page, and the save buttons look unavailable (a click
    still explains why - js/core.js refuses the write instead of keeping it in the browser) */
 .offline-bar { display: none; align-items: center; gap: .6rem; padding: .7rem 1rem; background: var(--bad-soft); color: var(--bad); border-bottom: 1px solid var(--bad); }
@@ -802,6 +825,7 @@ button.chip { cursor: pointer; }
 .bar-t { height: .7rem; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .bar-t i { display: block; height: 100%; background: var(--brand); border-radius: 999px; transition: width var(--t-slow) var(--ease); }
 .neg { color: var(--bad); }
+.pos { color: var(--ok); }
 .present { position: fixed; inset: 0; z-index: 120; background: var(--brand); color: #fff; display: grid; place-items: center; padding: 2rem; cursor: pointer; }
 .present .ps { width: min(70rem, 100%); display: grid; gap: 2rem; }
 .present h2 { font-size: clamp(1.6rem, 4vw, 3rem); margin: 0; }
@@ -833,6 +857,11 @@ button.chip { cursor: pointer; }
   .cert-in p { font-size: 14pt; margin: 0; }
   .cert-sign { display: flex; justify-content: space-between; margin-top: 1cm; font-size: 12pt; }
   .cert-date { font-size: 11pt; }
+  .qp-who { display: grid; gap: .3cm; font-size: 11pt; white-space: nowrap; }
+  .qp-list { margin: 0; padding-inline-start: 1.4em; display: grid; gap: .45cm; }
+  .qp-q { break-inside: avoid; page-break-inside: avoid; }
+  .qp-q > p { margin: 0 0 .15cm; font-weight: 600; }
+  .qp-ch { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .1cm .6cm; }
   .omr-page { width: 210mm; height: 297mm; overflow: hidden; break-after: page; page-break-after: always; }
   .omr-page:last-child { break-after: auto; page-break-after: auto; }
   .omr-page svg { display: block; }

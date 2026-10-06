@@ -12,14 +12,14 @@
     { id: 'students', icon: 'users', page: 'students', perm: 'students.view', n: 5 },
     { id: 'groups', icon: 'layers', page: 'groups', perm: 'groups.view', n: 8 },
     { id: 'money', icon: 'sheet', page: 'money', perm: ['money.view', 'money.collect'], n: 6 },
-    { id: 'exams', icon: 'star', page: 'exams', perm: ['exams.view', 'marks.enter'], n: 4 },
+    { id: 'exams', icon: 'star', page: 'exams', perm: ['exams.view', 'marks.enter'], n: 6 },
     { id: 'followup', icon: 'bell', page: 'followup', perm: 'followup.view', n: 4 },
     { id: 'settlements', icon: 'chart', page: 'settlements', perm: 'settlements.view', n: 3 },
     { id: 'reports', icon: 'present', page: 'reports', perm: 'reports.view', n: 2 },
     { id: 'phone', icon: 'globe', page: 'overview', n: 3 },
     { id: 'devices', icon: 'sync', page: 'devices', perm: 'users.manage', n: 6 },
     { id: 'safety', icon: 'shield', page: 'settings', n: 6 },
-    { id: 'parents', icon: 'link', page: 'settings?tab=gateway', n: 5 },
+    { id: 'parents', icon: 'link', page: 'settings?tab=gateway', n: 6 },
     { id: 'remote', icon: 'globe', page: 'settings?tab=remote', n: 4 },
     { id: 'printing', icon: 'printer', page: 'settings', n: 3 }
   ];

@@ -4,7 +4,7 @@
   var HS = window.HS;
   var THEMES = ['auto', 'daylight', 'night', 'asphalt', 'highway', 'contrast'];
   var FONTS = { plex: "'HS Plex Arabic','HS Plex'", cairo: "'HS Cairo'", tajawal: "'HS Tajawal'", kufi: "'HS Kufi'", system: "'Segoe UI',Tahoma,sans-serif" };
-  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'remote', 'access', 'data'];
+  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'remote', 'ai', 'access', 'data'];
 
   /* Work from outside the centre (docs/REMOTE_ACCESS.md): a secure tunnel on this PC, switched on here, for chosen people only */
   var remote = {
@@ -39,6 +39,42 @@
         var go = function () { HS.ui.run(HS.post('/api/remote', { on: on }), on ? 'rm.turnedOn' : 'rm.turnedOff', b).then(load, function () {}); };
         if (on) HS.ui.confirm({ title: HS.t('rm.on'), body: HS.t('rm.confirm'), ok: HS.t('rm.on') }).then(function (yes) { if (yes) go(); });
         else go();
+      });
+    }
+  };
+
+  /* the optional AI question generator (review G04): the key stays in this PC's data folder, the page sees only its last letters */
+  var aiTab = {
+    render: function () {
+      if (!(HS.me && HS.me.admin)) return HS.ui.empty('lock', HS.t('set.admin.only'), '');
+      return '<div data-ai><div class="skeleton" style="height:12rem"></div></div>';
+    },
+    body: function (r) {
+      return '<section class="card stack"><header><span class="tile-ic">' + HS.icon('spark') + '</span><h2>' + HS.esc(HS.t('ai.title')) + '</h2></header>' +
+        '<p class="muted">' + HS.esc(HS.t('ai.intro')) + '</p>' +
+        '<div class="row wrap" style="gap:.6rem;align-items:center"><span class="badge ' + (r.configured ? 'ok' : '') + '">' + HS.esc(HS.t(r.configured ? 'ai.on' : 'ai.off')) + '</span>' +
+          (r.configured ? '<span class="faint" dir="ltr">sk-ant-…' + HS.esc(r.ends) + '</span>' : '') + '</div>' +
+        '<ol class="rm-ways"><li>' + HS.esc(HS.t('ai.step1')) + '</li><li>' + HS.esc(HS.t('ai.step2')) + '</li><li>' + HS.esc(HS.t('ai.step3')) + '</li></ol>' +
+        '<form class="row wrap" data-aiform autocomplete="off" style="gap:.5rem"><input class="input" name="key" type="password" dir="ltr" spellcheck="false" autocomplete="off" placeholder="sk-ant-…" aria-label="' + HS.esc(HS.t('ai.key')) + '" style="max-width:26rem">' +
+          '<button class="btn primary" data-aisave>' + HS.icon('check', 'sm') + HS.esc(HS.t('ai.save')) + '</button>' +
+          (r.configured ? '<button type="button" class="btn danger" data-aiclear>' + HS.icon('x', 'sm') + HS.esc(HS.t('ai.clear')) + '</button>' : '') + '</form>' +
+        '<div class="tip">' + HS.icon('shield') + '<span>' + HS.esc(HS.t('ai.privacy')) + '</span></div>' +
+        '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(HS.t('ai.cost')) + '</span></div></section>';
+    },
+    mount: function (root) {
+      var box = root.querySelector('[data-ai]'); if (!box) return;
+      function load() { HS.get('/api/ai').then(function (r) { box.innerHTML = aiTab.body(r); }, function (e) { box.innerHTML = HS.ui.empty('alert', HS.ui.errorText(e)); }); }
+      load();
+      box.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var f = e.target, b = f.querySelector('[data-aisave]');
+        HS.ui.run(HS.post('/api/ai/key', { key: f.key.value.trim() }), 'ai.saved', b).then(load, function () {});
+      });
+      box.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-aiclear]'); if (!b) return;
+        HS.ui.confirm({ title: HS.t('ai.clear'), body: HS.t('ai.clear.b'), danger: true, ok: HS.t('ai.clear') }).then(function (yes) {
+          if (yes) HS.ui.run(HS.post('/api/ai/key', { clear: true }), 'ai.cleared', b).then(load, function () {});
+        });
       });
     }
   };
@@ -85,7 +121,7 @@
       '<button class="btn sm" type="button">' + HS.esc(HS.t('common.cancel')) + '</button></div></div></aside>';
   }
   function settingFields(tab) {
-    var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear']
+    var keys = tab === 'centre' ? ['systemName','logoText','receiptFooter','currency','academicYear','bookingPhone']
       : ['lateMinutes','doorEarlyMinutes','doorLateMinutes','schoolTreasuryPct','schoolTeacherPct','schoolMaxFee','schoolMaxStudents','riskCall','riskHigh','autoCheckin','doorSounds'];
     return keys.map(function (key) { return { key: key, label: 'set.' + key,
       type: tab === 'centre' ? (key === 'receiptFooter' ? 'textarea' : 'text') : (key === 'autoCheckin' || key === 'doorSounds' ? 'bool' : 'number') }; });
@@ -152,6 +188,7 @@
           : tab === 'data' ? HS.dataTab.render()
           : tab === 'gateway' ? HS.mailboxTab.render()
           : tab === 'remote' ? remote.render()
+          : tab === 'ai' ? aiTab.render()
           : tab === 'lists' ? '<div class="stack">' + ['subjects','rooms','teachers','materials'].map(HS.lists.render).join('') + '</div>'
           : settingsBody(tab));
     },
@@ -161,6 +198,7 @@
       if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
       if (ctx.route.q.tab === 'remote') remote.mount(root);
+      if (ctx.route.q.tab === 'ai') aiTab.mount(root);
       if (ctx.route.q.tab === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
       root.addEventListener('click', function (e) {
         var b = e.target.closest('[data-pref]');

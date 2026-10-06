@@ -11,6 +11,7 @@ the portable/development version does the same with `python3 server/app.py` and 
 | Settings of this PC | `%ProgramData%\Hessa\config.json` | port 8095, sync port 8463, second backup folder, remote work switch |
 | Data | `%ProgramData%\Hessa\data\` | `center.db` (records), `journal.db` (signed history - the source of truth), `auth.db` (accounts), `uploads\` |
 | Parent-link secrets | `data\gateway.json` | this PC only, never in the shared data; `gateway-cards.json` = hashes of cards to revoke |
+| AI question key (optional) | `data\ai.json` | this PC only (readable by this Windows account), never in the shared data, backups or logs; Settings -> AI questions |
 | Backups | `%ProgramData%\Hessa\backups\` + the second folder | every 6 hours and before every update, verified |
 | Logs | `data\logs\server.log`, `data\logs\sync-YYYY-MM.jsonl` | no passwords, no link tokens |
 

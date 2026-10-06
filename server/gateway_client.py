@@ -145,6 +145,9 @@ class Client:
     def put_cards(self, cards, remove=(), revoke_students=()):
         return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove), 'revokeStudents': list(revoke_students)})
 
+    def put_pages(self, pages, remove=()):
+        return self.call('PUT', '/office/pages', {'pages': pages, 'remove': list(remove)})
+
 
 # --------------------------------------------------------------------------- the card a parent reads
 def _epoch(iso):
@@ -196,6 +199,30 @@ def card_for(store, student_id, center_name=''):
             'wallet': f['wallet'], 'updatedAt': _now()}
 
 
+def page_for(store, teacher, center_name='', booking=''):
+    """The teacher's public page (<gateway>/p/<slug>, review G06): who the teacher is, the subjects, every active group with its
+    times and the seats still free, and a WhatsApp link to book. Never a student, a parent or a price agreement."""
+    import center
+    import domain as D
+    from datetime import date
+    subjects = {s['id']: s for s in store.rows('subjects')}
+    enrolled = center._enrolled_counts(store, date.today().isoformat())
+    groups = []
+    for g in store.rows('groups', 'teacher_id=?', (teacher['id'],)):
+        if g.get('active') is False or g.get('kind') == 'school':
+            continue
+        sub = subjects.get(g.get('subjectId')) or {}
+        cap = int(g.get('capacity') or 0)
+        groups.append({'name': g.get('name', ''), 'subject': sub.get('name', ''), 'subjectEn': sub.get('nameEn', ''), 'grade': g.get('gradeCode'),
+                       'system': g.get('system'), 'track': g.get('track'), 'slots': D.clean_slots(g.get('slots')), 'feeType': g.get('feeType'),
+                       'fee': g.get('fee'), 'seats': max(0, cap - enrolled.get(g['id'], 0)) if cap else None})
+    groups.sort(key=lambda x: (x['grade'] or '', x['name']))
+    subs = [subjects[i] for i in (teacher.get('subjectIds') or []) if i in subjects]
+    return {'name': teacher.get('name'), 'bio': (teacher.get('bio') or '')[:1500], 'center': center_name,
+            'subjects': [{'name': x.get('name'), 'nameEn': x.get('nameEn')} for x in subs], 'groups': groups[:40],
+            'booking': D.wa_number(booking) if booking else '', 'updatedAt': _now()}
+
+
 def _published(store, exam_id):
     """A mark reaches the parent only when the teacher pressed "Show to parents" on that exam."""
     ex = store.row('exams', exam_id)
@@ -214,6 +241,12 @@ class GatewaySync:
         # removed is still revoked after an internet outage or a restart
         self.known_path = os.path.join(os.path.dirname(secrets.path), 'gateway-cards.json')
         self.known = self._load_known()
+        self.pages_path = os.path.join(os.path.dirname(secrets.path), 'gateway-pages.json')   # slug -> signature of the published page
+        try:
+            with open(self.pages_path, encoding='utf-8') as f:
+                self.pushed_pages = dict(json.load(f))
+        except (OSError, ValueError, TypeError):
+            self.pushed_pages = {}
         self._pushed_version, self._pushed_at = None, 0
         self.stat = {'lastOk': None, 'lastError': None, 'lastTry': None, 'cards': None, 'gatewayTime': None}
         self._stop = False
@@ -322,7 +355,34 @@ class GatewaySync:
             for i in range(0, len(removed), 100):
                 cl.put_cards([], revoke_students=removed[i:i + 100])
             self._save_known()
+        self.push_pages(cl if (cards or stale) else None, name)
         self._pushed_version, self._pushed_at = v, time.time()
+
+    def push_pages(self, cl, name):
+        """Teachers with a page address get a public page; a removed address (or teacher) is taken down."""
+        import center
+        booking = str(center.settings(self.store).get('bookingPhone') or '')
+        pages, sigs = [], {}
+        for t in self.store.rows('teachers', "slug IS NOT NULL AND slug<>''"):
+            if t.get('active') is False:
+                continue
+            body = page_for(self.store, t, name, booking)
+            sig = hashlib.sha1(json.dumps({k: v for k, v in body.items() if k != 'updatedAt'}, sort_keys=True, default=str).encode()).hexdigest()
+            sigs[t['slug']] = sig
+            if self.pushed_pages.get(t['slug']) != sig:
+                pages.append({'slug': t['slug'], 'body': body})
+        gone = sorted(set(self.pushed_pages) - set(sigs))
+        if pages or gone:
+            cl = cl or self.client()
+            cl.put_pages(pages, remove=gone)
+            self.pushed_pages = sigs
+            self._save_pages()
+
+    def _save_pages(self):
+        tmp = self.pages_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(self.pushed_pages, f)
+        os.replace(tmp, self.pages_path)
 
     def check(self):
         """How many cards the gateway holds: the settings page compares it with the links made here."""

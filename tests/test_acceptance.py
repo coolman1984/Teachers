@@ -25,6 +25,21 @@ class SampleCentreTest(BrowserBase):
         cls.sample_seconds = time.time() - t
         cls.state = cls.c.get('/api/state')
 
+    def test_a0_the_sessions_now_list_never_widens_a_phone(self):
+        """Regression (2026-10-06): during the day the overview lists the sessions running now; a long group, teacher and room
+        made the row wider than a 360 px phone at the largest font. The page test above only sees it at those hours."""
+        pg = self.open({'lang': 'en', 'size': 'xl'}, width=360, height=740)
+        pg.goto(self.S.base + '/#/overview')
+        pg.wait_for_selector('#view > *')
+        wide = pg.evaluate("""() => { const v = document.querySelector('#view'); v.insertAdjacentHTML('afterbegin', '<section class="card"><ul class="now-list">' +
+            '<li><span class="now-time"><bdi>15:00</bdi><small><bdi>16:30</bdi></small></span><span class="now-bar"></span><div class="grow">' +
+            '<b class="ellipsis" style="display:block">A very long group name for the secondary third year revision</b>' +
+            '<span class="muted">Mr Abdelrahman Mostafa Abdelrahman Ibrahim · Laboratory room number two</span><div class="meter"><i style="width:40%"></i></div></div>' +
+            '<span class="now-count"><b class="num">121</b><span class="faint num"> / 124</span></span></li></ul></section>');
+            return document.documentElement.scrollWidth; }""")
+        self.assertLessEqual(wide, 362)
+        pg.context.close()
+
     def test_a_every_page_fits_a_phone_in_both_languages_dark_and_xl(self):
         problems = []
         for lang in ('ar', 'en'):

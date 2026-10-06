@@ -19,7 +19,7 @@
         field('gradeCodes', 'multi', { options: choices(['P1','P2','P3','P4','P5','P6','M1','M2','M3','S1','S2','S3'], 'grade.') }),
         field('settleModel', 'select', { blank: false, options: choices(['centerPct','rentSession','rentStudent','rentMonth','mixed'], 'settle.model.') }),
         field('centerPct', 'number'), field('rentSession', 'number'), field('rentStudent', 'number'), field('rentMonth', 'number'),
-        color, field('bio', 'textarea'), active] },
+        color, field('bio', 'textarea'), field('slug', 'text', { ltr: true, help: 'f.slug.h' }), active] },
       materials: { perm: 'materials.manage', fields: [name, field('teacherId', 'ref', { entity: 'teachers' }),
         field('gradeCode', 'select', { options: choices(['P1','P2','P3','P4','P5','P6','M1','M2','M3','S1','S2','S3'], 'grade.') }),
         field('price', 'number'), field('cost', 'number'), field('stock', 'number'), active] }

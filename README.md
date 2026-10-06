@@ -34,7 +34,7 @@ keeps its data in `%ProgramData%\Hessa`.
 node --test tests/test_frontend.js
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_xlsx test_integration
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx test_integration
 python3 -m unittest test_sample test_multinode test_gateway_parent                       # several PCs, the parent link (~5 min)
 HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance   # real browser
 cd ../gateway && node --test --no-warnings test/gateway.test.js

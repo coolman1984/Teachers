@@ -14,14 +14,14 @@ class WorkflowTest(unittest.TestCase):
         for module in modules:
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         for module in ('test_center_api', 'test_center_network', 'test_sample', 'test_ci',
-                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway', 'test_center_links', 'test_center_review', 'test_center_remote', 'test_center_roles', 'test_gateway_parent', 'test_multinode', 'test_integration'):
+                       'test_center_api_remote', 'test_center_domain_remote', 'test_center_multinode_remote', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_gateway', 'test_center_links', 'test_center_review', 'test_center_remote', 'test_center_roles', 'test_qbank', 'test_ai', 'test_gateway_parent', 'test_multinode', 'test_integration'):
             self.assertIn(module, modules)
         self.assertIn('node --test tests/test_frontend.js', workflow)
 
     def test_the_browser_job_runs_the_screens(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         job = workflow.split('  browser:', 1)[1].split('  windows-installer:', 1)[0]
-        for module in ('test_e2e_browser', 'test_e2e_center', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_review', 'test_center_links', 'test_gateway_parent', 'test_acceptance', 'test_omr'):
+        for module in ('test_e2e_browser', 'test_e2e_center', 'test_center_join', 'test_center_devices', 'test_center_safety', 'test_center_review', 'test_center_links', 'test_gateway_parent', 'test_acceptance', 'test_omr', 'test_qbank', 'test_ai'):
             self.assertIn(module, job)
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         self.assertIn('HS_CHROMIUM', job)

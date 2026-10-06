@@ -74,6 +74,18 @@ async function parent(request, env, url, parts) {
   return reply(200, { card: JSON.parse(card.body), sentAt: iso(card.updated_at), serverTime: iso(now()) });
 }
 
+// ---------------------------------------------------------------- a teacher's public page: subjects, groups, free seats (no student)
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
+async function publicPage(request, env, slug) {
+  if (request.method !== 'GET') throw new Fail(405, 'Read only', { 'Allow': 'GET' });
+  if (!SLUG_RE.test(slug || '')) throw new Fail(404, 'Not found');
+  const ip = request.headers.get('CF-Connecting-IP') || 'local';
+  if (await limited(env, 'ip:' + ip, LIMIT_IP)) throw new Fail(429, 'Too many requests', { 'Retry-After': '60' });
+  const p = await env.DB.prepare('SELECT body, updated_at FROM pages WHERE slug = ?').bind(slug).first();
+  if (!p) throw new Fail(404, 'No such page');
+  return reply(200, { page: JSON.parse(p.body), sentAt: iso(p.updated_at) }, { 'Cache-Control': 'public, max-age=60' });
+}
+
 // ---------------------------------------------------------------- office side
 async function officeAuth(request, env, url, bodyBytes) {
   if (!env.OFFICE_SECRET) throw new Fail(503, 'The gateway has no office secret yet');
@@ -123,6 +135,18 @@ async function office(request, env, url, parts) {
     if (stmts.length) await env.DB.batch(stmts);
     return reply(200, { ok: true, cards: (d.cards || []).length, removed: (d.remove || []).length });
   }
+  if (what === 'pages' && m === 'PUT') {
+    const d = json(), stmts = [];
+    for (const p of (d.pages || []).slice(0, 200)) {
+      if (!SLUG_RE.test(p.slug || '')) throw new Fail(400, 'Bad page address');
+      const body = JSON.stringify(p.body || {});
+      if (body.length > MAX_CARD) throw new Fail(400, 'Page too large');
+      stmts.push(env.DB.prepare('INSERT INTO pages(slug, body, updated_at) VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at').bind(p.slug, body, now()));
+    }
+    for (const slug of (d.remove || []).slice(0, 200)) stmts.push(env.DB.prepare('DELETE FROM pages WHERE slug = ?').bind(String(slug)));
+    if (stmts.length) await env.DB.batch(stmts);
+    return reply(200, { ok: true, pages: (d.pages || []).length });
+  }
   // older office programs still ask for an inbox; parents' pages never write, so it is always empty
   if (what === 'inbox' && m === 'GET') return reply(200, { events: [], photos: [] });
   if (what === 'ack' && m === 'POST') return reply(200, { ok: true });
@@ -162,7 +186,9 @@ export default {
       const url = new URL(request.url);
       const parts = url.pathname.split('/').filter(Boolean);
       const m = request.method;
+      if (parts[0] === 'api' && parts[1] === 'page' && parts.length === 3) return await publicPage(request, env, parts[2]);
       if (parts[0] === 'api') return await parent(request, env, url, parts);
+      if (parts[0] === 'p' && parts.length === 2 && m === 'GET') return await asset(env, request, '/index.html');
       if (parts[0] === 'office') return await office(request, env, url, parts);
       if (parts[0] === 't' && parts.length === 2 && m === 'GET') return await asset(env, request, '/index.html');
       if (parts[0] === 'sw.js' && m === 'GET') return await asset(env, request, '/app/sw.js', { 'Service-Worker-Allowed': '/', 'Content-Type': 'text/javascript; charset=utf-8' });

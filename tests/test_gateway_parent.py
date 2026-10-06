@@ -115,6 +115,41 @@ class ParentJourneyTest(unittest.TestCase):
         self.assertTrue(card['week'])                                                         # the timetable of the coming days
         self.assertEqual(card['groups'][0]['balance'], -30)                                   # 80 owed - 50 paid
 
+    def test_d_the_teacher_page(self):
+        """Review G06: a teacher with a page address gets a public page with the groups, times and free seats - no student, no
+        phone number except the centre's booking number; a bad or taken address is refused; removing it takes the page down."""
+        import json
+        import urllib.error
+        import urllib.request
+        c = self.c
+        with self.assertRaises(Exception) as e:
+            c.post('/api/commit', {'label': 'slug', 'ops': [{'e': 'teachers', 'id': 'pg-t2', 'op': 'put', 'row': {'name': 'Other', 'slug': 'Bad Slug!'}}]})
+        self.assertEqual(e.exception.data.get('key'), 'err.slug')
+        t = next(x for x in c.get('/api/state')['teachers'] if x['id'] == 'pg-t')
+        c.post('/api/commit', {'label': 'slug', 'ops': [{'e': 'teachers', 'id': 'pg-t', 'op': 'put', 'ver': t['ver'], 'row': {**{k: v for k, v in t.items() if k not in ('id', 'ver')}, 'slug': 'Mr-Physics', 'bio': 'Physics for secondary.'}}]})
+        with self.assertRaises(Exception) as e:
+            c.post('/api/commit', {'label': 'slug', 'ops': [{'e': 'teachers', 'id': 'pg-t3', 'op': 'put', 'row': {'name': 'Other', 'slug': 'mr-physics'}}]})
+        self.assertEqual(e.exception.data.get('key'), 'err.slugTaken')
+        c.post('/api/commit', {'label': 'booking', 'ops': [{'e': 'settings', 'id': 'bookingPhone', 'op': 'put', 'row': {'value': '"01055555555"'}}]})
+        self.send()
+        page = json.loads(urllib.request.urlopen(self.gw.url + '/api/page/mr-physics').read())['page']
+        self.assertEqual(page['name'], 'Synthetic Teacher')
+        self.assertEqual(page['groups'][0]['name'], 'Physics S1 Sat')
+        self.assertEqual(page['groups'][0]['seats'], 28)                                      # 30 seats - 2 children
+        self.assertEqual(page['booking'], '201055555555')
+        raw = json.dumps(page, ensure_ascii=False)
+        for secret in ('Alpha', 'Beta', '0101212', '0103434', '0109999', 'centerPct'):
+            self.assertNotIn(secret, raw)
+        html = urllib.request.urlopen(self.gw.url + '/p/mr-physics').read().decode()
+        self.assertIn('<script', html)
+        # the address is removed -> the page goes
+        t = next(x for x in c.get('/api/state')['teachers'] if x['id'] == 'pg-t')
+        c.post('/api/commit', {'label': 'slug', 'ops': [{'e': 'teachers', 'id': 'pg-t', 'op': 'put', 'ver': t['ver'], 'row': {**{k: v for k, v in t.items() if k not in ('id', 'ver')}, 'slug': ''}}]})
+        self.send()
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(self.gw.url + '/api/page/mr-physics')
+        self.assertEqual(e.exception.code, 404)
+
     @SKIP
     def test_b_the_phone(self):
         b = self.browser()
