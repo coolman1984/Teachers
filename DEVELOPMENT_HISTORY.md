@@ -1,6 +1,47 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Isolate both PCs in the restore regression (2026-10-06)
+
+**Why/source:** while validating the form integration on `codex/form-layout-sync-20261006`
+(form commit `e69d24c`, base `b0f3950`), the 294-test source gate failed the inherited T30 restore
+scenario. The same failure reproduced in isolation; instrumentation also produced a passing run,
+consistent with a timing race. Each harness proxy blocks only incoming traffic: cutting PC1's
+proxy still lets PC1 send its supposedly offline record to the administrator. A restore may
+legitimately remove a known record absent from the backup; the intended test concerns unseen work.
+**Fix:** cut both endpoints, assert the offline record is absent on the restoring PC before and
+after restore, then reconnect both. Keep the existing convergence, surviving-record and audit
+assertions. No application, restore or sync behaviour changes and no new user-visible strings.
+**Evidence:** corrected T30 passed in three fresh processes (15.720s, 15.739s, 13.848s);
+all 35 multi-PC tests passed in 605.719s. An initial attempt to repeat the same class within one
+unittest process reused class-level databases and caused duplicate-record conflicts; fresh
+processes correctly isolate repetitions. Frontend 26/26, lint, installer preflight and whitespace
+checks passed. Browser execution remains subject to the PR's real Chrome gate before merge.
+**Lesson:** an incoming-port proxy is not a bidirectional network disconnection. Assert isolation
+in a concurrent-restore scenario instead of relying on timing. This supports L1 source validation;
+the field recovery drill remains FS3/L4.
+
+## Publish the pending form readability improvements (2026-10-06)
+
+**Why/source:** the owner requested push, merge and main synchronization. Existing uncommitted
+form changes were based on `main` at `b0f3950`; prepared on `codex/form-layout-sync-20261006`.
+**What:** separate labels from preceding controls, align responsive settings fields, group rules
+by door/school/follow-up, explain each rule in English and Formal Arabic, associate help with
+controls through `aria-describedby`, and make each switch's whole labelled row clickable.
+Message templates keep paired languages and collapse to one column on phones. Existing list
+drawers use the same spacing. Added the required task and documentation record and corrected
+a missing space between HTML attributes during review. Removed a legal reference from the new
+school-group help so it describes configuration without suggesting regulatory acceptance.
+**Tests:** the supplied frontend regression covers both languages, switch labelling/help,
+list containers, rule sections and paired message fields: 26/26 frontend tests passed.
+Python lint, installer preflight (1.1.0) and whitespace checks passed. The full local source
+gate ran 294 tests (25 skips) and exposed an inherited restore test's incomplete simulated
+partition; a separate test correction follows. Local browser checks skipped all 32 tests
+because the configured browser was absent; GitHub's real Chrome gate is required before merge.
+**Limits/next:** this is source integration for the pilot's usability, not new field acceptance.
+The published `v1.1.0` installer stays tied to its original tag; these subsequent source changes
+need a later installer build to appear in the executable. Private runtime files remain local.
+
 ## Hessa 1.1.0 installer published and verified (2026-10-06)
 
 **Why:** the owner explicitly requested the Windows executable on GitHub. **Source/gate:**

@@ -226,6 +226,28 @@ test('multi-select fields escape choices, keep selection and validate empty requ
   assert.equal(HS.ui.read(root,[field]).missing.length, 1);
 });
 
+test('forms keep fields apart: list drawers and settings put fields in a spaced container, switches are whole rows', () => {
+  // the subject drawer and the rules tab put every field straight into a plain <form>: each label touched the box above it
+  for (const lang of ['en','ar']) {
+    const HS = startup(lang); HS.lang = lang;
+    HS.me = {perms:['rooms.manage','settings.edit']}; HS.data.state = {settings:{}, subjects:[]};
+    const sw = HS.ui.field({key:'active', label:'f.active', type:'bool', help:'set.doorSounds.h'}, true);
+    assert.ok(sw.includes('class="toggle-row" for="f-active"'));                      // the whole row toggles
+    assert.ok(sw.includes('aria-describedby="f-active-h"') && sw.includes('id="f-active-h"'));
+    assert.ok(sw.indexOf('class="lbl"') < sw.indexOf('class="switch"'));             // words first, switch at the end
+    let opened; HS.panel.open = o => { opened = o; };
+    HS.lists.edit('subjects');
+    assert.ok(opened.body.startsWith('<form class="fields" data-list-form>'));
+    const rules = HS.views.settings.render({route:{q:{tab:'rules'}}});
+    assert.equal((rules.match(/class="form-sec"/g) || []).length, 3);
+    for (const id of ['door','school','risk']) assert.ok(rules.includes(HS.esc(HS.t('set.sec.' + id))));
+    assert.ok(rules.includes('class="fields cols"') && rules.includes('class="form-foot"'));
+    assert.ok(rules.includes(HS.esc(HS.t('set.lateMinutes.h'))));
+    assert.ok(!rules.includes('set.sec.') && !rules.includes('.h<'));                 // no raw dictionary keys
+    assert.ok(HS.views.settings.render({route:{q:{tab:'messages'}}}).includes('class="fields cols pairs"'));
+  }
+});
+
 test('reference list editors hide contacts, preserve mixed settlement terms and escape names', () => {
   const HS = startup('en');
   HS.me = {perms:['teachers.manage']};

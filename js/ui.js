@@ -151,7 +151,10 @@
   }
   U.field = function (f, value) {
     var id = 'f-' + f.key, lab = HS.t(f.label), val = value === undefined || value === null ? '' : value;
-    var attrs = (f.required ? ' required' : '') + (f.ltr ? ' dir="ltr"' : '') + (f.placeholder ? ' placeholder="' + HS.esc(HS.t(f.placeholder)) + '"' : '');
+    var help = f.help ? '<span class="help" id="' + id + '-h">' + HS.esc(HS.t(f.help)) + '</span>' : '';
+    var attrs = (f.required ? ' required' : '') + (f.ltr ? ' dir="ltr"' : '') + (f.placeholder ? ' placeholder="' + HS.esc(HS.t(f.placeholder)) + '"' : '') +
+      (f.help ? ' aria-describedby="' + id + '-h"' : '');
+    var cls = 'field' + (f.wide ? ' wide' : '');
     var input;
     if (f.type === 'multi') {
       input = '<select class="input" multiple id="' + id + '" name="' + f.key + '"' + attrs + '>' + f.options.map(function (o) {
@@ -165,8 +168,9 @@
       input = '<input class="input" id="' + id + '" name="' + f.key + '" list="dl-' + id + '" autocomplete="off" value="' + HS.esc(cur ? cur.l : '') + '"' + attrs + ' data-ref="' + f.entity + '">' +
         '<datalist id="dl-' + id + '">' + opts.map(function (o) { return '<option value="' + HS.esc(o.l) + '"></option>'; }).join('') + '</datalist>';
     } else if (f.type === 'bool') {
-      return '<div class="field"><div class="row"><span class="switch"><input type="checkbox" id="' + id + '" name="' + f.key + '"' + (val ? ' checked' : '') + '><span></span></span><label for="' + id + '" style="font-weight:600">' + HS.esc(lab) + '</label></div>' +
-        (f.help ? '<span class="help">' + HS.esc(HS.t(f.help)) + '</span>' : '') + '</div>';
+      // an on/off setting is one row you can click anywhere on: the words (and their explanation) first, the switch at the end
+      return '<div class="' + cls + ' toggle"><label class="toggle-row" for="' + id + '"><span class="toggle-text"><span class="lbl">' + HS.esc(lab) + '</span>' + help + '</span>' +
+        '<span class="switch"><input type="checkbox" id="' + id + '" name="' + f.key + '"' + (val ? ' checked' : '') + (f.help ? ' aria-describedby="' + id + '-h"' : '') + '><span></span></span></label></div>';
     } else if (f.type === 'textarea') {
       input = '<textarea class="input" id="' + id + '" name="' + f.key + '" rows="3"' + attrs + '>' + HS.esc(val) + '</textarea>';
     } else {
@@ -174,7 +178,7 @@
       input = '<input class="input" id="' + id + '" name="' + f.key + '" type="' + type + '"' + (type === 'number' ? ' inputmode="numeric" step="any"' : '') + ' value="' + HS.esc(type === 'datetime-local' ? String(val).slice(0, 16) : val) + '"' + attrs + (f.suggest ? ' list="dl-' + id + '" autocomplete="off"' : '') + '>' +
         (f.suggest ? '<datalist id="dl-' + id + '">' + f.suggest().map(function (x) { return '<option value="' + HS.esc(x) + '"></option>'; }).join('') + '</datalist>' : '');
     }
-    return '<div class="field"><label for="' + id + '">' + HS.esc(lab) + (f.required ? ' <span class="faint">*</span>' : '') + '</label>' + input + (f.help ? '<span class="help">' + HS.esc(HS.t(f.help)) + '</span>' : '') + '</div>';
+    return '<div class="' + cls + '"><label for="' + id + '">' + HS.esc(lab) + (f.required ? ' <span class="faint">*</span>' : '') + '</label>' + input + help + '</div>';
   };
   U.fields = function (fields, values) { return fields.map(function (f) { return U.field(f, (values || {})[f.key]); }).join(''); };
 
