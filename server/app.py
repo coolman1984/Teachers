@@ -21,7 +21,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -30,6 +30,7 @@ sys.path.insert(0, HERE)  # the portable (embedded) Python does not add the scri
 
 import backup as backup_mod  # noqa: E402
 import appwindow  # noqa: E402
+import watch  # noqa: E402
 import xlsx  # noqa: E402
 from auth import ADMIN_PERMS, ALL, DEV_PASSWORD, DEV_USER, PERMISSIONS, AuthError, Forbidden  # noqa: E402
 import center  # noqa: E402
@@ -149,6 +150,19 @@ def write_config(key, value):
     except (OSError, ValueError):
         raise BadRequest('The setting could not be saved (config.json is damaged or cannot be written).')
     CFG[key] = value
+
+
+def trusted_ts(ts):
+    """The time of a click as the page saw it, unless that PC's clock is more than 5 minutes off this one (a clock moved back
+    to hide something): then the time it arrived here."""
+    t = datetime.now()
+    try:
+        seen = datetime.fromisoformat(str(ts)[:19])
+        if abs((seen - t).total_seconds()) <= 300:
+            return seen.isoformat(timespec='seconds')
+    except ValueError:
+        pass
+    return t.isoformat(timespec='seconds')
 
 
 def resolve(p):
@@ -635,6 +649,18 @@ class Handler(BaseHTTPRequestHandler):
                 'node': {'id': NODE.id, 'name': NODE.name, 'role': NODE.role, 'authority': NODE.is_authority},
                 'trialPassword': AUTH.dev_default(u['id'])}
 
+    def watch_run(self, frm, to):
+        """The watch for a period: today back to 30 days by default, at most a year."""
+        today = datetime.now().date()
+        end = center.D.as_date(to) or today
+        start = center.D.as_date(frm) or end - timedelta(days=30)
+        if start > end:
+            start, end = end, start
+        start = max(start, end - timedelta(days=366))
+        admins = [f'{x["full_name"]} ({x["username"]})' for x in AUTH.list_users() if 'users.manage' in (x.get('perms') or [])]
+        admins += [x['username'] for x in AUTH.list_users() if 'users.manage' in (x.get('perms') or [])]
+        return watch.run(STORE, JOURNAL, start.isoformat(), end.isoformat(), admins)
+
     def trial_hint(self):
         """The sign-in screen shows "admin / 123" only on this PC, while the trial sign-in can still be used."""
         if self.ip not in LOCAL_IPS or self.via_proxy or not CFG.get('dev_login'):
@@ -732,6 +758,10 @@ class Handler(BaseHTTPRequestHandler):
             self.need('trash.restore')
             self.need_all_scopes()
             return self.send(200, STORE.trash())
+        if p == '/api/watch':              # the owner's watch (server/watch.py): administrators of the whole centre only
+            self.need_admin()
+            self.need_all_scopes()
+            return self.send(200, self.watch_run(qs.get('from', ''), qs.get('to', '')))
         if p in ('/api/audit', '/api/activity'):
             self.need('logs.view' if p == '/api/audit' else 'logs.activity')
             if p == '/api/activity':
@@ -843,7 +873,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.outside:
                 AUTH.log(u['display'], self.ip, 'remote-login', u['username'], 'Signed in from outside the centre')
             say(f'Login: {u["display"]} ({self.ip})')
-            return self.send(200, self.me(), headers=self.set_session(token))
+            return self.send(200, {**self.me(), 'welcome': u.get('welcome')}, headers=self.set_session(token))
         if p == '/api/join':
             if self.ip not in LOCAL_IPS or AUTH.has_users() or NODE.role != 'unconfigured':
                 raise Forbidden('Joining is only possible on a new, not yet set up PC, on the PC itself.')
@@ -904,8 +934,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, self.me())
         if p == '/api/log':
             d = self.json_body()
-            events = [{**e, 'user': self.user} for e in (d.get('events') or []) if isinstance(e, dict)]  # never trust a name sent by the page
-            STORE.log_activity(self.user, self.ip, events)
+            raw = d.get('events') if isinstance(d.get('events'), list) else []
+            events = [{**e, 'user': self.user, 'ts': trusted_ts(e.get('ts'))} for e in raw[:500] if isinstance(e, dict)]  # never trust a name sent by the page
+            try:
+                STORE.log_activity(self.user, self.ip, events)
+            except Exception as e:  # noqa: BLE001 - the clicks log must never break the screens; the page sends them again
+                say(f'Activity not saved ({len(events)} events): {e}')
+                return self.send(200, {'ok': False})
             return self.send(200, {'ok': True})
         if self.u['must_change']:
             raise Forbidden('Please change your temporary password first.')
@@ -922,6 +957,10 @@ class Handler(BaseHTTPRequestHandler):
             if any(isinstance(o, dict) and 'resolve' in o for o in (d.get('ops') or []) if isinstance(d.get('ops'), list)):
                 raise Forbidden('Conflicts are decided only in Devices & Sync by an administrator.')
             raw_ops = d.get('ops')
+            if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') == 'settings' and o.get('id') == watch.REVIEWS for o in raw_ops):
+                raise Forbidden('Alerts are reviewed on the Watch page by an administrator.')   # nobody hides an alert about himself
+            if not is_admin(self.u) and isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') == 'settings' and str(o.get('id')).startswith('watch') for o in raw_ops):
+                raise Forbidden('Only an administrator changes what the Watch looks for.')
             if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') in ('payments', 'expenses', 'shifts', 'settlements', 'attendance') for o in raw_ops):
                 raise Forbidden('Use the dedicated centre operation for attendance and money records.')
             with STORE.lock:
@@ -941,6 +980,11 @@ class Handler(BaseHTTPRequestHandler):
             self.need('contacts.view')
             data, name = self.body(30 * 1048576), qs.get('name', '')[:120]
             return self.send(200, center.import_preview(STORE, data, name, qs.get('grade', ''), qs.get('group', ''), self.u.get('scopes')))
+        if p == '/api/watch/review':
+            self.need_admin()
+            self.need_all_scopes()
+            d = self.json_body()
+            return self.send(200, watch.review(self.ctx(), d.get('keys'), d.get('note')))
         if p.startswith('/api/c/'):
             return self.center_post(p[len('/api/c/'):], self.json_body())
         if p.startswith('/api/gateway/'):

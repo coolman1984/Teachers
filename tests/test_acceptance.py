@@ -7,7 +7,7 @@ import unittest
 from harness import ADMIN
 from test_e2e_browser import BrowserBase, SKIP
 
-PAGES = ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'devices',
+PAGES = ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'watch', 'devices',
          'settings', 'settings?tab=rules', 'settings?tab=lists', 'settings?tab=messages', 'settings?tab=gateway', 'settings?tab=remote',
          'settings?tab=access', 'settings?tab=data', 'help', 'students/import']
 

@@ -40,9 +40,13 @@
     var m = {}; rows.forEach(function (p) { var k = p.method || 'cash'; m[k] = (m[k] || 0) + (Number(p.amount) || 0); });
     return '<div class="chip-row">' + Object.keys(m).map(function (k) { return '<span class="badge">' + HS.esc(HS.t('pay.method.' + k)) + ' ' + U.money(Math.round(m[k] * 100) / 100) + '</span>'; }).join('') + '</div>';
   }
-  function voidReceipt(id, done) {
-    U.confirm({ title: HS.t('money.void'), body: HS.t('money.void.b'), reason: HS.t('stu.reason'), danger: true, ok: HS.t('money.void') }).then(function (reason) {
-      if (reason) U.run(HS.post('/api/c/void', { id: id, reason: reason }), 'money.voided').then(done, function () {});
+  function voidReceipt(id, done, again) {
+    U.confirm({ title: HS.t('money.void'), bodyHtml: (again ? '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(HS.t('void.vague')) + '</span></div>' : '') +
+      '<p>' + HS.esc(HS.t('money.void.b')) + '</p><p class="faint">' + HS.icon('shield', 'sm') + ' ' + HS.esc(HS.t('void.watched')) + '</p>', reason: HS.t('void.reason'), danger: true, ok: HS.t('money.void') }).then(function (reason) {
+      if (!reason) return;
+      // "خطأ" or "غلط" tells the owner nothing: ask for what was wrong before the receipt leaves the books
+      if (String(reason).replace(/\s+/g, ' ').trim().length < 8) { voidReceipt(id, done, true); return; }
+      U.run(HS.post('/api/c/void', { id: id, reason: reason }), 'money.voided').then(done, function () {});
     });
   }
 

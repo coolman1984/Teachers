@@ -1,6 +1,34 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The owner's control: Watch, every click, a careful sign-in, entries that explain themselves (2026-10-06)
+
+**Why/source:** the owner wants centre owners to trust the desk while they are away - "nobody steals, cheats, deletes
+or discounts by mistake or on purpose" - as the main selling point; keep the trial sign-in until the build is done.
+**What:**
+- `server/watch.py` reads the existing signed records for a period (receipts and reversals, drawers, attendance, the change
+  log, the security log, refused requests) and lists 16 patterns with a level, the person, the numbers and the page. The
+  skim (reversed and taken again smaller the same day by the same person) is critical; repeated short drawers too.
+  `/api/watch` and `/api/watch/review` are for administrators of the whole centre; the review is a settings row
+  (`watchReviewed`) that only that endpoint writes - `/api/commit` refuses it, and non-administrators cannot change the
+  `watch*` thresholds, so nobody quietens an alert about himself. Defaults: working hours 8-23, large amount 1000, 2 units.
+- `js/views/watch.js`: period, four level tiles (click to filter), people ranking, filters, each alert with "why it matters"
+  and "the right way", open the record, mark reviewed with a note, export; an overview card for administrators.
+- Clicks: the browser never sent anything to the existing `/api/log` (the activity table was empty). `HS.track` now sends
+  every click (button words, tick boxes ended on/off), page, save and failed save, screen errors; the server stamps the real
+  name. Activity log → "Clicks & screens" for administrators. Typed values are never recorded.
+- Sign-in: show/hide password, Caps Lock warning, the last user name remembered, and after sign-in "your last sign-in was
+  ... from ...; N wrong passwords since - not you? tell the administrator".
+- Entries: a discount or exemption needs its reason (server); a reversal reason must say what was wrong; e-wallet payments
+  ask for the transfer number once; the pay dialog says what remains owed or goes into credit.
+- Sample: desk2 now skims once and closes short twice in the last 12 days, so the Watch shows real patterns.
+- Guides: "Know what happened while you were away" and three situations (suspected theft, no receipt, shared password).
+**Checks:** `tests/test_center_watch.py` (a desk user skims, closes short, is refused the Watch and the review and the
+thresholds; a review keeps the note; discount without reason refused; welcome counts wrong passwords; clicks stored under
+the real name, administrators only). **Lessons:** the click log existed on the server for months with nothing feeding it -
+check the producer, not only the table. **Limits:** clicks are stored in the replicated journal (thousands a day per desk);
+watch volume on a busy centre should be measured during the pilot.
+
 ## Trial sign-in, own app window, step-by-step guides and a hidden-bug review (2026-10-06)
 
 **Why/source:** the owner asked (on `main`, base `4e43522`) for a fixed first version that anyone can use with no

@@ -79,7 +79,7 @@ test('the home-screen manifest is linked and its icons exist', () => {
 test('centre navigation uses server permissions and supported routes', () => {
   const HS = startup('en');
   assert.deepEqual(Array.from(HS.pages, p => p.id),
-    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'devices', 'settings', 'help']);
+    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'watch', 'activity', 'devices', 'settings', 'help']);
   HS.me = { perms: ['students.manage'] };
   const routes = [];
   HS.go = route => routes.push(route);

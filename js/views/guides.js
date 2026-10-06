@@ -100,6 +100,9 @@
       S('go', 'groups?tab=list'), S('click', 'groups?tab=list', 'tr[data-id]'), S('click', null, '[data-edit]'), S('choose', null, '#gf-tempFrom'), S('click', null, '[data-addtslot]'), S('click', null, DR + ' [data-save]'), S('check') ] },
 
     /* ---------- reports, safety, administration ---------- */
+    { id: 'watch', cat: 'admin', icon: 'shield', perm: 'users.manage', steps: [
+      S('go', 'watch'), S('check', 'watch', '.wa-kpis'), S('click', 'watch', '[data-level="critical"]'), S('check', 'watch', '.wa-more'), S('click', 'watch', '.wa-acts .btn'),
+      S('click', 'watch', '[data-review]'), S('check', 'watch', '.wa-people'), S('go', 'activity'), S('tip') ] },
     { id: 'report', cat: 'admin', icon: 'chart', perm: 'reports.view', steps: [
       S('go', 'reports'), S('check', 'reports', '[data-rep]'), S('click', 'reports', '[data-xlsx]'), S('click', 'reports', '[data-printrep]'), S('tip') ] },
     { id: 'backup', cat: 'admin', icon: 'shield', perm: 'backups.manage', steps: [
@@ -123,6 +126,7 @@
     ['phoneChanged', 'students', 'students'], ['duplicate', 'students', 'students'], ['leaves', 'students', 'students'], ['comesBack', 'students', 'students'],
     ['parentAsks', 'students', 'students'], ['noPhone', 'students', 'students'], ['excelMess', 'students/import', 'students'],
     ['ramadan', 'groups', 'groups'], ['exams', 'door', 'groups'], ['roomClash', 'groups', 'groups'], ['groupFull', 'groups', 'groups'], ['moveGroup', 'students', 'groups'],
+    ['theft', 'watch', 'admin'], ['cashNoReceipt', 'watch', 'admin'], ['staffAccount', 'settings?tab=access', 'admin'],
     ['deletedWrong', 'settings?tab=data', 'admin'], ['staffLeaves', 'settings?tab=access', 'admin'], ['forgotPassword', 'settings?tab=access', 'admin'],
     ['pcBroke', 'settings?tab=data', 'admin'], ['virus', 'settings?tab=data', 'admin'], ['newPc', 'settings?tab=data', 'admin'], ['trialPassword', 'overview', 'admin']
   ];
