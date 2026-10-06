@@ -30,6 +30,8 @@ Read `CLAUDE.md` (rules), then `docs/EXECUTION_PLAN.md`, `TASKS.md`, and `DEVELO
 | words | `js/i18n/en.js` + `js/i18n/ar.js` (Formal Arabic); guides in `docs/GUIDE_*.md` are Egyptian Arabic |
 | parent card / gateway | `server/gateway_client.py` `card_for`, `gateway/src/worker.js`, `gateway/public/app/*` |
 | guide pictures | `python3 tools/make_screens.py` (fictional sample centre) |
+| in-app guides / situations | `js/views/guides.js` (steps + selectors) and `gd.<id>.*` / `sit.<id>.*` in both dictionaries; `[[key]]` names a button by its label key; a new button a guide points at needs a stable `data-` attribute |
+| trial sign-in, app window | `auth.py` `trial_setup` (`dev_login`), `server/appwindow.py` (`app_window`) |
 
 ## Patterns that already exist - reuse them
 - Payment retried after a lost answer: send `key` (random hex per dialog); the receipt id is `pk<key>`.

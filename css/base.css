@@ -968,7 +968,7 @@ button.chip { cursor: pointer; }
 .coach-step p { margin: 0; line-height: 1.65; font-size: 1rem; }
 .coach-card footer { display: flex; gap: .4rem; align-items: center; }
 .coach-miss { margin: 0; font-size: .85rem; }
-.coach-hot { outline: 3px solid var(--signal) !important; outline-offset: 3px; border-radius: .5rem; animation: coach-pulse 1.4s ease-in-out infinite; position: relative; z-index: 1; }
+.coach-hot { outline: 3px solid var(--signal) !important; outline-offset: 3px; animation: coach-pulse 1.4s ease-in-out infinite; }
 @keyframes coach-pulse { 50% { outline-color: color-mix(in srgb, var(--signal) 25%, transparent); outline-offset: 6px; } }
 @media (prefers-reduced-motion: reduce) { .coach-hot { animation: none; } }
 @media (max-width: 760px) { #coach { inset-inline: .5rem; inset-block-end: calc(4.4rem + env(safe-area-inset-bottom)); width: auto; } }

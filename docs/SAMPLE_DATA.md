@@ -10,6 +10,8 @@ The generator adds 420 fictional students, 24 groups, eight teachers, four rooms
 The timetable has no room or teacher clashes. Example warning students have declining
 attendance and marks; profitability includes full, healthy, watch, merge and loss groups.
 
+Every sample student has a different full name; the 30 sample families (60 students) share the father's name, family name and parent mobile, which is also how real brothers and sisters are recognised (same parent mobile) for the family payment at the door.
+
 All generated business records have an `smp-` id. Student codes skip existing codes,
 including archived records. Centre sample defaults yield to your explicit settings.
 Existing students, money records and the administrator account are preserved.

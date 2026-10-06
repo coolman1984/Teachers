@@ -1,6 +1,44 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Trial sign-in, own app window, step-by-step guides and a hidden-bug review (2026-10-06)
+
+**Why/source:** the owner asked (on `main`, base `4e43522`) for a fixed first version that anyone can use with no
+help: sample data removable in one click, tick-box permissions like Mr.Ayman-HR, step-by-step guides in English and
+Arabic with the Egyptian edge cases, a temporary developer login admin / 123, a full-screen program instead of a
+browser tab, original icons everywhere, and a review for hidden bugs. Gate: L1/L2 source work (field gates unchanged).
+**What:**
+- Trial sign-in: on a brand-new PC (no accounts, not joined) "Try it now" / admin + 123 creates the administrator with
+  that password (strength rules skipped only here). Local only, never through a tunnel; a yellow bar on every page and
+  a hint on the sign-in screen until the password changes (flag file `trial-login.json`, never synced). `dev_login` is
+  on by default for now and must be switched off before a real sale. Added "Change my password" to the account panel -
+  people could not change their own password before unless forced. Password screen labels "Password (1)/(2)" fixed.
+- Own window: `server/appwindow.py` opens Edge/Chrome in app mode with its own profile (separate taskbar window with
+  Hessa's icon), maximized or full screen (Settings → Appearance, admin, on the PC itself); falls back to the browser.
+  Full-screen button (F11) in the top bar.
+- Icons: the Windows .ico (Hessa.exe, shortcut, installer) was still Trip Orders' "table and chairs"; one stdlib drawing
+  (navy tile, amber cap with lit board) now makes the .ico, the phone icons and the favicon. Eight new line icons.
+- Guides: `js/views/guides.js` - 31 guides in six areas, each step typed (open/click/type/choose/check/tip/careful)
+  and naming the button with `[[dictionary.key]]` so it always matches the screen; "Guide me" docks a coach that opens the
+  page, outlines the target and waits for the person to do it. 44 situations from Egyptian centres. "?" opens the
+  guides of the current page. All text in en.js and ar.js (Formal Arabic).
+- Permissions screen: a new person showed "Centre manager" over the Viewer ticks and was saved with the wrong profile
+  name; ready-made profile names now show in the reader's language.
+- Sample: names repeated every 60 students (7 pupils called the same); siblings had different fathers and numbers.
+  Confirm buttons said "Done" instead of "Load sample centre" / "Delete all sample data".
+**Hidden bugs fixed (each with a regression test):** nothing on the screens ever set a family, so "Pay for brothers and
+sisters" never appeared for real students - students without a family key are now one family when they share the
+parent mobile, found when read (a first version stored "tel:<number>" as the key and the LogPrivacyTest caught the number
+in the change log of a reader without contacts.view - never derive a stored key from a hidden field);
+NaN passed every "< 0" check and a new group could get a negative or text price, text in a discount or special fee gave a
+server error, NaN/negative drawer counts and NaN marks were stored; a cash expense could be reversed with no open drawer;
+an expense date was stored without checking it is a date; the "photo is being copied" picture printed a literal ….
+**Checks:** see the commit; browser suites run with the local Chromium. **Mistakes/lessons:** `pkill -f` matched its own
+shell; a guide that names a button by key cannot drift from the screen, and a probe that visits every guide target in the
+running app found two wrong selectors (groups remembered the last tab). **Limits/next:** the app window and new icon need
+a check on the centre's Windows PC (Edge); `dev_login` must be turned off for the first customer; guides cover the
+first-sale core plus administration - exams/settlements guides can follow when those pages are sold.
+
 ## Isolate both PCs in the restore regression (2026-10-06)
 
 **Why/source:** while validating the form integration on `codex/form-layout-sync-20261006`

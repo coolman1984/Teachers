@@ -9,6 +9,10 @@ Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Recor
 - [x] FS2 Publish v1.1.0: merged by PR #11, tagged `v1.1.0` at `6b5bf2d`, built by Actions run `37423171664`, downloaded and SHA-256 verified `Hessa-Setup-1.1.0.exe` (L1 distribution evidence; field acceptance remains FS3)
 - [x] FS1a Form readability: spaced list/settings fields, complete switch rows, grouped rules with English/Formal Arabic explanations, and linked accessible help (`tests/test_frontend.js` regression; publishing checks recorded in DEVELOPMENT_HISTORY.md)
 - [x] FS1b Restore-test partition: isolate both incoming endpoints and assert unseen work stays isolated through restore; three fresh T30 runs and all 35 multi-PC tests passed (source validation; real-PC recovery remains FS3)
+- [x] FS4 Owner's request 2026-10-06: trial sign-in admin / 123 (local, brand-new PC only, bar until changed; `test_center_safety.TrialLoginTest`), own app window (`server/appwindow.py`, Settings → Appearance; `test_unit.AppWindowTest`), Hessa's own program icon (the .ico was still Trip Orders'), Change my password in the account panel
+- [x] FS5 Step-by-step guides (31) with a docked coach that opens the page and outlines each button, 44 Egyptian-centre situations, EN + Formal Arabic (`js/views/guides.js`; `test_frontend` completeness test, `test_e2e_center` coach run)
+- [x] FS6 Hidden bugs found in review: family payment never reachable for real students (family now = same parent mobile, `test_center_api` 37); NaN/negative/text numbers in fees, discounts, special fees, drawer count and marks (38); cash expense reversal without a drawer, invalid expense dates (39); new-person form showed the wrong profile; sample names repeated every 60 students
+  - [ ] Check the app window and the new icon on the centre's Windows PC (needs Windows + Edge)
 - [ ] FS3 Install it on the centre PC, run the acceptance journey with real data, then back up and restore on a second PC (L2–L4)
 
 # Tasks – where to continue

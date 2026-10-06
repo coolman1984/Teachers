@@ -122,7 +122,16 @@ def _clean_question(q):
 
 
 # ---------------------------------------------------------------- cleaning generic saves (lists edited in the pages)
-FAMILY_BY_MOBILE = 'tel:'
+def _number(v, key='err.amount', msg='Write a valid amount.', low=0.0, high=None):
+    """A typed number for money, percentages and marks: finite and inside its range. float('nan') slipped through every
+    "< 0" check (NaN compares False), a negative fee made the centre owe its students, and text gave a server error."""
+    try:
+        n = float(v)
+    except (TypeError, ValueError, OverflowError):
+        raise Problem(key, msg)
+    if not math.isfinite(n) or n < low or high is not None and n > high:
+        raise Problem(key, msg)
+    return n
 
 
 def normalize_ops(store, ops, pc_index=0):
@@ -190,12 +199,6 @@ def normalize_ops(store, ops, pc_index=0):
             for f in ('mobile', 'parentMobile', 'parentMobile2'):
                 if row.get(f):
                     row[f] = D.norm_mobile_eg(row[f])[0]
-        if e == 'students' and 'parentMobile' in row:
-            # brothers and sisters = the same parent mobile. Nothing on the screens ever set the family, so the family
-            # payment at the door only worked for the sample centre; a family given by hand (or the sample's) is kept
-            pm, ok = D.norm_mobile_eg(row.get('parentMobile') or '')
-            if not row.get('familyKey') or str(row['familyKey']).startswith(FAMILY_BY_MOBILE):
-                row['familyKey'] = FAMILY_BY_MOBILE + pm if ok and pm else ''
         if e == 'students':
             g = D.check_grade(row.get('gradeCode'), row.get('system'), row.get('track'))
             if g:
@@ -212,7 +215,7 @@ def normalize_ops(store, ops, pc_index=0):
             if other:
                 raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0])
             if row.get('discountPct') not in (None, ''):
-                row['discountPct'] = max(0.0, min(100.0, float(row['discountPct'])))
+                row['discountPct'] = _number(row['discountPct'], 'err.discount', 'The discount is a percentage from 0 to 100.', 0, 100)
         if e == 'teachers':
             with store.lock:
                 other = store.conn.execute('SELECT id FROM teachers WHERE name_key=? AND deleted=0 AND id<>?', (row['nameKey'], op.get('id'))).fetchone()
@@ -224,6 +227,12 @@ def normalize_ops(store, ops, pc_index=0):
             elif not D.as_date(row['billFrom']) or row['billFrom'] < (row.get('from') or ''):
                 raise Problem('err.billFrom', 'The first billed month cannot be before the student joins.')
         if e == 'groups':
+            if row.get('fee') not in (None, ''):
+                row['fee'] = _number(row['fee'])
+            if row.get('capacity') not in (None, ''):
+                row['capacity'] = int(_number(row['capacity'], 'err.capacity', 'Write the number of seats.', 0, 10000))
+            if row.get('packageSessions') not in (None, ''):
+                row['packageSessions'] = int(_number(row['packageSessions'], 'err.capacity', 'Write the number of sessions.', 1, 500))
             _price_history(store, op, row)
             row['slots'] = D.clean_slots(row.get('slots'))
             if 'tempSlots' in row:
@@ -446,19 +455,18 @@ def find_students(store, q, scopes=None, limit=12):
 
 
 def family_of(store, st, scopes, active_only=False):
-    """Brothers and sisters: the same family key, or - for a family taken from the parent's mobile, and for students saved
-    before the key existed - the same parent mobile."""
+    """Brothers and sisters. Nothing on the screens ever set a family key, so the family payment at the door only worked
+    for the sample centre: students without a key are one family when they have the same parent mobile. Found when it is
+    read, never stored as a key - a key holding the number would show it in the change log to people without contacts.view."""
     key = st.get('familyKey') or ''
     pm, ok = D.norm_mobile_eg(st.get('parentMobile') or '')
-    where, args = [], []
     if key:
-        where.append('family_key=?'); args.append(key)
-    if ok and pm and (not key or key.startswith(FAMILY_BY_MOBILE)):
-        where.append("(parent_mobile=? AND (family_key IS NULL OR family_key='' OR family_key=?))"); args += [pm, FAMILY_BY_MOBILE + pm]
-    if not where:
+        where, args = 'family_key=?', (key,)
+    elif ok and pm:
+        where, args = "parent_mobile=? AND (family_key IS NULL OR family_key='')", (pm,)
+    else:
         return []
-    return store.rows('students', '(' + ' OR '.join(where) + ') AND id<>?' + (' AND (active=1 OR active IS NULL)' if active_only else ''),
-                      tuple(args) + (st['id'],), scopes)
+    return store.rows('students', where + ' AND id<>?' + (' AND (active=1 OR active IS NULL)' if active_only else ''), args + (st['id'],), scopes)
 
 
 def _family_lines(store, st, d, groups, scopes):
@@ -813,7 +821,7 @@ def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
         row['billFrom'] = D.as_date(bill_from).isoformat()
     if fee not in (None, ''):
         ctx.need('students.discount')
-        row['fee'] = float(fee)
+        row['fee'] = _number(fee)
     eid = new_id('en')
     ctx.commit(f'Enrol {st["name"]} in {g["name"]}', [{'e': 'enrollments', 'id': eid, 'op': 'put', 'row': row}])
     return {'id': eid}
@@ -929,10 +937,7 @@ def close_shift(ctx, shift_id, counted, reason=''):
         ctx.need('shifts.close', 'shifts.manage')
     if sh.get('status') != 'open':
         raise Problem('err.shiftClosed', 'This cash shift is already closed.')
-    try:
-        counted = round(float(counted), 2)
-    except (TypeError, ValueError):
-        raise Problem('err.amount', 'Write the amount counted in the drawer.')
+    counted = round(_number(counted, 'err.amount', 'Write the amount counted in the drawer.'), 2)
     summ = shift_summary(ctx.store, shift_id)
     diff = round(counted - summ['expected'], 2)
     reason = D.norm_text(reason)[:300]
@@ -1225,7 +1230,10 @@ def add_expense(ctx, d):
     if d.get('teacherId'):
         ctx.need_teacher(d['teacherId'])
     note = D.norm_text(d.get('note'))[:200]
-    row = {'date': str(d.get('date') or date.today().isoformat())[:10], 'at': datetime.now().strftime('%H:%M'), 'amount': amount, 'category': cat,
+    day = D.as_date(d.get('date')) if d.get('date') else date.today()
+    if not day:                                   # a typed date that is not a date never reached the month reports
+        raise Problem('err.date', 'Choose a valid date.')
+    row = {'date': day.isoformat(), 'at': datetime.now().strftime('%H:%M'), 'amount': amount, 'category': cat,
            'teacherId': d.get('teacherId') or '', 'groupId': d.get('groupId') or '', 'method': method, 'shiftId': shift['id'] if shift else '',
            'note': note, 'by': ctx.user}
     with ctx.store.lock:
@@ -1245,6 +1253,8 @@ def void_expense(ctx, expense_id, reason):
     if not x or x.get('voidOf') or ctx.store.rows('expenses', 'void_of=?', (expense_id,)):
         raise Problem('err.voided', 'This cannot be reversed.')
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
+    if (x.get('method') or 'cash') == 'cash' and not shift:   # the cash comes back into a drawer: like a receipt reversal
+        raise Problem('err.noShift', 'Open your cash shift first (the money comes back into your drawer).')
     row = {**_strip(x), 'amount': -float(x.get('amount') or 0), 'voidOf': x['id'], 'note': reason[:200], 'by': ctx.user,
            'date': date.today().isoformat(), 'at': datetime.now().strftime('%H:%M'), 'shiftId': shift['id'] if shift and x.get('method') == 'cash' else ''}
     with ctx.store.lock:
@@ -1467,10 +1477,7 @@ def save_marks(ctx, exam_id, items):
             answers = [str(a or '')[:2].upper() for a in answers[:200]]
             it = {**it, 'score': grade_answers(ex['answerKey'], answers, mx)[0]}
         if not absent and it.get('score') not in (None, ''):
-            try:
-                score = round(float(it['score']), 2)
-            except (TypeError, ValueError):
-                raise Problem('err.score', 'A mark is not a number.')
+            score = round(_number(it['score'], 'err.score', 'A mark is not a number.', float('-inf')), 2)
             if score < 0 or (mx and score > mx):
                 raise Problem('err.scoreRange', 'A mark is higher than the full mark.', max=mx)
         if score is None and not absent:

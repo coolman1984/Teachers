@@ -24,7 +24,13 @@ cd server
 python3 app.py            # Python 3.11+, standard library only
 ```
 
-Open http://localhost:8095 on the same PC: the first start creates the administrator. Other PCs and phones of the centre open
+Open http://localhost:8095 on the same PC: the first start creates the administrator - or, for a first look, choose
+**Try it now** and sign in as **admin / 123** (trial sign-in, `dev_login` in config.json; only on a brand-new PC, only on that PC;
+a yellow bar asks to change the password until it is changed; set `"dev_login": false` before a real sale).
+The installed `Hessa.exe` opens the program in its **own window** (Microsoft Edge or Chrome in app mode, maximized or full
+screen - Settings → Appearance, `app_window` in config.json), falling back to the normal browser.
+New staff learn from **Help → Step-by-step guides** (31 guided jobs with a coach that outlines each button) and
+**Situations and problems** (44 real-centre cases), both in English and Formal Arabic. Other PCs and phones of the centre open
 `http://<centre-pc>:8095` (Overview → "Open on phone" shows the address and a QR code). To try it with a fictional centre:
 Overview → **Load sample centre**; Settings → Data → **Delete all sample data** removes it again without touching real records.
 

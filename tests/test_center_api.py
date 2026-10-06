@@ -768,9 +768,51 @@ class CenterMoneyEdgeTest(CenterFixture):
         self.assertEqual([x['id'] for x in self.c.get('/api/c/card?id=' + a)['family']], [b])
         self.assertEqual([x['id'] for x in self.c.get('/api/c/card?id=' + b)['family']], [a])
         self.assertEqual(self.c.get('/api/c/card?id=' + other)['family'], [])
+        self.assertFalse(self.c.get('/api/c/student?id=' + a)['student'].get('familyKey'))   # never a stored copy of the number
         self.assertEqual([x['id'] for x in self.c.get('/api/c/student?id=' + a)['family']], [b])
         # a new number moves the student out of the family
         row = self.c.get('/api/c/student?id=' + b)['student']
         row['parentMobile'] = '0155' + mobile[4:]
         self.put([('students', b, row)])
         self.assertEqual(self.c.get('/api/c/card?id=' + a)['family'], [])
+
+    def test_38_impossible_numbers_are_refused_not_saved(self):
+        """float('nan') passed every "< 0" check, a new group took a negative price (the centre would owe its students),
+        and text in a discount or a special fee gave a server error instead of a message."""
+        g = self.p + '-gx'
+        for bad in (-50, 'abc', 'NaN', 'inf'):
+            with self.assertRaises(ApiError) as caught:
+                self.put([('groups', g, {'name': 'Bad price ' + self.p, 'teacherId': self.teacher, 'gradeCode': 'S1', 'feeType': 'session', 'fee': bad,
+                                         'capacity': 10, 'slots': []})])
+            self.assertEqual(caught.exception.data.get('key'), 'err.amount', bad)
+        self.assertIsNone(next((x for x in self.c.get('/api/state')['groups'] if x['id'] == g), None))
+        row = self.c.get('/api/c/student?id=' + self.student)['student']
+        for bad in ('NaN', 'ten', 120, -5):
+            with self.assertRaises(ApiError) as caught:
+                self.put([('students', self.student, {**row, 'discountPct': bad})])
+            self.assertEqual(caught.exception.data.get('key'), 'err.discount', bad)
+        self.error('/api/c/enroll', {'studentId': self.other_student, 'groupId': self.group, 'fee': -100}, 'err.amount')
+        self.error('/api/c/enroll', {'studentId': self.other_student, 'groupId': self.group, 'fee': 'NaN'}, 'err.amount')
+        self.open_shift(0)
+        shift = self.c.get('/api/c/shift')['shift']
+        for bad in ('NaN', 'Infinity', -10):
+            self.error('/api/c/shift/close', {'shiftId': shift['id'], 'counted': bad, 'reason': 'test'}, 'err.amount')
+        self.c.post('/api/c/shift/close', {'shiftId': shift['id'], 'counted': 0})
+        exam = self.p + '-ex'
+        self.c.post('/api/commit', {'label': 'exam', 'ops': [{'e': 'exams', 'id': exam, 'op': 'put', 'row': {
+            'title': 'Quiz ' + self.p, 'teacherId': self.teacher, 'groupIds': [self.group], 'date': self.day, 'kind': 'monthly', 'maxScore': 20}}]})
+        self.error('/api/c/marks', {'examId': exam, 'items': [{'studentId': self.student, 'score': 'NaN'}]}, 'err.score')
+        self.c.post('/api/c/marks', {'examId': exam, 'items': [{'studentId': self.student, 'score': 17.5}]})
+
+    def test_39_expense_reversal_returns_cash_into_an_open_drawer_and_dates_are_real(self):
+        self.open_shift(100)
+        self.error('/api/c/expense', {'category': 'supplies', 'amount': 30, 'date': '2026-13-45'}, 'err.date')
+        e = self.c.post('/api/c/expense', {'category': 'supplies', 'amount': 30})
+        shift = self.c.get('/api/c/shift')
+        self.assertEqual(shift['expected'], 70)
+        self.c.post('/api/c/shift/close', {'shiftId': shift['shift']['id'], 'counted': 70})
+        # the cash would come back into no drawer at all: refused until a shift is open, then counted in it
+        self.error('/api/c/expense/void', {'id': e['id'], 'reason': 'Bought by mistake'}, 'err.noShift')
+        self.open_shift(0)
+        self.c.post('/api/c/expense/void', {'id': e['id'], 'reason': 'Bought by mistake'})
+        self.assertEqual(self.c.get('/api/c/shift')['expected'], 30)
