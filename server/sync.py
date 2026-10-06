@@ -329,6 +329,7 @@ class SyncService:
         self.server = None
         self.stop = False
         self.missing = {}  # attachment path -> {'tries', 'last_error'}
+        self.fetching = set()  # file hashes being downloaded right now: one download per file, whatever the number of PCs
         self.missing_checked = (None, 0)
         self.journal.listeners.append(lambda recs: self.kick())
         self.sync_logger = SyncLog(os.path.join(system.data_dir, 'logs'))
@@ -638,8 +639,23 @@ class SyncService:
         return done
 
     def fetch_file(self, c, src, sha, size):
-        """Downloads one file into uploads/.incoming/<sha>.part (resuming), verifies it and moves it into place."""
+        """Downloads one file into uploads/.incoming/<sha>.part (resuming), verifies it and moves it into place.
+        Each other PC has its own sync thread: two of them must never write the same .part at once - the second kept appending
+        to the file after the first had moved it into place, and the stored photo grew longer than the original."""
+        with self.lock:
+            if sha in self.fetching:
+                return False  # another PC's thread is downloading it right now
+            self.fetching.add(sha)
+        try:
+            return self._fetch_file(c, src, sha, size)
+        finally:
+            with self.lock:
+                self.fetching.discard(sha)
+
+    def _fetch_file(self, c, src, sha, size):
         final = self.file_path(src)
+        if os.path.exists(final) and (size is None or os.path.getsize(final) == size):
+            return True   # already here (fetched through another PC a moment ago)
         inc = os.path.join(self.uploads, '.incoming')
         os.makedirs(inc, exist_ok=True)
         part = os.path.join(inc, sha + '.part')

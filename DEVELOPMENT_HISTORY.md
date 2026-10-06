@@ -2,6 +2,20 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## main green again: a race in copying photos, a phone overflow and a test that clicked too early (2026-10-06)
+
+**Why:** after #6 the browser job on main was red (top-students picture), and the next runs showed two more failures that came and went.
+**What:** (1) *Real bug:* with three or more PCs, two sync threads could download the same photo at the same moment into the same
+`.part` file; the second kept appending after the first had moved it into place, so the stored photo came out longer than the
+original (or the download failed its checksum). Now one download per file at a time (`SyncService.fetching`), and a file that is
+already in place is not fetched again. (2) The overview's "Sessions now and next" rows could not shrink: on a 360 px phone with the
+largest font the page was 4 px too wide - only at hours when that list is full. (3) The G05 browser test clicked "Top students" when
+the server had saved "shown to parents" but the panel had not yet got the answer; it now waits for the panel's own state.
+**Mistakes:** all three passed locally most of the time; each was found only by reading the CI log and reproducing the exact condition
+(three PCs, time of day, a slower browser).
+**Evidence:** `tests/test_sync_files.py` - two threads fetch one file: corrupted/lost on the old code, intact and stored once now;
+`test_acceptance` phone check reproduced at the same hour and passes now; G05 passes repeatedly.
+
 ## Integrate all outstanding branches and enforce the actual safety boundaries (2026-10-05)
 
 **User/outcome:** a nontechnical centre team must trust that attendance, receipts and parent links represent what was saved.
