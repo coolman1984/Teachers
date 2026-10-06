@@ -386,6 +386,9 @@ class DoorReviewTest(BrowserBase):
         self.assertEqual(pg.query_selector('.dialog [data-canvas]'), None)
         pg.click('.drawer [data-publish]')
         self.assertTrue(wait_until(lambda: next(x for x in self.c.get('/api/state')['exams'] if x['id'] == 'rv-hx').get('published') is True))
+        # the panel confirms "shown to parents" only after the save AND the reload of the data; on a slow CI runner the server had saved
+        # while the page had not caught up yet, so the click below was still refused - wait for what the user sees, as a user would
+        pg.wait_for_selector('.drawer [data-publish][aria-pressed="true"]')
         pg.click('.drawer [data-honours]')
         pg.wait_for_selector('.dialog [data-canvas]')
         painted = pg.evaluate("(() => { const c = document.querySelector('.dialog [data-canvas]'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;"
