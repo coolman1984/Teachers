@@ -441,6 +441,13 @@ class CenterApiTest(CenterFixture):
             changed = {**row, key:value}
             self.error('/api/commit', {'ops':[{'e':'teachers','id':self.teacher,'op':'put','ver':row['ver'],'row':changed}]}, 'err.amount')
 
+    def test_22b_the_menu_extras_accept_only_known_pages(self):
+        for value in ['exams', ['exams', 'money'], [{'id': 'exams'}]]:
+            self.error('/api/commit', {'ops':[{'e':'settings','id':'extras','op':'put','row':{'value':value}}]}, 'err.setting')
+        ver = self.c.get('/api/state').get('settingsVer', {}).get('extras')
+        self.c.post('/api/commit', {'ops':[{'e':'settings','id':'extras','op':'put','ver':ver,'row':{'value':['devices', 'exams', 'exams']}}]})
+        self.assertEqual(self.c.get('/api/state')['settings']['extras'], ['exams', 'devices'])   # known order, no repeats
+
     def test_24_absentees_are_computed_not_stored(self):
         third, fourth = self.p + '-s3', self.p + '-s4'
         self.put([('students', sid, {'code': str(20000 + type(self).serial * 10 + i), 'name': 'Absent Candidate ' + sid, 'gradeCode': 'S1',

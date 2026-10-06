@@ -511,6 +511,25 @@ class DoorTest(BrowserBase):
         self.assertEqual(pg.evaluate("document.querySelector('.tabbar a[aria-current=page]').dataset.tab"), 'door')
         self.assertEqual(self.errors, [])
 
+    def test_zzz_basic_menu_then_an_extra_page_is_turned_on(self):
+        pg = self.open({'lang': 'en'})
+        pg.goto(self.S.base + '/#/settings?tab=centre')
+        pg.wait_for_selector('[data-extras-form]')
+        menu = lambda: pg.eval_on_selector_all('#sidebar a[data-page]', 'els => els.map(e => e.dataset.page)')
+        self.assertEqual([p for p in menu() if p in D.EXTRA_PAGES], [])        # the first version shows only the daily work
+        self.assertIn('door', menu())
+        pg.check('[data-extras-form] input[name="exams"]')
+        pg.click('[data-extras-form] [type="submit"]')
+        pg.wait_for_selector('#sidebar a[data-page="exams"]')
+        self.assertEqual([p for p in menu() if p in D.EXTRA_PAGES], ['exams'])
+        self.assertEqual(self.c.get('/api/state')['settings']['extras'], ['exams'])
+        pg.goto(self.S.base + '/#/followup')                                    # a hidden page still opens from a link
+        pg.wait_for_selector('#crumbs b')
+        self.assertIn('Follow', pg.inner_text('#crumbs b'))
+        ver = self.c.get('/api/state')['settingsVer'].get('extras')
+        self.c.post('/api/commit', {'ops': [{'e': 'settings', 'id': 'extras', 'op': 'put', 'ver': ver, 'row': {'value': []}}]})
+        self.assertEqual(self.errors, [])
+
 
 if __name__ == '__main__':
     unittest.main()

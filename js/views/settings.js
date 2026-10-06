@@ -144,7 +144,30 @@
     return '<form data-settings-form class="card">' + (tab === 'messages' ? '<p class="notice">' + HS.esc(HS.t('msg.variables')) + '</p>' : '') +
       HS.ui.fields(fields, tab === 'messages' ? templateValues(settings) : settings) +
       (tab === 'messages' ? '<div class="notice" data-message-preview role="status"></div>' : '') +
-      (HS.can('settings.edit') ? '<button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button>' : '') + '</form>';
+      (HS.can('settings.edit') ? '<button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button>' : '') + '</form>' +
+      (tab === 'centre' ? extrasCard() : '');
+  }
+  // the basic menu holds the daily work; the owner adds the extra pages one by one when the centre is ready for them
+  function extrasCard() {
+    var edit = HS.can('settings.edit');
+    return '<form data-extras-form class="card stack" style="margin-top:1rem"><header><span class="tile-ic">' + HS.icon('layers') + '</span><h2>' +
+      HS.esc(HS.t('set.extras')) + '</h2></header><p class="faint">' + HS.esc(HS.t('set.extras.d')) + '</p>' +
+      HS.EXTRAS.map(function (id) {
+        return '<label class="row" style="gap:.6rem;align-items:flex-start"><input type="checkbox" name="' + id + '"' + (HS.extraOn(id) ? ' checked' : '') +
+          (edit ? '' : ' disabled') + '><span><b>' + HS.esc(HS.t('nav.' + id)) + '</b><br><small class="faint">' + HS.esc(HS.t('set.extras.' + id)) + '</small></span></label>';
+      }).join('') +
+      (edit ? '<div><button type="submit" class="btn primary">' + HS.esc(HS.t('common.save')) + '</button></div>' : '') + '</form>';
+  }
+  function mountExtras(root) {
+    var form = root.querySelector('[data-extras-form]');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault(); if (!HS.can('settings.edit')) return;
+      var on = HS.EXTRAS.filter(function (id) { return form.elements[id].checked; });
+      var ver = (HS.data.state || {}).settingsVer || {};
+      HS.ui.run(HS.data.commit('Choose the extra pages in the menu', [{ e:'settings', id:'extras', op:'put', ver:ver.extras || null, row:{ value:on } }]),
+        'common.saved', form.querySelector('[type="submit"]')).then(function () { HS.shell.rebuild(); }).catch(function () {});
+    });
   }
   function mountSettings(root, tab) {
     var form = root.querySelector('[data-settings-form]');
@@ -194,6 +217,7 @@
     },
     mount: function (root, ctx) {
       if (['centre','rules','messages'].indexOf(ctx.route.q.tab) >= 0) mountSettings(root, ctx.route.q.tab);
+      if (ctx.route.q.tab === 'centre') mountExtras(root);
       if (ctx.route.q.tab === 'lists') HS.lists.mount(root);
       if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
