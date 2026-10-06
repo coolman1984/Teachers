@@ -3,6 +3,9 @@ name: hessa
 description: Working memory for changing Hessa (the tutoring-centre system) - where things are, the rules that must never break, the checks before a push. Read it before touching server/, js/ or gateway/.
 ---
 
+<!-- first-sale-contract: 2026-10-06 -->
+> **Owner decision — 6 October 2026:** Read [the first-sale contract](../../../LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
+
 # Hessa — short working memory
 
 Read `CLAUDE.md` (rules), then `docs/EXECUTION_PLAN.md`, `TASKS.md`, and `DEVELOPMENT_HISTORY.md` before money, sync or attendance.
