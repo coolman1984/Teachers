@@ -1,3 +1,6 @@
+<!-- first-sale-contract: 2026-10-06 -->
+> **Optional service guide:** Parent links/remote work are excluded from the first basic paid pilot unless separately accepted. Implementers: consult the [source first-sale contract](https://github.com/coolman1984/Teachers/blob/main/LAUNCH_SCOPE.md) online before deploying this add-on. This source reference is not required for ordinary offline use; the agreed customer scope and acceptance checklist accompany the assisted handoff.
+
 # الشغل على حِصّة من بره السنتر
 
 > للمسؤول. بيتعمل مرة واحدة. بعد كده أي حد إنت سامحله يفتح البرنامج من البيت على موبايله أو اللابتوب.
