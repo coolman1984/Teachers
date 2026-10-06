@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), security: blank() };
@@ -87,6 +87,8 @@
     [/^Signed in from outside the centre$/, 'remoteLogin'],
     [/^Sign-in from outside the centre refused: no permission$/, 'remoteRefused'],
     [/^Work from outside the centre switched on$/, 'remoteOn'],
+    [/^AI key saved$/, 'aiKeySaved'],
+    [/^AI key removed$/, 'aiKeyRemoved'],
     [/^Work from outside the centre switched off$/, 'remoteOff']
   ];
   var PART = [

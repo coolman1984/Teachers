@@ -35,6 +35,7 @@ from auth import ADMIN_PERMS, ALL, PERMISSIONS, AuthError, Forbidden  # noqa: E4
 import center  # noqa: E402
 import formats  # noqa: E402
 import gateway_client as gwc  # noqa: E402
+import ai  # noqa: E402
 import store as store_mod  # noqa: E402
 from store import BadRequest, Conflict, now  # noqa: E402
 from upgrade import DataFromNewerVersion, UpgradeVerificationFailed, check_now  # noqa: E402
@@ -203,9 +204,11 @@ if INSTANCE:
     STORE, AUTH, BACKUPS, JOURNAL, NODE = SYSTEM.store, SYSTEM.auth, SYSTEM.backups, SYSTEM.journal, SYSTEM.node
     SYNC = SyncService(SYSTEM, CFG, UPLOADS, log=say)
     SECRETS = gwc.Secrets(os.path.join(DATA_DIR, 'gateway.json'))
+    AI_KEY = ai.Key(os.path.join(DATA_DIR, 'ai.json'))      # this PC only, never in the shared database
 else:
-    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = None
+    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = None
 GATE = None
+AI_BUSY = threading.Lock()
 formats.OFFICE_TMP = os.path.join(DATA_DIR, 'tmp')
 OFFICE_STATE = formats.office_state()      # is Microsoft Excel / Word on this PC? (decided once at start)
 
@@ -260,7 +263,7 @@ REPORT_PERMS = [p for p in ALL if p.startswith('report.')] + ['excel.export', 'l
 ENTITY_TITLE = {'subjects': 'subjects', 'rooms': 'rooms', 'teachers': 'teachers', 'students': 'students', 'groups': 'groups',
                 'enrollments': 'enrolments', 'sessions': 'sessions', 'attendance': 'attendance', 'payments': 'receipts',
                 'shifts': 'cash shifts', 'expenses': 'expenses', 'materials': 'handouts', 'exams': 'exams', 'marks': 'marks',
-                'followups': 'follow-ups', 'settlements': 'settlements', 'settings': 'settings'}
+                'followups': 'follow-ups', 'settlements': 'settlements', 'settings': 'settings', 'questions': 'bank questions'}
 OP_WORD = {'insert': 'add', 'update': 'change', 'delete': 'delete'}
 SHARED_LISTS = ('settings', 'subjects', 'rooms', 'students')  # not limited to a teacher
 DISCOUNT_FIELDS = {'discountPct', 'discountReason', 'exempt'}
@@ -284,6 +287,7 @@ def required(entity, op, changed):
         'sessions': {'insert': ('attendance.mark',), 'update': ('attendance.mark',), 'delete': ('attendance.edit',)},
         'materials': {'insert': ('materials.manage',), 'update': ('materials.manage',), 'delete': ('materials.manage',)},
         'exams': {'insert': ('exams.manage',), 'update': ('exams.manage',), 'delete': ('exams.manage',)},
+        'questions': {'insert': ('exams.manage',), 'update': ('exams.manage',), 'delete': ('exams.manage',)},
         'marks': {'insert': ('marks.enter',), 'update': ('marks.enter',), 'delete': ('marks.enter',)},
         'followups': {'insert': ('followup.log',), 'update': ('followup.log',), 'delete': ('followup.log',)},
         'attendance': {'insert': SYSTEM_ONLY, 'update': SYSTEM_ONLY, 'delete': SYSTEM_ONLY},
@@ -729,6 +733,9 @@ class Handler(BaseHTTPRequestHandler):
             self.need_admin()
             return self.send(200, AUTH.query_log(qs.get('q', ''), qs.get('user', ''), qs.get('type', ''), qs.get('from', ''), qs.get('to', ''),
                                                  max(1, min(1000, int(qs.get('limit', 200)))), max(0, int(qs.get('offset', 0))), qs.get('node', '')))
+        if p == '/api/ai':      # is the question generator set up on this PC? (never the key itself)
+            self.need('exams.manage', 'settings.edit')
+            return self.send(200, {**AI_KEY.status(), 'admin': is_admin(self.u)})
         if p == '/api/remote':
             self.need_admin()
             people = [x.get('full_name') or x.get('username') for x in AUTH.list_users() if x.get('active') and 'remote.use' in (x.get('perms') or [])]
@@ -977,6 +984,16 @@ class Handler(BaseHTTPRequestHandler):
             res = check_now(SYSTEM)
             STORE.log_activity(self.user, self.ip, [{'type': 'backup', 'action': 'Data check', 'target': 'ok' if res['ok'] else 'problems found'}])
             return self.send(200, res)
+        if p == '/api/ai/key':
+            self.need_admin()
+            d = self.json_body()
+            if d.get('clear'):
+                AI_KEY.clear()
+                AUTH.log(self.u['display'], self.ip, 'ai-key', NODE.name, 'AI key removed')
+            else:
+                AI_KEY.save(d.get('key'))
+                AUTH.log(self.u['display'], self.ip, 'ai-key', NODE.name, 'AI key saved')      # never the key itself
+            return self.send(200, AI_KEY.status())
         if p == '/api/remote':
             self.need_admin()
             on = bool(self.json_body().get('on'))
@@ -1247,6 +1264,21 @@ class Handler(BaseHTTPRequestHandler):
             if action == 'sample' and not STORE.row('settings', 'smp-centre') and STORE.counts().get('Students'):
                 BACKUPS.create('pre-sample')
             return self.send(200, sample.load(c, AUTH, self.u) if action == 'sample' else sample.remove(c, AUTH, self.u))
+        if action == 'ai/questions':        # review G04: questions to check, nothing is saved here
+            self.need('exams.manage')
+            tid = str(d.get('teacherId') or '')
+            if self.u['scopes'] is not None and tid not in self.u['scopes']:
+                raise center.Problem('err.scope', 'You can only change the work of the teachers assigned to you.')
+            sub = STORE.row('subjects', str(d.get('subjectId') or '')) or {}
+            if not AI_BUSY.acquire(blocking=False):      # one request at a time per PC: each one costs money
+                raise center.Problem('ai.err.wait', 'Another question request is running. Wait for it to finish.')
+            try:
+                got = ai.generate(AI_KEY, sub.get('name') or '', str(d.get('gradeCode') or ''), d.get('topic'), d.get('count'),
+                                  d.get('lang'), d.get('notes'))
+            finally:
+                AI_BUSY.release()
+            STORE.log_activity(self.user, self.ip, [{'type': 'change', 'action': f'AI questions: {len(got)} for "{str(d.get("topic") or "")[:80]}"', 'target': 'questions'}])
+            return self.send(200, {'questions': got, 'model': ai.MODEL})
         if action == 'portal':
             self.need('messages.send')
             if not SECRETS.configured:

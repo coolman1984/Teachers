@@ -2,6 +2,56 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## The "sessions now" list widened a phone at the largest font (found 2026-10-06)
+
+**What:** the full run of the acceptance tests at 15:00 found the overview wider than a 360 px phone: the list of sessions running now
+is a grid, and a grid row grows to its content, so a long group, teacher and room pushed it off the screen. The page test only sees
+it while sessions are running, which is why the morning runs passed. **Fix:** the list's column is `minmax(0, 1fr)`; the teacher and
+room line wraps. **Regression test:** `test_acceptance.test_a0_*` puts a long row on the overview at any hour (it fails without the fix).
+**Also:** the page-name check of G06 refused the free text that `test_multinode` kept in the teacher's page-name field; the test now
+writes valid page names (the merge rules it proves are unchanged). **Lesson:** a test that depends on the clock needs a twin that
+does not.
+
+## Questions written by AI, checked by the teacher (review G04, plan P9.2 - 2026-10-06)
+
+**What:** optional. An administrator pastes an Anthropic API key in Settings -> AI questions; in the question bank a teacher presses
+"Generate with AI", chooses subject, grade and lesson (and notes), and reads each question that comes back: add it as it is, correct
+it in place, or discard it. Added questions carry `source: 'ai'`.
+**Privacy and money:** the key is kept in `data/ai.json` on that PC (owner-only file, like `gateway.json`) - not in the shared data,
+the backups, the logs or any page (the page sees the last four letters). Only the subject name, grade, lesson and the teacher's
+notes are sent - no student, parent, mark or teacher name. One request at a time per PC; the activity log says who asked for how many.
+**How:** `server/ai.py` uses `urllib` (the server takes no outside packages, so the official SDK cannot be used) against the Messages
+API: structured JSON output (a schema with the text, choices, answer letter and explanation), server-side fallback on a declined
+request, the stop reason checked before reading (declined / cut short have their own messages), every question cleaned by the same
+rules as a hand-written one and a broken one dropped rather than "fixed". The model is the plan's (`claude-sonnet-5-5`), checked
+against the current model list first, as the review asked.
+**Mistakes:** the first "correct then add" opened the question editor over the dialog and lost the list on the way back; it is now an
+editor inside the list. The editor was cramped on a phone - it now stacks.
+**Evidence:** `tests/test_ai.py` with a local stand-in for the AI service: no key -> clear message and nothing sent; a bad key shape and
+a non-administrator refused; the key absent from the state, every other data file, the server output; the request carries the
+lesson but no student name, code or phone; nothing saved before the teacher adds; key refused / busy / no credit / declined / cut
+short / no internet each say what to do; a teacher limited to one teacher cannot ask for another's; in Chromium the administrator
+saves the key and the teacher adds one, corrects one and discards one. Not yet tried with a real account (needs the owner's key).
+
+## Question bank: write once, use in many exams (review G03, plan P9.2 - 2026-10-06)
+
+**Why:** a teacher writes the same kind of questions every week; the plan's AI generator also needs a place to put the questions
+a teacher accepts. **What:** a `questions` entity per teacher (subject, grade, lesson, 2-5 choices, the right answer, an
+explanation, source manual/ai), Exams -> Question bank (search and filters, edit, delete to the Recycle Bin), "Add from the question
+bank" in the exam form (order with arrows, remove), printing of the question paper and of the answer key with the explanations.
+**Decisions:** an exam keeps a *copy* of each question (`paper`), not a link: a change in the bank never changes an exam already
+made. The exam shows "Changed in the bank" and the teacher chooses "Use the new version"; if marks were already saved the page asks
+first and the saved marks stay as they are (only sheets read later use the new key). The server derives the number of questions,
+the choices and the answer key from the paper - the page cannot send a key that does not match. Questions are teacher-scoped like
+exams and written with "Create exams and answer keys" (an assistant is refused).
+**Mistakes:** an exam could not be opened for editing once created (the form existed, no button reached it); the marks sheet now has
+"Edit exam", which asks before leaving marks that were typed but not saved.
+**Evidence:** `tests/test_qbank.py` - bad questions refused with one clear message, the key follows the paper, a bank edit leaves the
+exam alone, marks counted with the exam's own key, delete keeps the exam's copy and shows in the Recycle Bin, a teacher sees only
+their bank and cannot write into another's, an assistant is refused; in Chromium (Arabic): write a question, add two to a new exam,
+reorder, print paper and key, change the bank, take the new version with the confirmation, marks unchanged. Screens checked at
+360 px and on a PC; the paper and key printed to A4 PDF.
+
 ## A public page for every teacher who wants one (review G06, plan P9.3 - 2026-10-06)
 
 **Why:** parents look for a teacher before they come; today the centre sends timetables as pictures in WhatsApp groups that are old

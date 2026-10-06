@@ -102,6 +102,25 @@ def atomic_operation(fn):
     return run
 
 
+# ---------------------------------------------------------------- the question bank (review G03)
+LETTERS = 'ABCDE'
+
+
+def _clean_question(q):
+    """A multiple-choice question: the text, 2 to 5 choices and the letter of the right one (and an optional explanation)."""
+    if not isinstance(q, dict):
+        raise Problem('err.question', 'Write the question, at least two choices and choose the right answer.')
+    text = str(q.get('text') or '').strip()
+    choices = [str(c or '').strip() for c in (q.get('choices') or [])] if isinstance(q.get('choices'), list) else []
+    while choices and not choices[-1]:
+        choices.pop()
+    answer = str(q.get('answer') or '').strip().upper()
+    if not text or len(text) > 2000 or not 2 <= len(choices) <= 5 or not all(choices) or any(len(c) > 400 for c in choices) \
+            or answer not in LETTERS[:len(choices)] or not answer:
+        raise Problem('err.question', 'Write the question, at least two choices and choose the right answer.')
+    return {'text': text, 'choices': choices, 'answer': answer, 'explanation': str(q.get('explanation') or '').strip()[:2000]}
+
+
 # ---------------------------------------------------------------- cleaning generic saves (lists edited in the pages)
 def normalize_ops(store, ops, pc_index=0):
     """Clean names and mobiles on the server, give new students a code, check grades, timetables and the limits of
@@ -135,6 +154,18 @@ def normalize_ops(store, ops, pc_index=0):
                         raise Problem('err.amount', 'Write a valid amount.')
                     if not math.isfinite(value) or value < 0 or key == 'centerPct' and value > 100:
                         raise Problem('err.amount', 'Write a valid amount.')
+        if e == 'questions':
+            row.update(_clean_question(row))
+            row['source'] = row.get('source') if row.get('source') in ('manual', 'ai') else 'manual'
+        if e == 'exams' and row.get('paper'):
+            # the questions printed on this exam are a copy taken from the bank: a later change in the bank never changes an
+            # exam by itself (the teacher presses "Take the bank's version"); the answer key always follows the paper
+            if not isinstance(row['paper'], list) or len(row['paper']) > 75:
+                raise Problem('err.paper', 'An exam paper holds up to 75 questions.')
+            row['paper'] = [{**_clean_question(q), 'qid': str(q.get('qid') or '')[:40]} for q in row['paper']]
+            row['questions'] = len(row['paper'])
+            row['choices'] = max(len(q['choices']) for q in row['paper'])
+            row['answerKey'] = [q['answer'] for q in row['paper']]
         if e == 'teachers' and 'slug' in row:
             # the address of the teacher's public page (<gateway>/p/<slug>): empty = no public page
             slug = str(row.get('slug') or '').strip().lower()

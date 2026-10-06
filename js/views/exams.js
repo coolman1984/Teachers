@@ -1,4 +1,5 @@
-/* Hessa - exams and marks: the exam list with averages, a new exam for one or more groups, and the marks sheet:
+/* Hessa - exams and marks: the exam list with averages, a new exam for one or more groups (its questions can come from the
+   question bank, js/views/qbank.js), and the marks sheet:
    type a mark and Enter moves down, paste a whole column from Excel, mark absent with A, live ranking with ties
    (1, 2, 2, 4), statistics, results to parents one chat at a time, and a printable results sheet. */
 (function () {
@@ -23,13 +24,58 @@
         '<div class="field"><label for="xf-q">' + HS.esc(HS.t('omr.questions')) + '</label><input class="input" id="xf-q" name="questions" type="number" min="0" max="' + HS.omr.MAX_Q + '" dir="ltr" value="' + HS.esc(x.questions || '') + '"><span class="help">' + HS.esc(HS.t('omr.questions.h')) + '</span></div>' +
         '<div class="field"><label for="xf-c">' + HS.esc(HS.t('omr.choices')) + '</label><select class="input" id="xf-c" name="choices">' + [2, 3, 4, 5].map(function (n) { return opt(n, String(n), x.choices || 4); }).join('') + '</select></div>' +
         '<div class="field wide" data-keyfield><label for="xf-k2">' + HS.esc(HS.t('omr.key')) + '</label><input class="input" id="xf-k2" name="answerKey" dir="ltr" autocomplete="off" spellcheck="false" placeholder="ABCDA BCDAB …" value="' + HS.esc((x.answerKey || []).join('')) + '"><span class="help" data-keycount></span></div>' +
+        '<div class="field wide" data-paperbox></div>' +
         '<div class="field wide"><span class="lbl">' + HS.esc(HS.t('ex.groups')) + '</span><div class="check-list">' + groups.map(function (g) {
           return '<label class="choice"><input type="checkbox" name="g" value="' + HS.esc(g.id) + '"' + ((x.groupIds || []).indexOf(g.id) >= 0 ? ' checked' : '') + '><span><b>' + HS.esc(g.name) + '</b><small>' + HS.esc(D.teacherName(g.teacherId)) + '</small></span></label>'; }).join('') + '</div>' +
           '<span class="help">' + HS.esc(HS.t('ex.groups.b')) + '</span></div>' +
         '<div class="tip bad wide" data-err hidden></div></form>',
       footer: '<button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t(cur ? 'common.save' : 'ex.create')) + '</button>',
       mount: function (p) {
-        var form = p.querySelector('[data-xform]');
+        var form = p.querySelector('[data-xform]'), paper = (x.paper || []).map(function (q) { return Object.assign({}, q); });
+        function teacherOfGroups() {
+          var t = {}; Array.prototype.forEach.call(form.querySelectorAll('[name=g]:checked'), function (c) { t[(D.get('groups', c.value) || {}).teacherId] = 1; });
+          var ids = Object.keys(t); return ids.length === 1 ? ids[0] : (cur && !ids.length ? cur.teacherId : null);
+        }
+        function paintPaper() {   // questions taken from the bank: the count, the choices and the key follow them
+          var box = p.querySelector('[data-paperbox]'), L = HS.omr.LETTERS[HS.lang === 'ar' ? 'ar' : 'en'];
+          box.innerHTML = '<span class="lbl">' + HS.esc(HS.t('qb.paper')) + '</span>' +
+            (paper.length ? '<ol class="qb-paper">' + paper.map(function (q, i) {
+              var newer = HS.qbank.changed(q);
+              return '<li><span class="grow"><span class="qb-text">' + HS.esc(q.text) + '</span><small class="faint">' + HS.esc(HS.t('qb.right')) + ': <b>' + HS.esc(L[HS.omr.LETTERS.en.indexOf(q.answer)] || '') + '</b>' +
+                (newer ? ' <span class="badge warn">' + HS.esc(HS.t('qb.changed')) + '</span> <button type="button" class="link" data-pnew="' + i + '">' + HS.esc(HS.t('qb.takeNew')) + '</button>' : '') + '</small></span>' +
+                '<span class="qb-acts"><button type="button" class="icon-btn" data-pup="' + i + '" aria-label="' + HS.esc(HS.t('qb.up')) + '"' + (i ? '' : ' disabled') + '>↑</button>' +
+                '<button type="button" class="icon-btn" data-pdown="' + i + '" aria-label="' + HS.esc(HS.t('qb.down')) + '"' + (i < paper.length - 1 ? '' : ' disabled') + '>↓</button>' +
+                '<button type="button" class="icon-btn" data-prm="' + i + '" aria-label="' + HS.esc(HS.t('qb.remove')) + '">' + HS.icon('x', 'sm') + '</button></span></li>'; }).join('') + '</ol>' : '') +
+            '<button type="button" class="btn" data-padd>' + HS.icon('book', 'sm') + HS.esc(HS.t('qb.add')) + '</button>' +
+            '<span class="help">' + HS.esc(HS.t('qb.paper.h')) + '</span>';
+          var on = paper.length > 0;
+          form.questions.disabled = form.choices.disabled = form.answerKey.disabled = on;
+          if (on) {
+            form.questions.value = paper.length;
+            form.choices.value = String(Math.max.apply(null, paper.map(function (q) { return q.choices.length; })));
+            form.answerKey.value = paper.map(function (q) { return q.answer; }).join('');
+          }
+          keyCount();
+        }
+        p.querySelector('[data-paperbox]').addEventListener('click', function (e) {
+          var b = e.target.closest('button'); if (!b) return;
+          if (b.hasAttribute('data-padd')) {
+            var t = teacherOfGroups();
+            if (!t) { HS.toast(HS.t('qb.pickGroups'), 'bad', 5000); return; }
+            HS.qbank.pick(t, paper.map(function (q) { return q.qid; }), function (list) {
+              if (paper.length + list.length > HS.omr.MAX_Q) { HS.toast(HS.t('omr.tooMany', { n: HS.omr.MAX_Q }), 'bad', 5000); return; }
+              paper = paper.concat(list); paintPaper();
+            });
+            return;
+          }
+          var i;
+          if (b.dataset.pup) { i = Number(b.dataset.pup); paper.splice(i - 1, 0, paper.splice(i, 1)[0]); }
+          else if (b.dataset.pdown) { i = Number(b.dataset.pdown); paper.splice(i + 1, 0, paper.splice(i, 1)[0]); }
+          else if (b.dataset.prm) paper.splice(Number(b.dataset.prm), 1);
+          else if (b.dataset.pnew) { i = Number(b.dataset.pnew); var nb = HS.qbank.changed(paper[i]); if (nb) paper[i] = HS.qbank.copy(nb); }
+          else return;
+          paintPaper();
+        });
         function keyCount() {   // "12 of 20" as the key is typed: the printed sheet and the marking both need it complete
           var n = Number(digits(form.questions.value)) || 0, k = HS.omr.parseKey(form.answerKey.value), bad = k.indexOf('?') >= 0;
           p.querySelector('[data-keyfield]').hidden = !n;
@@ -37,7 +83,7 @@
           out.textContent = n ? HS.t('omr.keyCount', { k: k.length, n: n }) + (bad ? ' · ' + HS.t('omr.keyBad') : '') : '';
           out.className = 'help' + (n && (k.length !== n || bad) ? ' neg' : '');
         }
-        form.addEventListener('input', keyCount); keyCount();
+        form.addEventListener('input', keyCount); paintPaper();
         function save() {
           var gids = Array.prototype.filter.call(form.querySelectorAll('[name=g]'), function (c) { return c.checked; }).map(function (c) { return c.value; });
           var err = p.querySelector('[data-err]'), title = form.title.value.trim(), max = Number(digits(form.maxScore.value));
@@ -52,12 +98,16 @@
           var teachers = {}; gids.forEach(function (g) { teachers[(D.get('groups', g) || {}).teacherId] = 1; });
           if (Object.keys(teachers).length > 1) { err.hidden = false; err.textContent = HS.t('ex.oneTeacher'); return; }   // marks belong to one teacher's scope
           var row = Object.assign({}, cur || {}, { title: title, kind: form.kind.value, date: form.date.value, maxScore: max, groupIds: gids, teacherId: Object.keys(teachers)[0],
-            questions: nq || null, choices: Number(form.choices.value) || 4, answerKey: nq ? key : [] });
+            questions: nq || null, choices: Number(form.choices.value) || 4, answerKey: nq ? key : [], paper: paper });
           delete row.id; delete row.ver;
+          if (paper.length && paper.some(function (q) { var b = q.qid && D.get('questions', q.qid); return b && b.teacherId !== row.teacherId; })) { err.hidden = false; err.textContent = HS.t('qb.otherTeacher'); return; }
           var xid = id || D.newId('ex');
-          U.run(D.save('exams', xid, row, (cur ? 'Edit exam ' : 'New exam ') + title), 'common.saved', p.querySelector('[data-save]')).then(function () {
-            HS.panel.close(); HS.rerender(); if (!cur) setTimeout(function () { openSheet(xid); }, 280);
-          }, function (e) { err.hidden = false; err.textContent = U.errorText(e); });
+          // a new answer key for an exam that already has marks is the teacher's decision: saved marks are not recounted
+          var keyMoved = cur && (cur.answerKey || []).join('') && (cur.answerKey || []).join('') !== row.answerKey.join('') && D.list('marks').some(function (m) { return m.examId === id; });
+          (keyMoved ? U.confirm({ title: HS.t('qb.keyChanged'), body: HS.t('qb.keyChanged.b'), ok: HS.t('common.save') }) : Promise.resolve(true)).then(function (yes) { if (yes) go(); });
+          function go() { U.run(D.save('exams', xid, row, (cur ? 'Edit exam ' : 'New exam ') + title), 'common.saved', p.querySelector('[data-save]')).then(function () {
+            HS.panel.close(); HS.rerender(); setTimeout(function () { openSheet(xid); }, 280);
+          }, function (e) { err.hidden = false; err.textContent = U.errorText(e); }); }
         }
         p.querySelector('[data-save]').addEventListener('click', save);
         form.addEventListener('submit', function (e) { e.preventDefault(); save(); });
@@ -226,11 +276,14 @@
       }
       var el = HS.panel.open({ title: ex.title, body:
         '<div class="row wrap"><span class="badge">' + HS.esc(HS.t('exam.kind.' + ex.kind)) + '</span><span class="badge">' + HS.esc(U.day(ex.date).replace(/<[^>]+>/g, '')) + '</span><span class="badge">' + HS.esc(D.teacherName(ex.teacherId)) + '</span></div>' +
+        ((ex.paper || []).some(function (q) { return HS.qbank.changed(q); }) ? '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(HS.t('qb.changedTip')) + '</span></div>' : '') +
         '<div data-stats>' + statsHTML(rows, max) + '</div>' +
         (can ? '<div class="tip">' + HS.icon('keyboard') + '<span>' + HS.esc(HS.t('ex.keys')) + '</span></div>' : '') +
         '<div data-sheet>' + (rows.length ? tableHTML() : U.empty('users', HS.t('roll.empty'), HS.t('roll.empty.b'))) + '</div>',
-        footer: (HS.can('exams.manage') ? '<button class="btn" data-publish aria-pressed="' + (ex.published === true) + '">' + HS.icon(ex.published === true ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(ex.published === true ? 'ex.shown' : 'ex.hidden')) + '</button>' : '') +
+        footer: (HS.can('exams.manage') ? '<button class="btn" data-xedit>' + HS.icon('settings', 'sm') + HS.esc(HS.t('ex.edit')) + '</button>' : '') +
+          (HS.can('exams.manage') ? '<button class="btn" data-publish aria-pressed="' + (ex.published === true) + '">' + HS.icon(ex.published === true ? 'eye' : 'lock', 'sm') + HS.esc(HS.t(ex.published === true ? 'ex.shown' : 'ex.hidden')) + '</button>' : '') +
           '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ex.print')) + '</button>' +
+          ((ex.paper || []).length ? '<button class="btn" data-qprint>' + HS.icon('book', 'sm') + HS.esc(HS.t('qb.print')) + '</button>' : '') +
           '<button class="btn" data-honours>' + HS.icon('star', 'sm') + HS.esc(HS.t('hon.btn')) + '</button>' +
           (ex.questions && (ex.answerKey || []).length ? '<button class="btn" data-bubbles>' + HS.icon('doc', 'sm') + HS.esc(HS.t('omr.print')) + '</button>' +
             (can ? '<button class="btn" data-omr>' + HS.icon('camera', 'sm') + HS.esc(HS.t('omr.read')) + '</button>' : '') : '') +
@@ -290,6 +343,13 @@
             if (e.target.closest('[data-print]')) { HS.printResults(ex, rows, rankOf(rows).rank); return; }
             if (e.target.closest('[data-bubbles]')) { bubbleMenu(ex, rows); return; }
             if (e.target.closest('[data-honours]')) { honours(ex, rows); return; }
+            if (e.target.closest('[data-qprint]')) { HS.qbank.printMenu(ex); return; }
+            if (e.target.closest('[data-xedit]')) {
+              var go = function () { HS.panel.close(); setTimeout(function () { editExam(id); }, 260); };
+              if (dirty) U.confirm({ title: HS.t('ex.unsaved'), body: HS.t('ex.unsaved.b'), danger: true, ok: HS.t('ex.edit') }).then(function (yes) { if (yes) go(); });
+              else go();
+              return;
+            }
             if (e.target.closest('[data-omr]')) { readSheets(ex, rows, function () { HS.panel.close(); setTimeout(function () { openSheet(id); }, 260); }); return; }
             var pub = e.target.closest('[data-publish]');
             if (pub) {   // marks reach the parents' page only after the teacher says so (a half-entered exam never shows)
@@ -328,7 +388,8 @@
     render: function () {
       var groups = D.list('groups').slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name), HS.lang); });
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('nav.exams')) + '</h1><p>' + HS.esc(HS.t('page.exams.d')) + '</p></div>' +
-          (HS.can('exams.manage') ? '<button class="btn primary" data-new>' + HS.icon('plus', 'sm') + HS.esc(HS.t('ex.new')) + '</button>' : '') + '</div>' +
+          '<div class="row wrap"><button class="btn" data-bank>' + HS.icon('book', 'sm') + HS.esc(HS.t('qb.bank')) + '</button>' +
+          (HS.can('exams.manage') ? '<button class="btn primary" data-new>' + HS.icon('plus', 'sm') + HS.esc(HS.t('ex.new')) + '</button>' : '') + '</div></div>' +
         '<div class="toolbar"><input class="input" type="search" data-f="q" value="' + HS.esc(F.q) + '" placeholder="' + HS.esc(HS.t('ex.search')) + '" style="max-width:20rem">' +
           '<select class="input" data-f="group" style="width:auto;max-width:16rem">' + opt('', HS.t('f.group') + ': ' + HS.t('common.all'), F.group) + groups.map(function (g) { return opt(g.id, g.name, F.group); }).join('') + '</select>' +
           '<select class="input" data-f="kind" style="width:auto">' + opt('', HS.t('ex.kind') + ': ' + HS.t('common.all'), F.kind) + KINDS.map(function (k) { return opt(k, HS.t('exam.kind.' + k), F.kind); }).join('') + '</select></div>' +
@@ -355,6 +416,7 @@
       root.addEventListener('change', function (e) { var k = e.target.dataset.f; if (k && k !== 'q') { F[k] = e.target.value; paint(); } });
       root.addEventListener('click', function (e) {
         if (e.target.closest('[data-new]')) { editExam(null); return; }
+        if (e.target.closest('[data-bank]')) { HS.qbank.open(); return; }
         var tr = e.target.closest('tr[data-id]'); if (tr) openSheet(tr.dataset.id);
       });
       root.addEventListener('keydown', function (e) { var tr = e.key === 'Enter' && e.target.closest('tr[data-id]'); if (tr) openSheet(tr.dataset.id); });

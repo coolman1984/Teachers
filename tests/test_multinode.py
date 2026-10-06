@@ -15,7 +15,7 @@ from harness import ADMIN, ApiError, Server, TcpProxy, make_authority, pair, wai
 
 FIELD = {'name': 'name', 'description': 'bio', 'responsible': 'notes', 'capacity': 'rentMonth'}  # neutral names used by the tests below
 # T31 edits five fields at once on four PCs; these are the teacher fields it uses
-RAW = {'destination': 'slug', 'purpose': 'notes', 'notes': 'color', 'seq': 'rentMonth', 'routeText': 'settleModel'}
+RAW = {'destination': 'slug', 'purpose': 'notes', 'notes': 'color', 'seq': 'rentMonth', 'routeText': 'settleModel'}  # destination = the page name: English letters and dashes only
 
 
 def area_op(aid, name, **kw):
@@ -418,7 +418,7 @@ class T11_Conflicts(Base):
         edit(c1, 'C1', capacity=11, description='pc1 text')
         edit(c2, 'C1', responsible='pc2 person', description='pc2 text')
         # 14 a third PC changes yet another field at the same time
-        edit(c0, 'C1', destination='pc0 destination')
+        edit(c0, 'C1', destination='pc0-destination')
         # 15 delete while another PC edits
         a = get_area(c0, 'C2')
         c0.post('/api/commit', {'label': 'del', 'ops': [{'e': 'teachers', 'id': 'C2', 'op': 'del', 'ver': a['ver']}]})
@@ -429,7 +429,7 @@ class T11_Conflicts(Base):
             self.assertEqual(a['capacity'], 11)
             self.assertEqual(a['responsible'], 'pc2 person')
             self.assertIn(a['description'], ('pc1 text', 'pc2 text'))
-            self.assertEqual(a['destination'], 'pc0 destination')
+            self.assertEqual(a['destination'], 'pc0-destination')
             self.assertIsNotNone(get_area(c, 'N1'))
             self.assertIsNotNone(get_area(c, 'N2'))
             self.assertIsNone(get_area(c, 'C2'), '16: the delete must win and not come back')
@@ -640,7 +640,7 @@ class T31_FourPCs(Base):
         # so: unplug 2 and 3 (they still reach each other? no - both unplugged). Use sequential partitions instead.
         self.unplug(2)
         self.unplug(3)
-        edit(c[0], 'F', destination='from pc0')
+        edit(c[0], 'F', destination='from-pc0')
         edit(c[1], 'F', purpose='from pc1')
         edit(c[2], 'F', notes='from pc2')
         edit(c[3], 'F', seq=4, name='Four renamed')
@@ -656,7 +656,7 @@ class T31_FourPCs(Base):
         for x in c:
             a = get_area(x, 'F')
             self.assertEqual((a['destination'], a['purpose'], a['notes'], a['seq'], a['routeText']),
-                             ('from pc0', 'from pc1', 'from pc2', 4, 'later on pc1'))
+                             ('from-pc0', 'from pc1', 'from pc2', 4, 'later on pc1'))
             self.assertEqual(a['name'], 'Four renamed')
         for x in c:
             self.assertTrue(x.post('/api/devices/verify', {'all': True})['ok'])
