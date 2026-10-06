@@ -6,7 +6,7 @@
 Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Record verified evidence, not assumptions. Later-release work below stays available; do not tick it complete merely because it is deferred.
 
 - [x] FS1 Basic first-version menu: the extra pages (exams, follow-up, settlements, devices) are off until Settings → Centre → "Pages in the menu" turns them on (`test_center_api` 22b, `test_e2e_center` zzz)
-- [ ] FS2 Publish v1.1.0: merge to main by PR, push tag `v1.1.0`, download `Hessa-Setup-1.1.0.exe` from the GitHub release (L1)
+- [x] FS2 Publish v1.1.0: merged by PR #11, tagged `v1.1.0` at `6b5bf2d`, built by Actions run `37423171664`, downloaded and SHA-256 verified `Hessa-Setup-1.1.0.exe` (L1 distribution evidence; field acceptance remains FS3)
 - [ ] FS3 Install it on the centre PC, run the acceptance journey with real data, then back up and restore on a second PC (L2–L4)
 
 # Tasks – where to continue

@@ -1,6 +1,23 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Hessa 1.1.0 installer published and verified (2026-10-06)
+
+**Why:** the owner explicitly requested the Windows executable on GitHub. **Source/gate:**
+`claude/basic-first-version` at `c78db6e`, merged by PR #11 into `main` at `6b5bf2d`; FS2 / L1 distribution.
+**What:** pushed the annotated `v1.1.0` tag, synchronized local main, and monitored Actions run
+`37423171664` until the source, browser and Windows-installer jobs all succeeded. The workflow compiled
+the program, built the installer, checked startup/served pages in a temporary home, and published the release.
+**Evidence:** installer preflight passed; branch run `37421882881` and release run `37423171664` succeeded.
+Downloaded `Hessa-Setup-1.1.0.exe` (10,960,435 bytes) from the published GitHub asset;
+SHA-256 `e70fa2541e76ffa37b809f9b3a33f1b356d15fc03c53633190c568915ac60758` matches GitHub's digest.
+Release: https://github.com/coolman1984/Teachers/releases/tag/v1.1.0.
+**Recovery/lessons:** the default GitHub API route timed out; a per-command proxy connection to an
+alternate GitHub API address worked with normal TLS validation. Existing Git credentials stayed in
+memory; local helpers and private runtime files were excluded from commits. No system proxy changes.
+**Limits/next:** no local installation was performed. Clean-PC installation, real counter/printer
+acceptance and restore on a second PC remain FS3 / L2-L4. This is the limited pilot candidate, not field acceptance.
+
 ## Basic first-version menu for the owner's own centre (2026-10-06)
 
 **What:** the owner asked for a first version to run their own counter, teachers and students. The menu now shows only the core of
