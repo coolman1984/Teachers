@@ -167,6 +167,10 @@
           '<span class="qb-acts">' + (q.done ? '<span class="badge ' + (q.done === 'added' ? 'ok' : '') + '">' + HS.esc(HS.t(q.done === 'added' ? 'ai.added' : 'ai.dropped')) + '</span>'
             : '<button type="button" class="btn" data-aiedit="' + i + '">' + HS.esc(HS.t('ai.edit')) + '</button><button type="button" class="btn primary" data-aiadd="' + i + '">' + HS.esc(HS.t('ai.add')) + '</button>' +
               '<button type="button" class="icon-btn" data-aidrop="' + i + '" aria-label="' + HS.esc(HS.t('ai.drop')) + '">' + HS.icon('x', 'sm') + '</button>') + '</span></li>'; }).join('') + '</ol>' : '';
+      found.forEach(function (q, i) {        // a correction still being saved stays frozen when another save redraws the list
+        if (!q.saving) return;
+        box.querySelectorAll('[data-aied="' + i + '"] input, [data-aied="' + i + '"] textarea, [data-aiadd="' + i + '"]').forEach(function (x) { x.disabled = true; });
+      });
     }
     el.querySelector('[data-aigo]').addEventListener('click', function () {
       var m = meta(), b = this;
@@ -180,6 +184,7 @@
     function keep(e) {
       var ed = e.target.closest('[data-aied]'); if (!ed) return;
       var q = found[Number(ed.dataset.aied)], t = e.target;
+      if (q.saving) return;                 // what is being saved is what the list shows
       if (t.dataset.k) q[t.dataset.k] = t.value;
       else if (t.dataset.c !== undefined) { var ch = q.choices.slice(); while (ch.length < 5) ch.push(''); ch[Number(t.dataset.c)] = t.value; q.choices = ch; }
       else if (t.type === 'radio' && t.checked) q.answer = t.value;
@@ -199,8 +204,12 @@
         var pick = ed.querySelector('input[type=radio]:checked'); q.answer = pick ? pick.value : '';
         if (!q.text || q.choices.length < 2 || q.choices.indexOf('') >= 0 || !q.answer || HS.omr.LETTERS.en.indexOf(q.answer) >= q.choices.length) { HS.toast(HS.t('err.question'), 'bad', 5000); return; }
       }
-      var row = Object.assign(meta(), { text: q.text, choices: q.choices, answer: q.answer, explanation: q.explanation, active: true });
-      U.run(D.save('questions', D.newId('q'), row, 'AI question added: ' + q.text.slice(0, 50)), 'ai.addedOne', b).then(function () { q.done = 'added'; q.editing = false; paint(); if (done) done(); }, function () {});
+      var row = Object.assign(meta(), { text: q.text, choices: q.choices.slice(), answer: q.answer, explanation: q.explanation, active: true });
+      // from here the correction is frozen until the save answers: later typing would show text the bank never got
+      q.saving = true;
+      if (ed) Array.prototype.forEach.call(ed.querySelectorAll('input, textarea'), function (x) { x.disabled = true; });
+      U.run(D.save('questions', D.newId('q'), row, 'AI question added: ' + q.text.slice(0, 50)), 'ai.addedOne', b).then(function () { q.saving = false; q.done = 'added'; q.editing = false; paint(); if (done) done(); },
+        function () { q.saving = false; if (ed) Array.prototype.forEach.call(ed.querySelectorAll('input, textarea'), function (x) { x.disabled = false; }); });
     });
     paint();
   }

@@ -251,6 +251,40 @@ class AiJourneyTest(AiSetup, unittest.TestCase):
         self.assertEqual({(q['source'], q['teacherId'], q['subjectId'], q['gradeCode'], q['topic']) for q in bank}, {('ai', 'ai-t1', 'ai-sub', 'S1', 'Forces and motion')})
         self.assertEqual(errors, [])
 
+    def test_b_slow_save_freezes_the_correction(self):
+        """Review of #9: typing after "Add to the bank" while the save is slow must not show text the bank never got."""
+        self.c.post('/api/ai/key', {'key': KEY})
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        b = pw.chromium.launch(executable_path=CHROMIUM)
+        self.addCleanup(b.close)
+        ctx = b.new_context(viewport={'width': 1360, 'height': 860})
+        ctx.add_init_script("localStorage.setItem('hs.prefs', JSON.stringify({welcomed: true, lang: 'en'}))")
+        pg = ctx.new_page()
+        pg.goto(self.s.base)
+        pg.wait_for_selector('#auth-form')
+        pg.fill('#username', 'boss')
+        pg.fill('#password', PASSWORD)
+        pg.click('button[type=submit]')
+        pg.wait_for_selector('#app-shell')
+        pg.goto(self.s.base + '/#/exams')
+        pg.click('[data-bank]')
+        pg.click('.drawer [data-qai]')
+        pg.wait_for_selector('[data-aiq]')
+        pg.select_option('[data-aiq] [name=teacherId]', 'ai-t1')
+        pg.fill('[data-aiq] [name=topic]', 'Slow save')
+        pg.click('.dialog [data-aigo]')
+        pg.wait_for_selector('.dialog [data-aiedit="2"]')
+        pg.click('.dialog [data-aiedit="2"]')
+        pg.fill('.dialog [data-aied="2"] [data-k=text]', 'Which of these is a vector quantity?')
+        # the centre PC answers slowly: every save waits 1.5 s
+        pg.evaluate("""() => { const post = HS.post; HS.post = (u, b) => u === '/api/commit' ? new Promise(r => setTimeout(r, 1500)).then(() => post(u, b)) : post(u, b); }""")
+        pg.click('.dialog [data-aiadd="2"]')
+        self.assertTrue(pg.is_disabled('.dialog [data-aied="2"] [data-k=text]'))       # frozen while saving
+        pg.wait_for_selector('.dialog .qb-done >> text=Which of these is a vector quantity?')
+        saved = [q['text'] for q in self.c.get('/api/state')['questions'] if q['topic'] == 'Slow save']
+        self.assertEqual(saved, ['Which of these is a vector quantity?'])                # shown = saved
+
 
 if __name__ == '__main__':
     unittest.main()
