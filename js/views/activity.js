@@ -41,6 +41,7 @@
      written. A list of changes ("User name: a -> b; Role: …") is translated part by part. */
   var DETAIL = [
     [/^First administrator account created on this PC \(it is now the administrator PC\)$/, 'setup'],
+    [/^Trial administrator created with the trial password - change it before real use$/, 'trial'],
     [/^Unknown user name$/, 'unknownUser'],
     [/^Account is locked until (.+)$/, 'lockedUntil'],
     [/^Wrong password \(attempt (\d+) of (\d+)\)$/, 'wrongPassword'],

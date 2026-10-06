@@ -66,9 +66,12 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         if grade=='P4': chosen=[0 if i//len(grades)<36 else 1]
         chosen=[j for j in chosen if entities['groups']['smp-g'+str(j)]['track'] == entities['groups']['smp-g'+str(chosen[0])]['track']]
         g=entities['groups']['smp-g'+str(chosen[0])]; sid='smp-s'+str(i); gender='female' if i%2 else 'male'
-        name=(FEMALE if gender=='female' else MALE)[i%60]+' '+MALE[(i*7)%60]+' '+FAMILY[(i*11)%60]
+        # 420 different full names (the old formula repeated every 60 students: seven pupils called the same); the two
+        # siblings of a sample family (i < 60) share father, family name and parent mobile, other neighbours do not
+        k=i//2; sib=i<60; fam=(k*11+k//60*17+(0 if sib else (i%2)*29))%60; father=MALE[(k*7+3+k//60*14)%60]
+        name=(FEMALE if gender=='female' else MALE)[k%60]+' '+father+' '+FAMILY[fam]
         row={'name':name,'nameKey':D.key_text(name),'code':code,'gradeCode':grade,'system':g['system'],'track':g['track'],'gender':gender,
-             'parentName':MALE[(i*7)%60]+' '+FAMILY[(i*11)%60], 'parentMobile':['010','011','012','015'][i%4]+str(90000000+i),
+             'parentName':father+' '+FAMILY[fam], 'parentMobile':['010','011','012','015'][(k if sib else i)%4]+str(90000000+(k if sib else i)),
              'school':['مدرسة النور التجريبية','مدرسة الأمل التجريبية','مدرسة المستقبل التجريبية'][i%3], 'active':True,
              'consent':True,'consentAt':first_day.isoformat(),'joinedAt':first_day.isoformat(),'notes':'Fictional sample student; do not contact this number.'}
         if i<60: row.update(familyKey='smp-family'+str(i//2),discountPct=10+(i//2)%4*5,discountReason='أشقاء — بيانات تجريبية')

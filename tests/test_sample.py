@@ -37,6 +37,23 @@ class SampleGeneratorTest(unittest.TestCase):
         rooms={o['id']:dict(o['row'],id=o['id']) for o in ops if o['e']=='rooms'}
         self.assertEqual(D.clashes(groups,rooms),[])
 
+    def test_every_sample_student_has_their_own_name_and_siblings_share_a_parent(self):
+        """The names repeated every 60 students (seven pupils with one name) and siblings had different fathers and parent
+        numbers - confusing exactly where the sample is meant to teach the family payment and the search."""
+        students=[o['row'] for o in sample.build(date(2026,10,4)) if o['e']=='students']
+        self.assertEqual(len({s['name'] for s in students}),420)
+        self.assertTrue(all(s['name'].split()[0]!=s['name'].split()[1] for s in students))
+        families={}
+        for s in students:
+            if s.get('familyKey'): families.setdefault(s['familyKey'],[]).append(s)
+        for kids in families.values():
+            self.assertEqual(len(kids),2)
+            self.assertEqual(len({k['parentMobile'] for k in kids}),1)
+            self.assertEqual(len({k['parentName'] for k in kids}),1)
+            self.assertEqual(len({k['name'].split(' ',1)[1] for k in kids}),1)
+        others=[s['parentMobile'] for s in students if not s.get('familyKey')]
+        self.assertEqual(len(others),len(set(others)))
+
     def test_sample_codes_avoid_real_codes(self):
         ops=sample.build(date(2026,10,4),used_codes=['10000','10001','10005'])
         codes={o['row']['code'] for o in ops if o['e']=='students'}

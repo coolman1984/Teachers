@@ -919,3 +919,11 @@ button.chip { cursor: pointer; }
   .seg button { flex: 1 1 auto; }
   .mini-kpis .num, .kpis .num { white-space: normal; }                  /* a big amount puts its currency on its own line instead of widening its card */
 }
+
+/* trial sign-in (admin / 123): the hint on the sign-in form and the bar on every page until the password is changed */
+.tip.trial { align-items: center; background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.tip.trial .ic { color: var(--warn); margin-top: 0; }
+.trial-bar { display: flex; gap: .7rem; align-items: center; flex-wrap: wrap; padding: .6rem 1rem; background: var(--warn-soft); color: var(--ink);
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.trial-bar > .ic { color: var(--warn); flex: none; }
+.trial-bar .grow { min-width: min(14rem, 100%); }

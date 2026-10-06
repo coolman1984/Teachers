@@ -109,7 +109,23 @@
       block(HS.t('ap.paper'), HS.t('ap.paper.d'), seg('receiptPaper', ['80', '58', 'a5'], 'ap.paper.', d.receiptPaper) +
         '<div class="row wrap" style="margin-top:.6rem;gap:.6rem">' + seg('autoReceipt', ['off', 'on'], 'ap.auto.', d.autoReceipt) +
         '<button type="button" class="btn sm" data-testprint>' + HS.icon('printer', 'sm') + HS.esc(HS.t('ap.testPrint')) + '</button></div>') +
+      (HS.me && HS.me.admin && HS.status && HS.status.local ? '<div data-window></div>' : '') +
       '<div class="row wrap" style="padding-top:1rem"><button class="btn" data-reset>' + HS.icon('refresh', 'sm') + HS.esc(HS.t('ap.reset')) + '</button><span class="faint">' + HS.esc(HS.t('ap.saved.local')) + '</span></div>';
+  }
+  /* How Hessa.exe opens the program on this PC: its own window (maximized or full screen) or the normal browser */
+  function mountWindow(root) {
+    var box = root.querySelector('[data-window]'); if (!box) return;
+    function draw(r) {
+      box.innerHTML = block(HS.t('ap.window'), HS.t(r.appWindow ? 'ap.window.d' : 'ap.window.none'), '<div class="seg" role="group">' + ['maximized', 'fullscreen', 'browser'].map(function (m) {
+        return '<button type="button" data-win="' + m + '" aria-pressed="' + (r.mode === m) + '">' + HS.esc(HS.t('ap.window.' + m)) + '</button>'; }).join('') + '</div>');
+    }
+    HS.get('/api/window').then(function (r) { if (r.here) draw(r); }, function () {});
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-win]'); if (!b || b.getAttribute('aria-pressed') === 'true') return;
+      HS.ui.run(HS.post('/api/window', { mode: b.dataset.win }), 'ap.window.saved', b).then(function (r) {
+        HS.$$('[data-win]', box).forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.win === r.mode)); });
+      }, function () {});
+    });
   }
   function preview() {
     return '<aside class="card"><header><h3>' + HS.esc(HS.t('ap.preview')) + '</h3></header>' +
@@ -238,6 +254,7 @@
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
       if (ctx.route.q.tab === 'remote') remote.mount(root);
       if (ctx.route.q.tab === 'ai') aiTab.mount(root);
+      mountWindow(root);
       if (ctx.route.q.tab === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
       root.addEventListener('click', function (e) {
         var b = e.target.closest('[data-pref]');

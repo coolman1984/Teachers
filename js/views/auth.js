@@ -23,7 +23,9 @@
   HS.views.auth = {
     show: function (status) {
       var root = HS.$('#root');
-      var setup = !status.hasUsers;
+      // trial sign-in (admin / 123): chosen on the first-start screen, or offered on the sign-in form of this PC
+      var trial = status.trial, trialForm = !status.hasUsers && trial && HS.joinFlow && HS.joinFlow.mode === 'trial';
+      var setup = !status.hasUsers && !trialForm;
       var body;
       // a new PC chooses between "first PC" and "join the centre PC"; a moved data folder asks first (js/views/join.js)
       if (HS.joinFlow && HS.joinFlow.intercept(status)) return;
@@ -40,10 +42,13 @@
         var notice = HS.joinFlow ? HS.joinFlow.takeNotice() : '';
         body = '<form id="auth-form"><div><h2>' + HS.esc(HS.t('auth.login.title')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('auth.login.sub')) + '</p></div>' +
           (notice ? '<div class="tip ok" role="status">' + HS.icon('check') + '<span>' + HS.esc(notice) + '</span></div>' : '') +
+          (trial ? '<div class="tip trial" role="note">' + HS.icon('key') + '<span class="grow">' + HS.esc(HS.t('trial.hint', trial)) + '</span>' +
+            '<button class="btn sm" type="button" data-fill>' + HS.esc(HS.t('trial.fill')) + '</button></div>' : '') +
           field('username', HS.t('auth.username'), 'text', 'autofocus required autocapitalize="off" spellcheck="false" dir="ltr" autocomplete="username"') +
           field('password', HS.t('auth.password'), 'password', 'required dir="ltr" autocomplete="current-password"') +
           '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div>' +
-          '<button class="btn primary" type="submit">' + HS.esc(HS.t('auth.login.btn')) + '</button></form>';
+          '<button class="btn primary" type="submit">' + HS.esc(HS.t('auth.login.btn')) + '</button>' +
+          (trialForm ? '<button class="btn ghost" type="button" data-back>' + HS.icon('left', 'sm mirror') + HS.esc(HS.t('common.back')) + '</button>' : '') + '</form>';
       }
       root.innerHTML = '<div class="auth">' + hero() + '<div class="panel">' + body + '</div></div><div id="overlay"></div><div id="toasts"></div>';
       bindLang(root);
@@ -51,6 +56,10 @@
       if (!form) return;
       var back = form.querySelector('[data-back]');
       if (back) back.addEventListener('click', function () { HS.joinFlow.mode = 'choose'; HS.emit('auth-rerender'); });
+      var fill = form.querySelector('[data-fill]');
+      function fillTrial() { form.username.value = trial.username; form.password.value = trial.password; }
+      if (fill) fill.addEventListener('click', function () { fillTrial(); form.querySelector('button[type=submit]').focus(); });
+      if (trialForm) fillTrial();
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var d = {}; new FormData(form).forEach(function (v, k) { d[k] = String(v).trim(); });
@@ -64,7 +73,7 @@
     mustChange: function () {
       var root = HS.$('#root');
       root.innerHTML = '<div class="auth">' + hero() + '<div class="panel"><form id="auth-form"><div><h2>' + HS.esc(HS.t('auth.password')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('auth.pw.hint')) + '</p></div>' +
-        field('old', HS.t('auth.password') + ' (1)', 'password', 'autofocus required dir="ltr"') + field('new', HS.t('auth.password') + ' (2)', 'password', 'required dir="ltr"') +
+        field('old', HS.t('pw.old'), 'password', 'autofocus required dir="ltr" autocomplete="current-password"') + field('new', HS.t('pw.new'), 'password', 'required dir="ltr" autocomplete="new-password"') +
         '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div><button class="btn primary" type="submit">' + HS.esc(HS.t('common.save')) + '</button></form></div></div><div id="overlay"></div><div id="toasts"></div>';
       bindLang(root);
       var form = HS.$('#auth-form', root);

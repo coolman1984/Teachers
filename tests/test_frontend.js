@@ -464,3 +464,26 @@ test('the overview status card shows only what the server sent, with a tone for 
     assert.equal(els['[data-status]'].innerHTML, '', 'a person with no system permissions gets no card');
   }
 });
+
+test('a new person: the profile list shows the profile whose ticks are shown; ready-made names are translated', async () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang; HS.data.state = { settings: {}, teachers: [] };
+    HS.me = { perms: ['users.manage'] };
+    const profiles = [{ id: 'full-access', name: 'Centre manager', perms: ['overview.view', 'money.view'] }, { id: 'viewer', name: 'Viewer', perms: ['overview.view'] }];
+    HS.get = async url => url === '/api/users' ? { users: [], profiles, permissions: [['Pages', [['overview.view', 'Overview'], ['money.view', 'Money']]]], authority: true } : { users: [] };
+    HS.accessTab.reset(); HS.rerender = () => {};
+    HS.accessTab.mount({ innerHTML: '', addEventListener() {} });
+    await new Promise(resolve => setImmediate(resolve));
+    let click, opened; HS.panel.open = opts => { opened = opts; };
+    HS.accessTab.mount({ addEventListener: (_, fn) => { click = fn; } });
+    click({ target: { closest: s => s === '[data-adduser]' ? {} : null } });
+    const selected = opened.body.match(/<option value="([^"]*)" selected>([^<]*)</);
+    assert.equal(selected[1], 'Viewer');                       // was the first profile (Centre manager) over the Viewer ticks
+    assert.equal(selected[2], HS.t('prof.viewer'));
+    assert.ok(opened.body.includes('data-perm="overview.view" checked'));
+    assert.ok(!opened.body.includes('data-perm="money.view" checked'));
+    assert.equal(HS.roleLabel('Front desk'), HS.t('prof.secretary'));
+    assert.equal(HS.roleLabel('My own profile'), 'My own profile');
+    assert.equal(HS.roleLabel(''), HS.t('acc.custom'));
+  }
+});

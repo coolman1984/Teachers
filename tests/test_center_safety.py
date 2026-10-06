@@ -416,3 +416,67 @@ class RecordHistoryBrowserTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TrialLoginTest(unittest.TestCase):
+    """Owner's request (2026-10-06): admin / 123 opens a brand-new PC for a first look. It must never weaken a PC that
+    already has accounts, never work from another device, and the screens keep asking for a real password until it changes."""
+
+    def test_a_trial_sign_in_creates_the_administrator_once(self):
+        s = Server('trial', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        c = s.client()
+        st = c.get('/api/auth/status')
+        self.assertEqual(st['trial'], {'username': 'admin', 'password': '123'})
+        self.assertFalse(st['hasUsers'])
+        with self.assertRaises(ApiError):                      # a wrong password creates nothing
+            c.login('admin', '1234')
+        self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+        me = c.login('admin', '123')
+        self.assertTrue(me['admin'])
+        self.assertTrue(me['trialPassword'])
+        self.assertTrue(c.get('/api/auth/status')['trial'])    # still shown while the password is 123
+        # a second browser signs in with the same trial password (no second account)
+        c2 = s.client()
+        self.assertEqual(c2.login('admin', '123')['id'], me['id'])
+        # changing the password ends the trial: no hint, no banner, 123 refused
+        c.post('/api/auth/password', {'old': '123', 'new': 'Centre-Owner-2026'})
+        self.assertFalse(c.get('/api/me')['trialPassword'])
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            s.client().login('admin', '123')
+        s.client().login('admin', 'Centre-Owner-2026')
+
+    def test_b_never_on_a_pc_with_accounts_or_when_switched_off(self):
+        s = Server('trial-off', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        make_authority(s)
+        c = s.client()
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            c.login('admin', '123')
+        off = Server('trial-no').start()                       # the harness default: switched off
+        self.addCleanup(off.cleanup)
+        c = off.client()
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            c.login('admin', '123')
+        self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+
+    def test_c_not_through_a_tunnel(self):
+        s = Server('trial-proxy', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        c, tunnel = s.client(), {'X-Forwarded-For': '203.0.113.9'}
+        with self.assertRaises(ApiError):                      # remote work is off: refused before anything else
+            c.call('GET', '/api/auth/status', headers=tunnel)
+        s.stop()
+        with open(s.cfg_path) as f:
+            cfg = json.load(f)
+        cfg['remote_access'] = True
+        with open(s.cfg_path, 'w') as f:
+            json.dump(cfg, f)
+        s.start()
+        self.assertIsNone(c.call('GET', '/api/auth/status', headers=tunnel)['trial'])
+        with self.assertRaises(ApiError):
+            c.call('POST', '/api/auth/login', {'username': 'admin', 'password': '123'}, headers=tunnel)
+        self.assertFalse(s.client().get('/api/auth/status')['hasUsers'])

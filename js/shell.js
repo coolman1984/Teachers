@@ -73,7 +73,7 @@
         '<div class="brand"><div class="mark">' + HS.icon('cap', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '<small>' + HS.esc(HS.t('app.tagline')) + '</small></div></div>' +
         '<nav class="nav" data-tour="nav">' + groups + '</nav>' +
         '<div class="side-foot"><button class="icon-btn" data-act="account" aria-label="' + HS.esc(HS.t('top.account')) + '" style="background:var(--side-active);color:var(--side-ink);font-weight:700;border-radius:50%">' + HS.esc(initials) + '</button>' +
-          '<div class="who"><b>' + HS.esc(me.full_name || me.username) + '</b><small>' + HS.esc(me.role || '') + '</small></div>' +
+          '<div class="who"><b>' + HS.esc(me.full_name || me.username) + '</b><small>' + HS.esc(HS.roleLabel ? HS.roleLabel(me.role) : me.role || '') + '</small></div>' +
           '<button class="icon-btn mirror-ic" data-act="collapse" aria-label="' + HS.esc(HS.t('top.collapse')) + '" title="' + HS.esc(HS.t('top.collapse')) + ' ([)">' + HS.icon('collapse') + '</button></div>' +
       '</aside>' +
       '<div class="main">' +
@@ -89,9 +89,12 @@
           '<button class="icon-btn" data-act="lang" aria-label="' + HS.esc(HS.t('top.lang')) + '" title="' + HS.esc(HS.t('top.lang')) + ' (L)">' + HS.icon('globe') + '</button>' +
           '<button class="icon-btn" data-act="theme" id="theme-btn" aria-label="' + HS.esc(HS.t('top.theme')) + '" title="' + HS.esc(HS.t('top.theme')) + ' (T)"></button>' +
           '<button class="icon-btn" data-act="help-here" aria-label="' + HS.esc(HS.t('top.helpHere')) + '" title="' + HS.esc(HS.t('top.helpHere')) + '">' + HS.icon('help') + '</button>' +
+          '<button class="icon-btn desk-only" data-act="full" id="full-btn" aria-label="' + HS.esc(HS.t('top.full')) + '" title="' + HS.esc(HS.t('top.full')) + ' (F11)">' + HS.icon('expand') + '</button>' +
           '<button class="icon-btn desk-only" data-act="keys" aria-label="' + HS.esc(HS.t('top.shortcuts')) + '" title="' + HS.esc(HS.t('top.shortcuts')) + ' (?)">' + HS.icon('keyboard') + '</button>' +
           '</span>' +
         '</header>' +
+        (me.trialPassword ? '<div class="trial-bar" role="alert">' + HS.icon('key') + '<span class="grow"><b>' + HS.esc(HS.t('trial.bar')) + '</b> ' + HS.esc(HS.t('trial.bar.b')) + '</span>' +
+          '<button class="btn sm primary" data-act="password">' + HS.esc(HS.t('pw.change')) + '</button></div>' : '') +
         '<div class="offline-bar" role="alert">' + HS.icon('alert') + '<span><b>' + HS.esc(HS.t('top.offline')) + '</b> ' + HS.esc(HS.t('top.offline.b')) + '</span></div>' +
         '<main class="content" id="view" tabindex="-1"></main>' +
       '</div>' + tabbarHTML() +
@@ -320,12 +323,56 @@
     var me = HS.me;
     HS.panel.open({ title: HS.t('panel.account'), body:
       '<div class="card"><h3>' + HS.esc(me.full_name || me.username) + '</h3><span class="muted">@' + HS.esc(me.username) + '</span>' +
-      '<dl class="kv" style="margin-top:1rem"><dt>' + HS.esc(HS.t('panel.account.role')) + '</dt><dd>' + HS.esc(me.role || '') + '</dd>' +
+      '<dl class="kv" style="margin-top:1rem"><dt>' + HS.esc(HS.t('panel.account.role')) + '</dt><dd>' + HS.esc(HS.roleLabel ? HS.roleLabel(me.role) : me.role || '') + '</dd>' +
       '<dt>' + HS.esc(HS.t('panel.account.node')) + '</dt><dd>' + HS.esc(me.node ? me.node.name : '') + '</dd>' +
       '<dt>' + HS.esc(HS.t('panel.account.perms')) + '</dt><dd><span class="num">' + (me.perms || []).length + '</span></dd></dl></div>',
-      footer: '<button class="btn" data-logout>' + HS.icon('logout', 'sm') + HS.esc(HS.t('auth.logout')) + '</button>',
-      mount: function (el) { el.querySelector('[data-logout]').addEventListener('click', logout); } });
+      footer: (me.viaLink ? '' : '<button class="btn" data-pw>' + HS.icon('key', 'sm') + HS.esc(HS.t('pw.change')) + '</button>') +
+        '<button class="btn" data-logout>' + HS.icon('logout', 'sm') + HS.esc(HS.t('auth.logout')) + '</button>',
+      mount: function (el) {
+        el.querySelector('[data-logout]').addEventListener('click', logout);
+        var pw = el.querySelector('[data-pw]'); if (pw) pw.addEventListener('click', changePassword);
+      } });
   }
+
+  /* Change my own password (any PC; the trial password 123 asks for it on every page until it is done). */
+  function changePassword() {
+    var min = HS.me.minPasswordLength || 8;
+    HS.panel.open({ title: HS.t('pw.change'), body:
+      '<form id="pw-form" class="stack" autocomplete="off">' +
+        '<div class="tip">' + HS.icon('info') + '<span>' + HS.esc(HS.t('pw.rules', { n: min })) + '</span></div>' +
+        '<div class="field"><label for="pw-old">' + HS.esc(HS.t('pw.old')) + '</label><input class="input" id="pw-old" type="password" required dir="ltr" autocomplete="current-password"></div>' +
+        '<div class="field"><label for="pw-new">' + HS.esc(HS.t('pw.new')) + '</label><input class="input" id="pw-new" type="password" required dir="ltr" autocomplete="new-password"></div>' +
+        '<div class="field"><label for="pw-again">' + HS.esc(HS.t('pw.again')) + '</label><input class="input" id="pw-again" type="password" required dir="ltr" autocomplete="new-password"></div>' +
+        '<div class="tip bad" id="pw-err" hidden role="alert"></div></form>',
+      footer: '<button class="btn primary" data-pw-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('common.save')) + '</button>',
+      mount: function (el) {
+        var err = el.querySelector('#pw-err'), btn = el.querySelector('[data-pw-save]'), form = el.querySelector('#pw-form');
+        function save(e) {
+          if (e) e.preventDefault();
+          var o = el.querySelector('#pw-old').value, n = el.querySelector('#pw-new').value, a = el.querySelector('#pw-again').value;
+          err.hidden = true;
+          if (n !== a) { err.hidden = false; err.textContent = HS.t('pw.mismatch'); return; }
+          btn.disabled = true;
+          HS.post('/api/auth/password', { old: o, new: n }).then(function () {
+            HS.panel.close(); HS.toast(HS.t('pw.done'), 'ok');
+            return HS.get('/api/me').then(function (m) { HS.me = m; HS.shell.rebuild(); });
+          }, function (er) { btn.disabled = false; err.hidden = false; err.textContent = er.message || HS.t('common.error'); });
+        }
+        btn.addEventListener('click', save); form.addEventListener('submit', save);
+        el.querySelector('#pw-old').focus();
+      } });
+  }
+  HS.changePassword = changePassword;
+
+  /* full screen: the app window fills the whole screen (F11 or the button; Esc leaves) */
+  function toggleFull() {
+    var d = document;
+    if (d.fullscreenElement) { if (d.exitFullscreen) d.exitFullscreen(); }
+    else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(function () {});
+  }
+  document.addEventListener('fullscreenchange', function () {
+    var b = HS.$('#full-btn'); if (b) b.innerHTML = HS.icon(document.fullscreenElement ? 'shrink' : 'expand');
+  });
 
   function logout() {
     HS.post('/api/auth/logout').then(function () { HS.emit('logged-out'); }, function () { HS.emit('logged-out'); });
@@ -348,6 +395,8 @@
     else if (a === 'help-here') HS.go('help?topic=' + (HS.helpTopic ? HS.helpTopic(HS.route().path) : 'start'));
     else if (a === 'collapse') toggleCollapse();
     else if (a === 'account') openAccount();
+    else if (a === 'password') changePassword();
+    else if (a === 'full') toggleFull();
     else if (a === 'menu') { var app = HS.$('#app-shell'); app.dataset.menu = app.dataset.menu === '1' ? 0 : 1; }
   });
   document.addEventListener('click', function (e) {   // on a phone the menu closes after choosing a page

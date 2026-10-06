@@ -579,3 +579,57 @@ class SecondReviewTest(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
         self.assertTrue(c.now() > 0)
+
+
+class AppWindowTest(unittest.TestCase):
+    """Hessa.exe shows the program in its own window (server/appwindow.py), never silently nothing."""
+
+    def test_the_window_command(self):
+        import appwindow
+        cmd = appwindow.command('C:/Edge/msedge.exe', 'http://localhost:8095/', 'maximized', 'C:/U/Hessa/window')
+        self.assertEqual(cmd[0], 'C:/Edge/msedge.exe')
+        self.assertIn('--app=http://localhost:8095/', cmd)
+        self.assertIn('--user-data-dir=C:/U/Hessa/window', cmd)   # own profile: own taskbar window, never the person's browser
+        self.assertIn('--start-maximized', cmd)
+        self.assertIn('--start-fullscreen', appwindow.command('e', 'u', 'fullscreen', 'p'))
+
+    def test_falls_back_to_the_browser(self):
+        import appwindow
+        opened = []
+        real_find, real_open = appwindow.find_browser, appwindow.webbrowser.open
+        appwindow.find_browser = lambda: None
+        appwindow.webbrowser.open = opened.append
+        try:
+            self.assertEqual(appwindow.open_window('http://localhost:1/', 'maximized', tempfile.gettempdir()), 'browser')
+            appwindow.find_browser = lambda: os.path.join(tempfile.gettempdir(), 'no-such-browser.exe')
+            self.assertEqual(appwindow.open_window('http://localhost:2/', 'nonsense', tempfile.gettempdir(), log=lambda m: None), 'browser')
+        finally:
+            appwindow.find_browser, appwindow.webbrowser.open = real_find, real_open
+        self.assertEqual(opened, ['http://localhost:1/', 'http://localhost:2/'])
+
+    def test_server_code_compiles_without_warnings(self):
+        """A bytes literal with \\u2026 showed the six characters on the 'photo is being copied' picture."""
+        import warnings
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for folder in ('server', 'tools'):
+            for name in sorted(os.listdir(os.path.join(root, folder))):
+                if name.endswith('.py'):
+                    with open(os.path.join(root, folder, name), encoding='utf-8') as f:
+                        src = f.read()
+                    with warnings.catch_warnings():
+                        warnings.simplefilter('error')
+                        compile(src, name, 'exec')
+
+    def test_the_program_icon_is_hessas(self):
+        """Hessa.exe, its shortcut and the installer carried the Trip Orders icon (a table and chairs): the .ico is now
+        drawn by the same code as the phone icons - the navy tile with the amber cap."""
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools'))
+        import make_app_icons
+        import make_icon
+        data = make_icon.ico(sizes=(16,))
+        self.assertEqual(data[6 + 16:], make_app_icons.png(16))
+        corner, centre = make_app_icons.pixel(0, 0, 32), make_app_icons.pixel(14, 13, 32)
+        self.assertEqual(corner[3], 0)                       # rounded tile: transparent corner
+        self.assertGreater(centre[0], 200)                   # amber cap in the middle
+        self.assertLess(make_app_icons.pixel(16, 29, 32)[0], 60)   # navy below it

@@ -94,7 +94,7 @@ class Server:
         self.data_dir = data_dir or os.path.join(self.root, 'data')
         self.cfg_path = os.path.join(self.root, 'config.json')
         cfg = {'port': self.port, 'host': '127.0.0.1', 'data_dir': self.data_dir, 'backup_dir': os.path.join(self.root, 'backups'),
-               'open_browser': False, 'sync_port': self.sync_port, 'sync_interval_seconds': 1, 'device_name': name,
+               'open_browser': False, 'dev_login': False, 'sync_port': self.sync_port, 'sync_interval_seconds': 1, 'device_name': name,
                'backup_interval_hours': 1000}
         cfg.update(extra_cfg or {})
         with open(self.cfg_path, 'w') as f:

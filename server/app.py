@@ -21,7 +21,6 @@ import threading
 import time
 import traceback
 import uuid
-import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -30,8 +29,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # the portable (embedded) Python does not add the script folder itself
 
 import backup as backup_mod  # noqa: E402
+import appwindow  # noqa: E402
 import xlsx  # noqa: E402
-from auth import ADMIN_PERMS, ALL, PERMISSIONS, AuthError, Forbidden  # noqa: E402
+from auth import ADMIN_PERMS, ALL, DEV_PASSWORD, DEV_USER, PERMISSIONS, AuthError, Forbidden  # noqa: E402
 import center  # noqa: E402
 import formats  # noqa: E402
 import gateway_client as gwc  # noqa: E402
@@ -60,6 +60,8 @@ DEFAULT_CONFIG = {
     'keep_auto_backups': 200,
     'max_upload_mb': 50,
     'open_browser': True,
+    'dev_login': True,       # owner's request (2026-10-06): trial sign-in admin / 123 on a brand-new PC (auth.DEV_USER); false before a real sale
+    'app_window': 'maximized',  # maximized | fullscreen | browser - how Hessa.exe shows the program (open_app_window)
     'session_idle_minutes': 30,
     'session_max_hours': 12,
     'max_failed_logins': 5,
@@ -234,7 +236,7 @@ if INSTANCE:
     GATE = gwc.GatewaySync(STORE, JOURNAL, NODE.id, SECRETS, store_bytes, log_fn=say)
 PLACEHOLDER = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" fill="#eef1f5"/>'
                b'<text x="160" y="96" font-family="Segoe UI,Arial" font-size="15" text-anchor="middle" fill="#6b7785">Photo is being copied</text>'
-               b'<text x="160" y="118" font-family="Segoe UI,Arial" font-size="12" text-anchor="middle" fill="#8a95a3">from another PC\u2026</text></svg>')
+               b'<text x="160" y="118" font-family="Segoe UI,Arial" font-size="12" text-anchor="middle" fill="#8a95a3">from another PC\xe2\x80\xa6</text></svg>')
 COOKIE = 'hs_sid'
 ABOUT = {'product': PRODUCT, 'version': VERSION, 'developer': DEVELOPER, 'copyright': COPYRIGHT, 'license': LICENSE_NOTE,
          'installed': ASSETS is not None}
@@ -630,7 +632,18 @@ class Handler(BaseHTTPRequestHandler):
         u = self.u
         return {**AUTH.public(u), 'display': u['display'], 'permissions': PERMISSIONS, 'adminPerms': sorted(ADMIN_PERMS),
                 'sessionIdleMinutes': CFG['session_idle_minutes'], 'minPasswordLength': AUTH.min_len, 'admin': is_admin(u), 'viaLink': bool(u.get('via_link')),
-                'node': {'id': NODE.id, 'name': NODE.name, 'role': NODE.role, 'authority': NODE.is_authority}}
+                'node': {'id': NODE.id, 'name': NODE.name, 'role': NODE.role, 'authority': NODE.is_authority},
+                'trialPassword': AUTH.dev_default(u['id'])}
+
+    def trial_hint(self):
+        """The sign-in screen shows "admin / 123" only on this PC, while the trial sign-in can still be used."""
+        if self.ip not in LOCAL_IPS or self.via_proxy or not CFG.get('dev_login'):
+            return None
+        if AUTH.has_users() and not AUTH.dev_default():
+            return None
+        if not AUTH.has_users() and NODE.role != 'unconfigured':
+            return None
+        return {'username': DEV_USER, 'password': DEV_PASSWORD}
 
     def need_all_scopes(self):
         if self.u['scopes'] is not None:
@@ -662,6 +675,7 @@ class Handler(BaseHTTPRequestHandler):
             u = AUTH.session(self.token, self.ip, touch=False)
             self.u = u
             return self.send(200, {'hasUsers': AUTH.has_users(), 'local': self.ip in LOCAL_IPS, 'me': self.me() if u else None,
+                                   'trial': self.trial_hint(),
                                    'node': self.node_status(), 'about': {**ABOUT, **site_names()}})
         if p == '/api/join/status':
             if self.ip not in LOCAL_IPS or AUTH.has_users() and NODE.role != 'member':
@@ -736,6 +750,10 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/ai':      # is the question generator set up on this PC? (never the key itself)
             self.need('exams.manage', 'settings.edit')
             return self.send(200, {**AI_KEY.status(), 'admin': is_admin(self.u)})
+        if p == '/api/window':            # how Hessa.exe shows the program on this PC (server/appwindow.py)
+            self.need_admin()
+            return self.send(200, {'mode': CFG.get('app_window', 'maximized'), 'here': self.ip in LOCAL_IPS and not self.via_proxy,
+                                   'appWindow': bool(appwindow.find_browser())})
         if p == '/api/remote':
             self.need_admin()
             people = [x.get('full_name') or x.get('username') for x in AUTH.list_users() if x.get('active') and 'remote.use' in (x.get('perms') or [])]
@@ -807,6 +825,8 @@ class Handler(BaseHTTPRequestHandler):
             d = self.json_body()
             if too_many_failures(self.ip):
                 raise AuthError('Too many wrong attempts from this computer. Wait a minute and try again.')
+            if CFG.get('dev_login') and self.ip in LOCAL_IPS and not self.via_proxy and AUTH.trial_setup(d.get('username'), d.get('password'), self.ip):
+                say('Trial administrator created (admin / 123) - change the password before real use')
             try:
                 token, u = AUTH.login(d.get('username'), d.get('password'), self.ip, self.headers.get('User-Agent', ''))
             except AuthError:
@@ -999,6 +1019,15 @@ class Handler(BaseHTTPRequestHandler):
                 AI_KEY.save(d.get('key'))
                 AUTH.log(self.u['display'], self.ip, 'ai-key', NODE.name, 'AI key saved')      # never the key itself
             return self.send(200, AI_KEY.status())
+        if p == '/api/window':
+            self.need_admin()
+            if self.ip not in LOCAL_IPS or self.via_proxy:
+                raise Forbidden('Choose how the program opens on this PC itself.')
+            mode = self.json_body().get('mode')
+            if mode not in appwindow.MODES:
+                raise BadRequest('Choose maximized, fullscreen or browser.')
+            write_config('app_window', mode)
+            return self.send(200, {'mode': mode})
         if p == '/api/remote':
             self.need_admin()
             on = bool(self.json_body().get('on'))
@@ -1472,19 +1501,24 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
 
 
+def show(port):
+    """The program in its own window (server/appwindow.py), or the browser when that is not possible."""
+    appwindow.open_window(f'http://localhost:{port}/', CFG.get('app_window', 'maximized'), HOME, log=say if INSTANCE else print)
+
+
 def main(background=False):
     port = int(CFG['port'])
     if not INSTANCE:
-        print('The system is already running on this PC. Opening it in the browser.')
+        print('The system is already running on this PC. Opening it.')
         if not background:
-            webbrowser.open(f'http://localhost:{port}/')
+            show(port)
         return
     try:
         httpd = Server((CFG['host'], port), Handler)
     except OSError:
-        print(f'Port {port} is already in use - the system is probably already running. Opening it in the browser.')
+        print(f'Port {port} is already in use - the system is probably already running. Opening it.')
         if not background:  # a second start (e.g. the desktop icon while it runs in the background) just opens it
-            webbrowser.open(f'http://localhost:{port}/')
+            show(port)
         return
 
     try:
@@ -1512,7 +1546,7 @@ def main(background=False):
     print('=' * 64, flush=True)
     say('Server started')
     if CFG.get('open_browser', True) and not background:
-        threading.Timer(0.8, lambda: webbrowser.open(f'http://localhost:{port}/')).start()
+        threading.Timer(0.8, lambda: show(port)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
