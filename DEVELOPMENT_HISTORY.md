@@ -2,6 +2,18 @@
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
 
+## A correction to an AI question was lost when another question was added (CI, 2026-10-06)
+
+**What:** in "Generate with AI", a teacher who started correcting one question and then added another lost the correction: the save
+of the second redrew the list from the original text. Found by the browser job on GitHub (a slower machine finished the save while the
+test was typing). **Fix:** every keystroke of a correction is kept in the question itself, so a redraw shows it. **Regression test:**
+`test_ai.AiJourneyTest` now starts a correction, adds another question, waits for the redraw and checks the text is still there
+(fails without the fix). **Review of #9:** keeping every keystroke opened the opposite hole - typing after "Add to the bank" while a slow
+save runs would show text the bank never got. A correction is now frozen (fields disabled, keystrokes ignored, also after a redraw)
+from the moment its save starts until it answers; `test_ai.test_b_slow_save_*` delays the save 1.5 s and checks shown = saved.
+**Lesson:** a list that redraws after a save must redraw from what the person typed, not from what arrived - and what is being
+saved must not move.
+
 ## The "sessions now" list widened a phone at the largest font (found 2026-10-06)
 
 **What:** the full run of the acceptance tests at 15:00 found the overview wider than a 360 px phone: the list of sessions running now
