@@ -130,7 +130,7 @@ class AiServerTest(AiSetup, unittest.TestCase):
             self.assertEqual(os.stat(os.path.join(self.s.data_dir, 'ai.json')).st_mode & 0o077, 0)   # only this account can read it
         for root, _, files in os.walk(self.s.data_dir):
             for n in files:
-                if n != 'ai.json':
+                if n not in ('ai.json', 'program.lock'):   # the running server locks program.lock on Windows (it holds a process id only)
                     with open(os.path.join(root, n), 'rb') as f:
                         self.assertNotIn(KEY.encode(), f.read(), n)                     # not in the databases or the logs
         self.assertNotIn(KEY, ''.join(self.s.out))

@@ -145,6 +145,11 @@ def normalize_ops(store, ops, pc_index=0):
             if not math.isfinite(number) or number < 0 or number > upper or op['id'] == 'schoolMaxStudents' and (number < 1 or number != int(number)):
                 raise Problem('err.setting', 'Check the setting value.')
             row['value'] = number
+        if e == 'settings' and op.get('id') == 'extras':
+            value = row.get('value')
+            if not isinstance(value, list) or any(v not in D.EXTRA_PAGES for v in value):
+                raise Problem('err.setting', 'Check the setting value.')
+            row['value'] = [p for p in D.EXTRA_PAGES if p in value]
         if e == 'teachers':
             for key in ('rentMonth', 'rentSession', 'rentStudent', 'centerPct'):
                 if row.get(key) not in (None, ''):

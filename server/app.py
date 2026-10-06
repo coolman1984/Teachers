@@ -184,7 +184,7 @@ def stop_with_message(text):
     except OSError:
         pass
     try:
-        if os.name == 'nt':
+        if os.name == 'nt' and not os.environ.get('HS_NO_DIALOG'):   # the test servers set HS_NO_DIALOG: no window on the desk
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, text, 'Hessa', 0x10)
     except Exception:  # noqa: BLE001 - the log line above is already written

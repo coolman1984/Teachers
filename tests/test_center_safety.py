@@ -262,9 +262,9 @@ class SystemHealthTest(unittest.TestCase):
             if n.startswith('to_') and n.endswith('.db'):
                 stamp = datetime.strptime(n[3:18], '%Y%m%d_%H%M%S') - timedelta(days=days)
                 new = 'to_' + stamp.strftime('%Y%m%d_%H%M%S') + n[18:]
-                os.rename(os.path.join(self.db, n), os.path.join(self.db, new))
+                os.replace(os.path.join(self.db, n), os.path.join(self.db, new))   # os.replace: same as Linux rename on Windows
                 moved.append((new, n))
-        self.addCleanup(lambda: [os.path.exists(os.path.join(self.db, a)) and os.rename(os.path.join(self.db, a), os.path.join(self.db, b)) for a, b in moved])
+        self.addCleanup(lambda: [os.path.exists(os.path.join(self.db, a)) and os.replace(os.path.join(self.db, a), os.path.join(self.db, b)) for a, b in moved])
 
     def test_a_status_and_advice_follow_the_real_state_of_the_backups(self):
         st = self.admin.get('/api/c/status')

@@ -1,6 +1,27 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Basic first-version menu for the owner's own centre (2026-10-06)
+
+**What:** the owner asked for a first version to run their own counter, teachers and students. The menu now shows only the core of
+LAUNCH_SCOPE (overview, door, students, groups, money, reports, activity, settings, help). Exams, follow-up, teacher settlements and
+devices are "extra" pages: hidden from the menu, palette, shortcuts and phone tab bar until ticked in Settings → Centre → "Pages in the
+menu" (setting `extras`, validated by the server against `domain.EXTRA_PAGES`). Nothing is deleted, no permission changes, and a link
+to a hidden page still opens it (the overview and the advisor link to follow-up). **Why:** a non-technical owner starting with real
+students should see the daily work first; every feature stays one tick away. **Source:** main at b342c7c, gate L1 preparation.
+**Checks run on Windows:** frontend tests, the Python unit/centre suites, and the browser suites (test_e2e_browser, test_e2e_center,
+test_acceptance, test_center_devices) with the installed Chrome. **Mistake:** my new API test reused the name `test_23_` of an
+existing test in the same class, so one would silently replace the other - renamed and checked both run. **Lesson:** grep for the
+test name before adding a numbered test. **Windows test fix:** `test_ai.test_b_the_key_stays_on_this_pc` read every
+file in the data folder and failed on Windows with "Permission denied" on `program.lock`, which the running server locks (Linux CI
+never saw it); the lock file holds only a process id and is now skipped. **Test pop-up on the desk:** running the tests on the owner's PC
+opened a real Windows message box ("data saved by a newer version 9.9.9") from `test_center_safety`, which starts a throwaway
+server on a fake newer data folder; the owner thought their data was at risk. Test servers now set `HS_NO_DIALOG`, so the refusal is
+written to the log and STARTUP_PROBLEM.txt only; real starts still show the box. **Lesson:** a test run on a working PC must never
+show the person a window. `test_center_safety.SystemHealthTest` also failed on Windows only: it backdates backup files with
+`os.rename`, which refuses an existing target on Windows; `os.replace` does what Linux rename does. **Next:** FS2 release v1.1.0 from a tag, FS3 install and the acceptance journey on the
+real PC.
+
 ## First-sale documentation review corrections (2026-10-06)
 
 Keep copied/standalone optional-service guides independent of repository-relative contract paths; point implementers to the online source contract. For transport, remove the stale-release installation instruction and unconditional no-data-loss claim, and describe the office-only pilot before optional phone work. Documentation only; all branch copies retain the same contract and application history. Verified source/standalone link targets and Markdown-only diffs.

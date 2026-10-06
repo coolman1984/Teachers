@@ -13,12 +13,13 @@
     { id: 'groups', icon: 'layers', group: 'ops', perm: 'groups.view', key: 'g', phase: 1 },
     // the desk can collect and close its own shift without seeing everybody's money (money.view)
     { id: 'money', icon: 'sheet', group: 'money', perm: ['money.view', 'money.collect', 'expenses.add', 'shifts.close'], key: 'm', phase: 1 },
-    { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1 },
-    { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1 },
-    { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1 },
+    // extra: left out of the basic menu until the centre turns it on (Settings > Centre); the page itself still opens
+    { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1, extra: true },
+    { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1, extra: true },
+    { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1, extra: true },
     { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'r', phase: 1 },
     { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 1 },
-    { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1 },
+    { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1, extra: true },
     { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 'c', phase: 1 },
     { id: 'help', icon: 'help', group: 'control', perm: null, key: 'h', phase: 1 }
   ];
@@ -32,7 +33,15 @@
     var list = Array.isArray(perm) ? perm : [perm];
     return list.some(function (p) { return (me.perms || []).indexOf(p) >= 0; });
   };
-  function visiblePages() { return PAGES.filter(function (p) { return HS.can(p.perm); }); }
+  // the centre setting "extras" lists the extra pages shown in the menu; without it the menu is the basic one
+  HS.EXTRAS = PAGES.filter(function (p) { return p.extra; }).map(function (p) { return p.id; });
+  HS.extraOn = function (id) {
+    var list = ((HS.data && HS.data.state) || {}).settings;
+    list = list && Array.isArray(list.extras) ? list.extras : [];
+    return list.indexOf(id) >= 0;
+  };
+  function inMenu(p) { return HS.can(p.perm) && (!p.extra || HS.extraOn(p.id)); }
+  function visiblePages() { return PAGES.filter(inMenu); }
 
   /* ---------- router ---------- */
   HS.route = function () {
@@ -93,7 +102,7 @@
   /* On a phone the four most used pages sit under the thumb, like an app; "More" opens the full menu. */
   var TABS = ['overview', 'door', 'students', 'followup', 'groups', 'exams'];
   function tabbarHTML() {
-    var tabs = TABS.map(function (id) { return PAGES.filter(function (p) { return p.id === id && HS.can(p.perm); })[0]; }).filter(Boolean).slice(0, 4);
+    var tabs = TABS.map(function (id) { return PAGES.filter(function (p) { return p.id === id && inMenu(p); })[0]; }).filter(Boolean).slice(0, 4);
     return '<nav class="tabbar" aria-label="' + HS.esc(HS.t('top.menu')) + '">' + tabs.map(function (p) {
       return '<a href="#/' + p.id + '" data-tab="' + p.id + '">' + HS.icon(p.icon) + '<span>' + HS.esc(HS.t('nav.' + p.id)) + '</span></a>';
     }).join('') + '<button data-act="menu">' + HS.icon('menu') + '<span>' + HS.esc(HS.t('top.more')) + '</span></button></nav>';
@@ -110,7 +119,8 @@
       renderRoute();
       if (!HS.prefs.data.welcomed) setTimeout(function () { HS.slides.open(true); }, 500);
     },
-    stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); }
+    stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); },
+    rebuild: function () { if (shellReady) rebuildShell(); }   // after the menu's extra pages change
   };
 
   function refreshThemeButton() {
