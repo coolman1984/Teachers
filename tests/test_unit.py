@@ -358,6 +358,23 @@ class NodeSafetyTest(unittest.TestCase):
             os.environ.pop('HS_MACHINE_ID', None)
             shutil.rmtree(d)
 
+    def test_installed_program_ignores_environment_overrides(self):
+        """Sale hardening: in Hessa.exe, HS_MACHINE_ID would hide a copied folder and HS_AI_URL would send the AI key elsewhere."""
+        import ai
+        import node
+        os.environ['HS_MACHINE_ID'] = 'pretend-pc'
+        os.environ['HS_AI_URL'] = 'http://evil.invalid'
+        try:
+            self.assertEqual(node.machine_fingerprint(), 'pretend-pc')       # tests and source runs only
+            self.assertEqual(ai.api_url(), 'http://evil.invalid')
+            node.__compiled__ = ai.__compiled__ = True
+            self.assertNotEqual(node.machine_fingerprint(), 'pretend-pc')
+            self.assertEqual(ai.api_url(), 'https://api.anthropic.com')
+        finally:
+            del node.__compiled__, ai.__compiled__
+            os.environ.pop('HS_MACHINE_ID', None)
+            os.environ.pop('HS_AI_URL', None)
+
     def test_rolled_back_journal_gets_new_epoch(self):
         from system import System
         d = tempfile.mkdtemp()

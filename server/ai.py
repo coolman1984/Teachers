@@ -10,12 +10,20 @@
 import json
 import os
 import socket
+import sys
 import urllib.error
 import urllib.request
 
 import center
 
-API_URL = os.environ.get('HS_AI_URL', 'https://api.anthropic.com')   # tests point this at a local stand-in
+API_URL = 'https://api.anthropic.com'
+
+
+def api_url():
+    """Tests point HS_AI_URL at a local stand-in; never in Hessa.exe, where it could send the centre's AI key elsewhere."""
+    if '__compiled__' in globals() or getattr(sys, 'frozen', False):
+        return API_URL
+    return os.environ.get('HS_AI_URL', API_URL)
 MODEL = 'claude-sonnet-5-5'          # the plan's choice (P9.2); checked against the current model list on 2026-10-06
 MAX_COUNT = 20
 GRADE_NAMES = {'P1': 'Primary 1', 'P2': 'Primary 2', 'P3': 'Primary 3', 'P4': 'Primary 4', 'P5': 'Primary 5', 'P6': 'Primary 6',
@@ -94,7 +102,7 @@ def generate(key_store, subject, grade, topic, count, lang, notes, timeout=120):
     body = {'model': MODEL, 'max_tokens': 16000, 'system': SYSTEM, 'fallbacks': 'default',
             'output_config': {'effort': 'high', 'format': {'type': 'json_schema', 'schema': SCHEMA}},
             'messages': [{'role': 'user', 'content': build_prompt(subject, grade, topic, count, 'en' if lang == 'en' else 'ar', notes)}]}
-    req = urllib.request.Request(API_URL.rstrip('/') + '/v1/messages', data=json.dumps(body).encode(), method='POST', headers={
+    req = urllib.request.Request(api_url().rstrip('/') + '/v1/messages', data=json.dumps(body).encode(), method='POST', headers={
         'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01',
         'anthropic-beta': 'server-side-fallback-2026-07-01'})
     try:
