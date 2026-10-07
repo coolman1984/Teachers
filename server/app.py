@@ -956,6 +956,11 @@ class Handler(BaseHTTPRequestHandler):
                 too_many_failures(self.ip, add=True)
                 time.sleep(0.6)  # slows down password guessing
                 raise
+            if AUTH.dev_default(u['id']) and (self.ip not in LOCAL_IPS or self.via_proxy):
+                # the trial password 123 is public knowledge: it opens the program only on the centre PC itself
+                AUTH.logout(token, u, self.ip)
+                AUTH.log(u['display'], self.ip, 'login-failed', u['username'], 'Trial password refused away from the centre PC')
+                raise AuthError('The trial password works only on the centre PC itself. Change it there first.')
             self.u = u
             try:
                 self.remote_allowed(u)

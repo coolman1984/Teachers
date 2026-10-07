@@ -93,7 +93,7 @@
           HS.emit('logged-in');
         }, function (err) {
           btn.disabled = false;
-          fail(form, err.code === 401 || err.code === 400 ? (err.message || HS.t('auth.failed')) : HS.t('common.error'));
+          fail(form, err.code === 401 || err.code === 400 || err.code === 403 ? (err.message ? HS.ui.serverText(err.message) : HS.t('auth.failed')) : HS.t('common.error'));
         });
       });
     },
@@ -107,7 +107,7 @@
       var form = HS.$('#auth-form', root);
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        HS.post('/api/auth/password', { old: form.old.value, new: form.new.value }).then(function () { HS.emit('logged-in'); }, function (err) { fail(form, err.message); });
+        HS.post('/api/auth/password', { old: form.old.value, new: form.new.value }).then(function () { HS.emit('logged-in'); }, function (err) { fail(form, HS.ui.serverText(err.message)); });
       });
     }
   };
