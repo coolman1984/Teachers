@@ -143,3 +143,18 @@ test('WhatsApp: a daily cap per centre, and no web address but the service\'s ow
     assert.equal((await officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', { messages: [msg('k5', '')] })).status, 429);
   } finally { globalThis.fetch = real; }
 });
+
+test('WhatsApp: requests at the same moment never pass the daily cap together', async () => {
+  const env = { ...serviceEnv(), WA_TOKEN: 't', WA_PHONE_ID: '1', WA_DAILY_CAP: '5' };
+  const a = await joinCentre(env, CODES.pc1);
+  let calls = 0;
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; await new Promise((r) => setTimeout(r, 5)); return new Response(JSON.stringify({ messages: [{ id: 'w' + calls }] }), { status: 200 }); };
+  try {
+    const batch = (n) => ({ messages: Array.from({ length: 4 }, (_, i) => ({ key: `b${n}-${i}`, to: '201012345678', template: 'hessa_absence', lang: 'ar', params: ['C', 'S', 'D', 'G', ''] })) });
+    await Promise.all([1, 2, 3].map((n) => officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', batch(n))));
+    assert.equal(calls, 5, 'twelve asked at once, five allowed');
+    const day = 'day:' + new Date().toISOString().slice(0, 10);
+    assert.equal((await env.DB.prepare('SELECT n FROM wa_usage WHERE centre = ? AND month = ?').bind(a.j.centre, day).first()).n, 5);
+  } finally { globalThis.fetch = real; }
+});

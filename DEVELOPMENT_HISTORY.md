@@ -8,6 +8,16 @@ owner agreed to this change. **What:** a small `new-version` job reads `server/v
 release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
 merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
 
+## Review of PR 20: an atomic WhatsApp cap, demo password after a broken load; version 1.4.1 (2026-10-07)
+
+**What:** the automatic review (after the merge) found two real issues. Requests at the same moment all read the day's count
+before any of them added to it, so together they passed `WA_DAILY_CAP`: each message now takes its place in one
+`INSERT ... ON CONFLICT DO UPDATE ... WHERE n < cap RETURNING` before it is sent, and gives it back if it does not go out
+(gateway test: twelve at once, five allowed - failed before). A sample load that stopped half way left the demo accounts
+behind with the old password while the next load showed a new one: existing demo accounts now take the shown password
+(`SamplePasswordTest`, failed before). **Lesson:** a limit that is read, then used, then written is no limit under load;
+reserve first.
+
 ## Full review before sale; version 1.4.0 (2026-10-07)
 
 **Why:** the owner asked for a complete, carefully reviewed program for sale. **How:** three independent reviews ran in
