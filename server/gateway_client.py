@@ -516,7 +516,7 @@ class GatewaySync:
     # -- links
     def make_link(self, student_id, nonce):
         if not self.secrets.configured:
-            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Parent links.', 'gw.err.notSetUp')
+            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Online & WhatsApp.', 'gw.err.notSetUp')
         tok = link_token(self.secrets.data['linkSecret'], student_id, nonce)
         return tok, f'{self.secrets.url}/t/{tok}'
 

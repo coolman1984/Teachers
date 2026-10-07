@@ -922,6 +922,7 @@ def end_enrollment(ctx, enrollment_id, day=None, reason=''):
 
 
 # ---------------------------------------------------------------- cash shifts
+
 def my_shift(store, user_id, node_id):
     rows = store.rows('shifts', "user_id=? AND node=? AND status='open'", (user_id, node_id))
     return rows[-1] if rows else None

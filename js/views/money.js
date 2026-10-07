@@ -128,8 +128,17 @@
     el.querySelector('[data-ok]').addEventListener('click', function (ev) {
       var btn = ev.currentTarget, err = el.querySelector('[data-err]'), method = segValue(el, 'method');
       var go = method === 'cash' ? HS.ensureShift() : Promise.resolve();
+      var amount = Number(el.querySelector('#ex-a').value) || 0;
       btn.disabled = true;
       go.then(function () {
+        if (method !== 'cash') return true;
+        // more cash out than the drawer holds: usually a typing mistake, sometimes money brought from the safe - ask
+        return HS.get('/api/c/shift').then(function (sh) {
+          if (!sh || sh.expected === undefined || amount <= sh.expected + 0.005) return true;
+          return U.confirm({ title: HS.t('money.drawerShort.t'), body: HS.t('money.drawerShort.b', { have: HS.fmt.num(sh.expected), a: HS.fmt.num(amount) }), ok: HS.t('stu.check.save') });
+        }, function () { return true; });
+      }).then(function (yes) {
+        if (!yes) { btn.disabled = false; throw new Error('cancelled'); }
         return HS.post('/api/c/expense', { category: cat.value, amount: el.querySelector('#ex-a').value, method: method, teacherId: el.querySelector('#ex-t').value, note: el.querySelector('#ex-n').value });
       }).then(function (r) { if (HS.overlay.isOpen) HS.overlay.close(); HS.toast(HS.t('money.expense.done', { no: r.no })); done(r); },
         function (e) { btn.disabled = false; if (e && e.message !== 'cancelled') { err.hidden = false; err.textContent = U.errorText(e); } });
@@ -153,7 +162,8 @@
       total = Math.round(total * 100) / 100;
       var diff = Math.round((total - expected) * 100) / 100;
       el.querySelector('[data-counted]').innerHTML = U.money(total);
-      el.querySelector('[data-diff]').innerHTML = U.money(diff);
+      // say it in words: more cash than expected, or missing cash - a red number alone does not tell which
+      el.querySelector('[data-diff]').innerHTML = diff === 0 ? U.money(0) : U.money(Math.abs(diff)) + ' <small>' + HS.esc(HS.t(diff > 0 ? 'shift.over' : 'shift.short')) + '</small>';
       el.querySelector('[data-diffbox]').className = diff === 0 ? 'ok' : 'bad';
       el.querySelector('[data-reason]').hidden = diff === 0;
     }
@@ -198,7 +208,7 @@
     return U.table([
       { h: 'f.no', cell: function (x) { return '<b class="num">' + U.bdi(x.no || '') + '</b>' + (x.voidOf ? ' <span class="badge bad">' + HS.esc(HS.t('money.reversal')) + '</span>' : voided[x.id] ? ' <span class="badge">' + HS.esc(HS.t('money.reversed')) + '</span>' : ''); } },
       { h: 'f.date', cell: function (x) { return U.day(x.date); } },
-      { h: 'money.category', cell: function (x) { return HS.esc(HS.t('exp.cat.' + x.category)) + (x.teacherId ? ' · <span class="muted">' + HS.esc(D.teacherName(x.teacherId)) + '</span>' : ''); } },
+      { h: 'money.category', cell: function (x) { return HS.esc(HS.expCat(x.category)) + (x.teacherId ? ' · <span class="muted">' + HS.esc(D.teacherName(x.teacherId)) + '</span>' : ''); } },
       { h: 'f.notes', cell: function (x) { return '<span class="muted">' + HS.esc(x.note || '') + '</span>'; } },
       { h: 'pay.method', cell: function (x) { return HS.esc(HS.t('pay.method.' + x.method)); } },
       { h: 'pay.amount', cls: 'end', cell: function (x) { return U.money(x.amount); } },
@@ -233,7 +243,7 @@
     var head = which === 'receipts' ? ['no', 'date', 'at', 'student', 'kind', 'group', 'method', 'ref', 'amount', 'by'] : ['no', 'date', 'category', 'teacher', 'method', 'amount', 'note', 'by'];
     var lines = [head.map(function (h) { return HS.t('csv.' + h); })].concat(rows.map(function (p) {
       return which === 'receipts' ? [p.no, p.date, p.at, stName(p.studentId), HS.t('pay.kind.' + p.kind), D.groupName(p.groupId), HS.t('pay.method.' + p.method), p.ref, p.amount, p.by]
-        : [p.no, p.date, HS.t('exp.cat.' + p.category), D.teacherName(p.teacherId), HS.t('pay.method.' + p.method), p.amount, p.note, p.by];
+        : [p.no, p.date, HS.expCat(p.category), D.teacherName(p.teacherId), HS.t('pay.method.' + p.method), p.amount, p.note, p.by];
     }));
     U.download('hessa-' + which + '-' + R.from + '_' + R.to + '.csv', U.csv(lines), 'text/csv;charset=utf-8');
   }

@@ -17,7 +17,7 @@ Overview → **Load sample centre** loads the demonstration records. Settings �
 preserving your own data and administrator account.
 
 The fictional accounts `owner`, `desk1`, `desk2`, `t.ahmed` and `asst.mona` initially
-use `Hessa-2026!` and must change the password before entering data.
+get a new password each time the sample is loaded (Settings → Data → "Demo password", administrators only) and must change it before entering data.
 See [Sample data and real imports](SAMPLE_DATA.md) for roles, safe removal and test details.
 
 ## Import real students

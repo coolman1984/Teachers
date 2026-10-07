@@ -29,7 +29,7 @@
     var payouts = r.payouts || 0, net = Math.round((r.income - r.expenseTotal - payouts) * 100) / 100;
     var teachers = Object.keys(r.byTeacher).map(function (k) { return [D.teacherName(k) || HS.t('rep.noTeacher'), r.byTeacher[k]]; });
     var methods = Object.keys(r.byMethod).map(function (k) { return [HS.t('pay.method.' + k), r.byMethod[k]]; });
-    var exp = Object.keys(r.expenses).map(function (k) { return [HS.t('exp.cat.' + k), r.expenses[k]]; });
+    var exp = Object.keys(r.expenses).map(function (k) { return [HS.expCat(k), r.expenses[k]]; });
     var end = lastDay(ym), n = Number(end.slice(8, 10));
     var signals = {}; r.profitability.forEach(function (g) { signals[g.signal] = (signals[g.signal] || 0) + 1; });
     return '<div class="mini-kpis rep-kpis">' + kpi('rep.income', U.money(r.income), 'ok') + kpi('rep.expenses', U.money(r.expenseTotal)) + kpi('rep.payouts', U.money(payouts)) +
@@ -87,7 +87,7 @@
         [t('rep.visits'), r.days.reduce(function (a, d) { return a + d.visits; }, 0)]] },
       { name: t('rep.byTeacher'), head: [t('f.teacherId'), t('rep.income')], rows: pair(r.byTeacher, function (k) { return D.teacherName(k) || t('rep.noTeacher'); }) },
       { name: t('rep.byMethod'), head: [t('pay.method'), t('rep.income')], rows: pair(r.byMethod, function (k) { return t('pay.method.' + k); }) },
-      { name: t('rep.byExpense'), head: [t('rep.x.category'), t('rep.expenses')], rows: pair(r.expenses, function (k) { return t('exp.cat.' + k); }) },
+      { name: t('rep.byExpense'), head: [t('rep.x.category'), t('rep.expenses')], rows: pair(r.expenses, function (k) { return HS.expCat(k); }) },
       { name: t('rep.attDays'), head: [t('f.date'), t('rep.visits')], rows: r.days.map(function (d) { return [d.date, d.visits]; }) },
       { name: t('rep.moneyDays'), head: [t('f.date'), t('rep.income')], rows: r.moneyDays.map(function (d) { return [d.date, d.amount]; }) },
       { name: t('rep.profitability'), head: [t('f.group'), t('f.teacherId'), t('set.revenue'), t('set.centre'), t('rep.roomCost'), t('rep.profit'), t('rep.x.enrolled'), t('rep.x.capacity'), t('rep.x.fillPct'), t('rep.x.attPct'), t('rep.signal'), t('rep.x.todo')],

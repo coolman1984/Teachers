@@ -99,14 +99,18 @@
     },
     mustChange: function () {
       var root = HS.$('#root');
-      root.innerHTML = '<div class="auth">' + hero() + '<div class="panel"><form id="auth-form"><div><h2>' + HS.esc(HS.t('auth.password')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('auth.pw.hint')) + '</p></div>' +
+      // the first sign-in with a password someone else chose: say why, and every rule before the first try (not after a refusal)
+      root.innerHTML = '<div class="auth">' + hero() + '<div class="panel"><form id="auth-form"><div><h2>' + HS.esc(HS.t('auth.mustChange.t')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('auth.mustChange.b')) + '</p>' +
+        '<ul class="notes" style="margin-top:.4rem"><li>' + HS.esc(HS.t('auth.rule.len', { n: (HS.me && HS.me.minPasswordLength) || 8 })) + '</li><li>' + HS.esc(HS.t('auth.rule.mix')) + '</li><li>' + HS.esc(HS.t('auth.rule.name')) + '</li></ul></div>' +
         field('old', HS.t('pw.old'), 'password', 'autofocus required dir="ltr" autocomplete="current-password"') + field('new', HS.t('pw.new'), 'password', 'required dir="ltr" autocomplete="new-password"') +
+        field('new2', HS.t('pw.again'), 'password', 'required dir="ltr" autocomplete="new-password"') +
         '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div><button class="btn primary" type="submit">' + HS.esc(HS.t('common.save')) + '</button></form></div></div><div id="overlay"></div><div id="toasts"></div>';
       bindLang(root);
       wirePasswords(root);
       var form = HS.$('#auth-form', root);
       form.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (form.new2.value !== form.new.value) { fail(form, HS.t('pw.mismatch')); form.new2.focus(); return; }
         HS.post('/api/auth/password', { old: form.old.value, new: form.new.value }).then(function () { HS.emit('logged-in'); }, function (err) { fail(form, HS.ui.serverText(err.message)); });
       });
     }

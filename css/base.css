@@ -243,6 +243,7 @@ table.tbl { border-collapse: separate; border-spacing: 0; width: 100%; }
 .input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); outline: 0; }
 .seg { display: inline-grid; grid-auto-flow: column; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-1); padding: 3px; gap: 2px; }
 .seg button { border: 0; background: transparent; padding: .4rem .85rem; border-radius: calc(var(--r-1) - 3px); font-weight: 600; color: var(--ink-2); transition: background var(--t-fast), color var(--t-fast); }
+.tabs-scroll button { white-space: nowrap; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
 .switch { position: relative; width: 2.9rem; height: 1.6rem; flex: none; }
 .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
@@ -1042,3 +1043,10 @@ button.chip { cursor: pointer; }
 .main > .lic-bar { position: sticky; inset-inline: auto; z-index: 30; }   /* in the page column: never over the menu */
 body > .lic-bar ~ .auth, body:has(> .lic-bar) .auth { padding-bottom: 5.5rem; }
 .main:has(> .lic-bar) { display: flex; flex-direction: column; min-height: 100vh; } .main > .lic-bar { margin-top: auto; }
+
+/* the WhatsApp sender on a phone: the counter on its own line, the buttons share the full width */
+@media (max-width: 30rem) {
+  [data-progress] { flex-basis: 100%; text-align: center; }
+  [data-step] { flex: 1 1 100%; }
+  [data-step] .btn { flex: 1 1 auto; }
+}

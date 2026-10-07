@@ -10,17 +10,29 @@
     var active = (HS.data.state || {}).settings && HS.data.state.settings['smp-centre'];
     return '<section class="card"><h2>' + HS.esc(HS.t('sample.title')) + '</h2><p>' + HS.esc(HS.t(active ? 'sample.active' : 'sample.help')) + '</p>' +
       (HS.can('data.import') && HS.can('users.manage') ? '<button class="btn ' + (active ? 'danger' : 'primary') + '" data-sample="' + (active ? 'delete' : 'load') + '">' +
-        HS.esc(HS.t(active ? 'sample.delete' : 'sample.load')) + '</button>' : '') +
+        HS.esc(HS.t(active ? 'sample.delete' : 'sample.load')) + '</button>' +
+        (active ? ' <button class="btn" data-sample-pw>' + HS.icon('key', 'sm') + HS.esc(HS.t('sample.showPw')) + '</button>' : '') : '') +
       (HS.can('students.manage') && HS.can('contacts.view') ? ' <a class="btn" href="#/students/import">' + HS.esc(HS.t('sample.importReal')) + '</a>' : '') + '</section>';
   };
+  function showPassword(pw) {
+    HS.dialog({ title: HS.t('sample.pwTitle'), body: '<p>' + HS.esc(HS.t('sample.pwBody')) + '</p><p class="muted">desk1 · desk2 · t.ahmed · asst.mona · owner</p>' +
+      '<input class="input" readonly dir="ltr" value="' + HS.esc(pw || '') + '">', footer: '<button class="btn primary" data-close>' + HS.esc(HS.t('common.done')) + '</button>' });
+  }
   HS.mountSampleControls = function (root) {
     root.addEventListener('click', function (e) {
+      var pwb = e.target.closest('[data-sample-pw]');
+      if (pwb && !(pwb.dataset && pwb.dataset.sample)) {
+        HS.get('/api/c/sample/password').then(function (r) { if (r.password) showPassword(r.password); else HS.toast(HS.t('sample.pwGone'), 'bad'); },
+          function (er) { HS.toast(U.errorText(er), 'bad'); });
+        return;
+      }
       var button = e.target.closest('[data-sample]'); if (!button) return;
       var removing = button.dataset.sample === 'delete';
       U.confirm({ title: HS.t(removing ? 'sample.delete' : 'sample.load'), body: HS.t(removing ? 'sample.deleteConfirm' : 'sample.loadConfirm'), danger: removing,
         ok: HS.t(removing ? 'sample.delete' : 'sample.load') })   // the button says what it does (it said "Done")
         .then(function (ok) { if (!ok) return;
-          return U.run(HS.post('/api/c/sample' + (removing ? '/delete' : ''), {}), 'common.saved', button).then(function () {
+          return U.run(HS.post('/api/c/sample' + (removing ? '/delete' : ''), {}), 'common.saved', button).then(function (r) {
+            if (r && r.password) showPassword(r.password);
             if (HS.dataTab) HS.dataTab.reset(); return HS.data.load();
           }).then(function () { HS.rerender(); });
         }).catch(function () {});

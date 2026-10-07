@@ -14,6 +14,8 @@
     return s;
   };
   HS.has = function (key) { return ((HS.dict[HS.lang] || {})[key] !== undefined) || ((HS.dict.en || {})[key] !== undefined); };
+  // an expense category by its name; one the program does not know (old data, an import) reads "Other", never a raw key
+  HS.expCat = function (c) { return HS.has('exp.cat.' + c) ? HS.t('exp.cat.' + c) : HS.t('exp.cat.other'); };
 
   HS.setLang = function (lang) {
     HS.lang = lang === 'en' ? 'en' : 'ar';
