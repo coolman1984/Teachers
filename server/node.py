@@ -18,6 +18,7 @@ import json
 import os
 import platform
 import secrets
+import sys
 from datetime import datetime
 
 import ed25519
@@ -44,8 +45,8 @@ def machine_fingerprint():
     """Something that changes when the data folder is copied to another PC, but not when the network changes:
     the Windows installation id (MachineGuid), /etc/machine-id elsewhere, plus the computer name."""
     override = os.environ.get('HS_MACHINE_ID')
-    if override:
-        return override
+    if override and not ('__compiled__' in globals() or getattr(sys, 'frozen', False)):
+        return override                                        # the tests only: in Hessa.exe a copy could pretend to be this PC
     mid = ''
     try:
         import winreg

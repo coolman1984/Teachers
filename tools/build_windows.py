@@ -16,7 +16,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(ROOT, 'build')
 sys.path.insert(0, os.path.join(ROOT, 'server'))
-from version import COPYRIGHT, DEVELOPER, PRODUCT, VERSION, wa_international  # noqa: E402
+from version import COPYRIGHT, DEVELOPER, PRODUCT, VERSION, service_url, wa_international  # noqa: E402
 
 
 def run(cmd):
@@ -40,7 +40,7 @@ def compile_program(v4):
 
 
 # every file the installer or the release page ships; checked before the long compile so a missing one fails in a second
-SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/migrate-v1.sql', 'gateway/build.js', 'gateway/src/worker.js',
+SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/migrate-v1.sql', 'gateway/migrate-v2.sql', 'gateway/build.js', 'gateway/src/worker.js',
            'installer/hessa.iss', 'server/hs_main.py', 'server/appwindow.py', 'server/license.py', 'server/license_key.py', 'tools/make_assets.py', 'tools/make_icon.py', 'tools/make_app_icons.py')
 
 
@@ -64,6 +64,7 @@ def main():
     vendor = os.path.join(ROOT, 'server', '_vendor.py')      # the seller's WhatsApp, from the build's secret only
     with open(vendor, 'w', encoding='utf-8') as f:
         f.write(f'VENDOR_WHATSAPP = {wa_international(os.environ.get("HESSA_VENDOR_WHATSAPP", ""))!r}\n')
+        f.write(f'SERVICE_URL = {service_url(os.environ.get("HESSA_SERVICE_URL", ""))!r}\n')   # the seller's "Hessa online" gateway
     run([sys.executable, 'tools/make_icon.py', os.path.join(BUILD, 'hessa.ico')])
     v4 = '.'.join((VERSION.split('.') + ['0', '0', '0'])[:4])
     try:
@@ -80,7 +81,7 @@ def main():
     run(['node', os.path.join('gateway', 'build.js')])
     gw = os.path.join(dist, 'gateway')
     os.makedirs(gw, exist_ok=True)
-    for src in ('gateway/dist/hessa-gateway.js', 'gateway/dist/schema.sql', 'gateway/dist/migrate-v1.sql', 'docs/GATEWAY_SETUP.md'):
+    for src in ('gateway/dist/hessa-gateway.js', 'gateway/dist/schema.sql', 'gateway/dist/migrate-v1.sql', 'gateway/dist/migrate-v2.sql', 'docs/GATEWAY_SETUP.md'):
         shutil.copy(os.path.join(ROOT, src), gw)
     shutil.copy(os.path.join(ROOT, 'docs', 'REMOTE_ACCESS.md'), dist)   # the owner finds the remote-work guide next to the program
     run([iscc(), f'/DAppVersion={VERSION}', f'/DAppPublisher={DEVELOPER}', f'/DAppCopyright={COPYRIGHT}', os.path.join('installer', 'hessa.iss')])

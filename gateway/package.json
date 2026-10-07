@@ -2,5 +2,5 @@
   "name": "hessa-gateway",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test --no-warnings test/gateway.test.js", "dev": "node --no-warnings dev/server.js" }
+  "scripts": { "test": "node --test --no-warnings test/gateway.test.js test/service.test.js", "dev": "node --no-warnings dev/server.js" }
 }

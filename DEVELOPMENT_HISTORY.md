@@ -8,6 +8,44 @@ owner agreed to this change. **What:** a small `new-version` job reads `server/v
 release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
 merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
 
+## WhatsApp to parents: the short report and automatic messages; version 1.3.0 (2026-10-07)
+
+**Why:** the owner decided parents get no app: "a small, neat report on WhatsApp", sent automatically on WhatsApp.
+**What:** `server/parent_report.py` writes the few lines (attendance this month with the missed classes, the latest published
+mark and rank, the account, the next class, the link) from the dictionaries; the report/monthly messages now default to
+`{summary}`. Automatic sending uses only the official WhatsApp Business API through the seller's service (an unofficial sender
+gets numbers banned): the gateway sends approved templates (`hessa_report`, `hessa_absence`, `hessa_receipt`, values without new
+lines), once per key per centre, counts per month and keeps only a hash of the number. `server/wa_auto.py` on the administrator
+PC decides what is due (absence after the class ends, receipts from the moment it was switched on, weekly/monthly reports),
+only for parents who gave consent, and writes each message in the follow-up history. Settings → Parent links has the card.
+Version 1.3.0 so the merge publishes the installer. **Checks:** gateway tests (23), `test_wa_auto` (real gateway + a stand-in
+for Meta's API + server), `test_owner_online`, `test_center_api`, `test_center_gateway`, `test_unit`, `test_ci`, frontend tests.
+**Mistakes/lessons:** the first test expected the forced round to send, but the background round (kicked by saving the settings)
+had already sent them - a test waits for the effect, not for the caller; a receipt keeps only the minute, so "since" compares
+receipt ids taken at the moment it was switched on.
+**Review fixes (PR 19):** with an owner's phone registered the PC ran a full round every 10 s (status + picture), about 17,000
+writes a day per idle centre on a shared service whose free quota is 100,000: now the status is asked every five minutes, the
+picture goes only when the data changed (checked locally every 10 s) plus a 3-minute heartbeat, and the Worker writes
+`seen_at` at most every ten minutes (`test_an_idle_centre_writes_little_to_the_shared_service`). The self-hosted upgrade
+guide now runs `migrate-v2.sql` (re-running `schema.sql` does not add columns to existing tables). Version raised to 1.3.0.
+
+## Hessa online and the owner's live phone (2026-10-07)
+
+**Why:** the owner researched the market (competitors sell a parent app and live owner control) and asked for one online
+service in the seller's name, a live phone view for the centre owner, and short WhatsApp reports for parents instead of a parent app.
+**What:** the gateway became multi-centre: `/office/join` takes the subscription code, verifies it with the seller's Ed25519 key in
+the Worker (same format as `server/license.py`), one code joins one centre, every card/page is scoped by centre, and publishing
+stops after the grace days (renewal via `/office/licence`). `server/owner.py` builds the owner's picture (today's money,
+drawers, sessions now, watch alerts, a bilingual feed rendered from the program's own dictionaries, top debts, people signed
+in); `GatewaySync.push_owner` sends it within seconds of a data change and every minute as a heartbeat. The phone page `/o/`
+(installable, service worker, offline copy, key in a header and never in an address) reads it. Phones are added/removed by
+administrators (hash only in the shared settings; security log). Also: the installed program ignores `HS_MACHINE_ID` and
+`HS_AI_URL`. **Checks:** gateway node tests (22), `test_owner_online` (real gateway + server + Chromium), `test_unit`, `test_ci`,
+`test_center_gateway`, `test_gateway_parent`, `test_center_review`, `test_license`, `test_center_watch`, frontend tests.
+**Mistakes/lessons:** the page's CSP forbids inline styles, so bar widths are set from script; a JS comment pasted inside a
+one-line function broke the page, caught by the browser test - always run the browser check after editing the phone page.
+**Next:** the seller creates the Cloudflare service and the `HESSA_SERVICE_URL` secret; WhatsApp parent reports.
+
 ## Hessa 1.2.0 release (2026-10-07)
 
 **What:** the owner asked for a new installer. Raised `VERSION` to 1.2.0 and described it in `docs/RELEASE_NOTES.md`

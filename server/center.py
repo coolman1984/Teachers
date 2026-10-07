@@ -1735,14 +1735,13 @@ WA_DEFAULTS = {
                 'en': 'Hello, parent of {student}. {student} was absent today ({date}) from {group}. We hope all is well. {center} {link}'},
     'payment': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نذكّركم بلطف بالرسوم المستحقة: {amount} جنيه. شكرًا لتعاونكم. {center} {link}',
                 'en': 'Hello, parent of {student}. A kind reminder of the fees due: {amount} EGP. Thank you. {center} {link}'},
-    'report': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. يمكنكم متابعة الحضور والدرجات والرصيد ({balance} جنيه) من الرابط: {link} — {center}',
-               'en': 'Hello, parent of {student}. Follow attendance, marks and the balance ({balance} EGP) here: {link} — {center}'},
+    # the neat few-line report (server/parent_report.py): attendance, latest mark, money, next class and the link
+    'report': {'ar': '{summary}', 'en': '{summary}'},
     'exam': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نتيجة الامتحان متاحة على الرابط: {link} — {center}',
              'en': 'Hello, parent of {student}. The exam result is available here: {link} — {center}'},
     'welcome': {'ar': 'أهلًا بالطالب {student} في {center}. مجموعته: {group}. يسعدنا تواصلكم في أي وقت. {link}',
                 'en': 'Welcome {student} to {center}. Group: {group}. You can reach us any time. {link}'},
-    'monthly': {'ar': 'ولي أمر الطالب {student}، الرصيد: {balance} جنيه. {center} {link}',
-                'en': 'Dear parent of {student}, balance: {balance} EGP. {center} {link}'},
+    'monthly': {'ar': '{summary}', 'en': '{summary}'},
 }
 
 

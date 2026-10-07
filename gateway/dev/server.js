@@ -1,5 +1,5 @@
 // Local gateway for development and tests: the real worker code + the D1 stand-in + the public folder.
-//   node dev/server.js            (PORT, OFFICE_SECRET, GATEWAY_DB are read from the environment)
+//   node dev/server.js            (PORT, OFFICE_SECRET, SELLER_PUB, GATEWAY_DB are read from the environment)
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,8 @@ export function makeEnv(extra = {}) {
   return {
     DB: new D1(process.env.GATEWAY_DB || ':memory:'),
     OFFICE_SECRET: process.env.OFFICE_SECRET || '',
+    ...(process.env.SELLER_PUB ? { SELLER_PUB: process.env.SELLER_PUB } : {}),
+    ...Object.fromEntries(['WA_TOKEN', 'WA_PHONE_ID', 'WA_API'].filter((k) => process.env[k]).map((k) => [k, process.env[k]])),   // a test WhatsApp stand-in
     ASSETS: {
       async fetch(req) {
         const p = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^([/\\])+/, '');
