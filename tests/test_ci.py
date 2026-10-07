@@ -26,13 +26,16 @@ class WorkflowTest(unittest.TestCase):
             self.assertTrue((ROOT / 'tests' / (module + '.py')).is_file(), module)
         self.assertIn('HS_CHROMIUM', job)
 
-    def test_installer_publication_requires_an_explicit_version_tag(self):
+    def test_installer_publication_requires_a_tag_or_a_new_version_on_main(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
-        release = workflow.split('- name: Publish an explicitly tagged release', 1)[1]
-        self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')", release)
-        self.assertIn("if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')", workflow)
+        release = workflow.split('- name: Publish a tagged release or a new version merged into main', 1)[1]
+        self.assertIn("if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true')", release)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true'", workflow)
+        check = workflow.split('  new-version:', 1)[1].split('  windows-installer:', 1)[0]
+        self.assertIn('refs/heads/main', check, 'only main publishes; session branches and pull requests never do')
+        self.assertIn('gh release view', check, 'a version that already has a release is never rebuilt')
         installer = workflow.split('  windows-installer:', 1)[1]
-        self.assertIn('needs: [test, browser]', installer, 'a release must also pass real screen checks')
+        self.assertIn('needs: [test, browser, new-version]', installer, 'a release must also pass real screen checks')
 
 
 class ShippedFilesTest(unittest.TestCase):

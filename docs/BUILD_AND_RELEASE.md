@@ -13,10 +13,11 @@ Every inherited suite now tests the centre (test_multinode, test_e2e_browser). A
 with the runner's Chrome (test_e2e_browser, test_e2e_center, test_center_review, test_gateway_parent, test_acceptance).
 `python tools/build_windows.py --check` runs on every push and fails in seconds when a shipped file is missing.
 
-Installer builds run on manual workflow dispatch or explicit `v*` tags. A tagged push can
-publish an installer; ordinary development merges do not publish a release. To release: raise
+Installer builds run on manual workflow dispatch, explicit `v*` tags, or a merge to main that raises the
+version. Ordinary development merges (same version) do not publish a release. To release: raise
 `server/version.py` (never lower it), describe the version in `docs/RELEASE_NOTES.md` (the preflight
-refuses otherwise), push the tag `v<version>`. The release carries the installer, the gateway files and
+refuses otherwise), and merge into main: a push to main whose version has no release yet builds and
+publishes it (pushing the tag `v<version>` still works too). The release carries the installer, the gateway files and
 `GATEWAY_SETUP.md`; `REMOTE_ACCESS.md` is installed next to the program. Testing the installer on a clean
 Windows PC and an update over an older version is still a manual step (TASKS F01, F02).
 
