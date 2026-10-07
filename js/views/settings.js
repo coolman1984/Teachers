@@ -4,7 +4,7 @@
   var HS = window.HS;
   var THEMES = ['auto', 'daylight', 'night', 'asphalt', 'highway', 'contrast'];
   var FONTS = { plex: "'HS Plex Arabic','HS Plex'", cairo: "'HS Cairo'", tajawal: "'HS Tajawal'", kufi: "'HS Kufi'", system: "'Segoe UI',Tahoma,sans-serif" };
-  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'remote', 'ai', 'access', 'data'];
+  var TABS = ['appearance', 'centre', 'rules', 'lists', 'messages', 'gateway', 'remote', 'ai', 'access', 'data', 'license'];
 
   /* Work from outside the centre (docs/REMOTE_ACCESS.md): a secure tunnel on this PC, switched on here, for chosen people only */
   var remote = {
@@ -242,6 +242,7 @@
         (tab === 'appearance' ? '<div class="grid two-col"><section class="card">' + appearance() + '</section>' + preview() + '</div>'
           : tab === 'access' ? HS.accessTab.render()
           : tab === 'data' ? HS.dataTab.render()
+          : tab === 'license' ? HS.licenseTab.render()
           : tab === 'gateway' ? HS.mailboxTab.render()
           : tab === 'remote' ? remote.render()
           : tab === 'ai' ? aiTab.render()
@@ -253,6 +254,7 @@
       if (ctx.route.q.tab === 'centre') mountExtras(root);
       if (ctx.route.q.tab === 'lists') HS.lists.mount(root);
       if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
+      if (ctx.route.q.tab === 'license') HS.licenseTab.mount(root);
       if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
       if (ctx.route.q.tab === 'remote') remote.mount(root);
       if (ctx.route.q.tab === 'ai') aiTab.mount(root);

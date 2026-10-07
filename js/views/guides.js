@@ -126,7 +126,7 @@
     ['phoneChanged', 'students', 'students'], ['duplicate', 'students', 'students'], ['leaves', 'students', 'students'], ['comesBack', 'students', 'students'],
     ['parentAsks', 'students', 'students'], ['noPhone', 'students', 'students'], ['excelMess', 'students/import', 'students'],
     ['ramadan', 'groups', 'groups'], ['exams', 'door', 'groups'], ['roomClash', 'groups', 'groups'], ['groupFull', 'groups', 'groups'], ['moveGroup', 'students', 'groups'],
-    ['theft', 'watch', 'admin'], ['cashNoReceipt', 'watch', 'admin'], ['staffAccount', 'settings?tab=access', 'admin'],
+    ['subscription', 'settings?tab=license', 'admin'], ['theft', 'watch', 'admin'], ['cashNoReceipt', 'watch', 'admin'], ['staffAccount', 'settings?tab=access', 'admin'],
     ['deletedWrong', 'settings?tab=data', 'admin'], ['staffLeaves', 'settings?tab=access', 'admin'], ['forgotPassword', 'settings?tab=access', 'admin'],
     ['pcBroke', 'settings?tab=data', 'admin'], ['virus', 'settings?tab=data', 'admin'], ['newPc', 'settings?tab=data', 'admin'], ['trialPassword', 'overview', 'admin']
   ];

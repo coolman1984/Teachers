@@ -518,3 +518,19 @@ test('every step-by-step guide and situation is complete in both languages and n
     assert.ok(!/undefined|\[\[|sit\.[a-zA-Z]+\.[qa]/.test(sit));
   }
 });
+
+test('the subscription screens have words for every state in both languages and show the request code', () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang;
+    for (const s of ['ok', 'warn', 'grace', 'locked', 'trial', 'trialEnded', 'clock', 'off']) {
+      assert.ok(HS.has('lic.s.' + s) && HS.has('lic.state.' + s), lang + ' ' + s);
+    }
+    for (const k of ['locked', 'trialEnded', 'clock']) assert.ok(HS.has('err.license.' + k));
+    for (const k of ['typo', 'forged', 'kind', 'otherPc', 'older', 'expired', 'clock']) assert.ok(HS.has('err.code.' + k), k);
+    for (const k of ['forged', 'otherPc', 'used', 'expired']) assert.ok(HS.has('err.reset.' + k), k);
+    HS.me = { perms: ['users.manage'], admin: false };
+    assert.ok(!HS.licenseTab.render().includes('data-lic>'));      // staff never see the request code or the activation box
+    HS.me.admin = true;
+    assert.ok(HS.licenseTab.render().includes('data-lic'));
+  }
+});

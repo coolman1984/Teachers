@@ -1,6 +1,27 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Monthly subscription with per-PC activation codes and password recovery (2026-10-07)
+
+**Why/source:** the owner rents Hessa monthly and wants the .exe to stop being useful when copied or not paid for, with
+reminders before the end and a way back for a forgotten password.
+**What:** `server/license.py` - request code from the Windows MachineGuid (never from the environment in Hessa.exe),
+activation codes = Ed25519-signed {PCs, until, issued, serial} in 160 readable characters with a check letter; one code
+can name several PCs. 7-day trial (its start also taken from the oldest data), a bar at the bottom from 7 days before the
+end, 3 grace days, then LOCKED: sign-in, reading, backups and exports still work, saving is refused with err.license.*
+The highest time ever seen (license.json and the signed history) catches a clock moved back. A copied data folder shows
+another request code. Older codes cannot replace newer ones. `tools/seller.py` (+ seller.bat menu in Arabic) issues
+codes with the seller's private key, never in the repository, and keeps issued.csv. Forgotten administrator password:
+one-time request on the centre PC -> seller reset code -> new password (staff: the administrator resets as before).
+The check is always on in Hessa.exe and off in the source copy unless config `license_required` (tests).
+**Checks:** `tests/test_license.py` (9: codes, typos, forged keys, other PC, older/ended codes, trial/warn/grace/lock,
+clock moved back with license.json deleted, one-use reset code, the seller tool; the running server locked, backing up,
+refusing another PC's code, activating; password recovery from the centre PC only). Frontend test for every state's words.
+**Mistakes/lessons:** a bottom bar fixed to the window covered the account button in the menu - it lives in the page
+column now. HS_MACHINE_ID (a test override) would have let a copy pretend to be a licensed PC; the licence reads the
+MachineGuid itself in the compiled program. **Limits:** no offline licence can stop a skilled cracker from patching the
+.exe; the public repository lets anyone run the source without the check - make it private before selling widely.
+
 ## The owner's control: Watch, every click, a careful sign-in, entries that explain themselves (2026-10-06)
 
 **Why/source:** the owner wants centre owners to trust the desk while they are away - "nobody steals, cheats, deletes

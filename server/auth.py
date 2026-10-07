@@ -974,6 +974,27 @@ class Auth:
         self.log(actor['display'], ip, 'password-reset', u['display'], 'Temporary password set by the administrator; must be changed at next '
                  'login; logged out on every PC')
 
+    def recover(self, username, password, ip):
+        """A forgotten password set again on the centre PC with the seller's one-time reset code (server/license.py checks the
+        code; this only runs after it). The person chooses the new password; every session of that account ends."""
+        with self.lock:
+            r = self.conn.execute('SELECT * FROM users WHERE username=? AND deleted=0', ((username or '').strip(),)).fetchone()
+        u = self._user(r)
+        if not u:
+            raise AuthError('There is no account with this user name.')
+        self.check_password(password, u['username'], u['full_name'])
+        ts = now()
+        self._write('Password recovery', ip, 'Recover password of ' + u['username'], [
+            {'e': 'users', 'id': u['id'], 'op': 'update', 'c': {'pw_hash': ['', '']},
+             's': {'pw_hash': hash_password(password), 'pw_pub': account_pub(password, u['id']), 'must_change': False, 'active': True,
+                   'pw_changed_at': ts, 'updated_at': ts, 'updated_by': 'Password recovery'}},
+            {'e': 'userCommands', 'id': uuid.uuid4().hex, 'op': 'insert', 'noaudit': True, 's': {'cmd': 'unlock', 'user': u['id']}},
+            {'e': 'userCommands', 'id': uuid.uuid4().hex, 'op': 'insert', 'noaudit': True, 's': {'cmd': 'logout', 'user': u['id']}}])
+        if self.dev_default(u['id']):
+            self._dev_flag(None)
+        self.log('Password recovery', ip, 'admin-reset', u['username'], 'Password recovered on the centre PC with the seller\'s reset code')
+        return u['username']
+
     def _command(self, actor, ip, uid, cmd, label):
         """Unlock / log out: on the administrator PC for every PC, elsewhere for this PC only."""
         if self.node.is_authority:
