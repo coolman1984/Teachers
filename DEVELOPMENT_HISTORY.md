@@ -1,6 +1,13 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## A raised version merged into main publishes its installer (2026-10-07)
+
+**Why:** pushing the `v1.2.0` tag from the cloud session was refused (403), and so was a manual workflow start; the
+owner agreed to this change. **What:** a small `new-version` job reads `server/version.py`; on a push to main with no
+release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
+merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
+
 ## Hessa 1.2.0 release (2026-10-07)
 
 **What:** the owner asked for a new installer. Raised `VERSION` to 1.2.0 and described it in `docs/RELEASE_NOTES.md`

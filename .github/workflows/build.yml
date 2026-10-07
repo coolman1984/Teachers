@@ -64,9 +64,27 @@ jobs:
           python -c "import os, sys; sys.exit(0 if os.path.exists(os.environ['HS_CHROMIUM']) else 'Chrome is missing on the runner')"
           python -m unittest test_e2e_browser test_e2e_center test_center_join test_center_devices test_center_safety test_center_review test_center_links test_gateway_parent test_acceptance test_omr test_qbank test_ai
 
+  new-version:
+    # a merge to main that raises server/version.py past the last release builds and publishes it (no tag push needed)
+    runs-on: ubuntu-latest
+    outputs:
+      new: ${{ steps.check.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(python3 -c "import sys; sys.path.insert(0, 'server'); from version import VERSION; print(VERSION)")
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] && ! gh release view "v$v" > /dev/null 2>&1; then
+            echo "new=true" >> "$GITHUB_OUTPUT"; echo "Version $v has no release yet - the installer will be built and published."
+          else
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          fi
+
   windows-installer:
-    needs: [test, browser]
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: [test, browser, new-version]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -113,8 +131,8 @@ jobs:
           name: Hessa-Setup
           path: dist/Hessa-Setup-*.exe
           retention-days: 30
-      - name: Publish an explicitly tagged release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      - name: Publish a tagged release or a new version merged into main
+        if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
