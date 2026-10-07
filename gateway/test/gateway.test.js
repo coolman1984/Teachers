@@ -133,14 +133,16 @@ test('older office programs: the inbox is always empty and ack is accepted', asy
   assert.equal((await office(env, 'POST', '/office/ack', { events: [], photos: [] })).status, 200);
 });
 
-test('an existing v1 mailbox upgrades without losing cards or revocation history', async () => {
+test('an existing v1 mailbox upgrades (v1, then v2, then the schema again) without losing cards or revocation history', async () => {
   const { readFileSync } = await import('node:fs');
   const env = newEnv(), th = await sha256Hex(TOKEN);
-  env.DB.db.exec('DROP INDEX cards_student; ALTER TABLE cards RENAME COLUMN student_id TO trip_id');
+  env.DB.db.exec('DROP INDEX cards_student; DROP INDEX cards_centre; ALTER TABLE cards DROP COLUMN centre; ALTER TABLE pages DROP COLUMN centre; ALTER TABLE cards RENAME COLUMN student_id TO trip_id');
   await env.DB.prepare("INSERT INTO cards VALUES (?, ?, ?, 0, NULL, ?)").bind(th, 'st1', '{"name":"Synthetic preserved child"}', 1).run();
   const revoked = 'ab'.repeat(32);
   await env.DB.prepare('INSERT INTO revoked_links VALUES (?, ?)').bind(revoked, 1).run();
   env.DB.db.exec(readFileSync(new URL('../migrate-v1.sql', import.meta.url), 'utf8'));
+  env.DB.db.exec(readFileSync(new URL('../migrate-v2.sql', import.meta.url), 'utf8'));
+  env.DB.db.exec(readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
   const result = await (await call(env, 'GET', '/api/card/' + TOKEN)).json();
   assert.equal(result.card.name, 'Synthetic preserved child');
   assert.ok(await env.DB.prepare('SELECT * FROM revoked_links WHERE token_hash = ?').bind(revoked).first());

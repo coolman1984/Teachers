@@ -8,6 +8,23 @@ owner agreed to this change. **What:** a small `new-version` job reads `server/v
 release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
 merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
 
+## Hessa online and the owner's live phone (2026-10-07)
+
+**Why:** the owner researched the market (competitors sell a parent app and live owner control) and asked for one online
+service in the seller's name, a live phone view for the centre owner, and short WhatsApp reports for parents instead of a parent app.
+**What:** the gateway became multi-centre: `/office/join` takes the subscription code, verifies it with the seller's Ed25519 key in
+the Worker (same format as `server/license.py`), one code joins one centre, every card/page is scoped by centre, and publishing
+stops after the grace days (renewal via `/office/licence`). `server/owner.py` builds the owner's picture (today's money,
+drawers, sessions now, watch alerts, a bilingual feed rendered from the program's own dictionaries, top debts, people signed
+in); `GatewaySync.push_owner` sends it within seconds of a data change and every minute as a heartbeat. The phone page `/o/`
+(installable, service worker, offline copy, key in a header and never in an address) reads it. Phones are added/removed by
+administrators (hash only in the shared settings; security log). Also: the installed program ignores `HS_MACHINE_ID` and
+`HS_AI_URL`. **Checks:** gateway node tests (22), `test_owner_online` (real gateway + server + Chromium), `test_unit`, `test_ci`,
+`test_center_gateway`, `test_gateway_parent`, `test_center_review`, `test_license`, `test_center_watch`, frontend tests.
+**Mistakes/lessons:** the page's CSP forbids inline styles, so bar widths are set from script; a JS comment pasted inside a
+one-line function broke the page, caught by the browser test - always run the browser check after editing the phone page.
+**Next:** the seller creates the Cloudflare service and the `HESSA_SERVICE_URL` secret; WhatsApp parent reports.
+
 ## Hessa 1.2.0 release (2026-10-07)
 
 **What:** the owner asked for a new installer. Raised `VERSION` to 1.2.0 and described it in `docs/RELEASE_NOTES.md`

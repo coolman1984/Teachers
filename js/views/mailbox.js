@@ -20,9 +20,41 @@
       HS.esc(HS.t('gw.counts', { links: s.links || 0, cards: s.cards === null || s.cards === undefined ? '–' : s.cards })) +
       '<br><small>' + HS.esc(HS.t('gw.lastOk', { t: U.ago ? U.ago(s.lastOk) : s.lastOk })) + '</small></span></div>';
   }
+  function qr(text) {
+    try { var q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch (e) { return ''; }
+  }
+  /* Hessa online: the seller's service - one click with the subscription code, nothing to set up */
+  function online(s) {
+    var body;
+    if (s.centre) {
+      body = '<div class="tip ' + (s.active === false ? 'bad' : 'ok') + '">' + HS.icon(s.active === false ? 'alert' : 'check') + '<span><b>' +
+        HS.esc(HS.t(s.active === false ? 'gw.online.ended' : 'gw.online.on', { d: s.until ? HS.fmt.date(s.until) : '…' })) + '</b></span></div>';
+    } else if (!s.service) {
+      body = '<p class="muted">' + HS.esc(HS.t('gw.online.none')) + '</p>';
+    } else {
+      body = '<p class="muted">' + HS.esc(HS.t(s.licensed ? 'gw.online.b' : 'gw.online.needLicence')) + '</p><div class="row wrap" style="gap:.5rem">' +
+        '<button class="btn primary" data-gw-join' + (s.licensed ? '' : ' disabled') + '>' + HS.icon('link', 'sm') + HS.esc(HS.t('gw.online.go')) + '</button>' +
+        (s.licensed ? '' : '<a class="btn ghost" href="#/settings?tab=license">' + HS.esc(HS.t('set.tab.license')) + '</a>') + '</div>';
+    }
+    return '<section class="card stack"><header><span class="tile-ic">' + HS.icon('globe') + '</span><h2>' + HS.esc(HS.t('gw.online.t')) + '</h2></header>' + body + '</section>';
+  }
+  /* the owner's phones: the centre live from anywhere (gateway page /o/) */
+  function phones(o) {
+    if (!o) return '';
+    var list = o.phones || [];
+    return '<section class="card stack" data-owner><header><span class="tile-ic">' + HS.icon('eye') + '</span><h2>' + HS.esc(HS.t('own.t')) + '</h2></header>' +
+      '<p class="muted">' + HS.esc(HS.t('own.b')) + '</p>' +
+      (list.length ? '<ul class="list">' + list.map(function (p) {
+        return '<li class="row" style="justify-content:space-between;gap:.6rem"><span><b>' + HS.esc(p.label) + '</b><br><small class="faint">' + HS.esc(HS.t('own.added', { at: HS.fmt.date(String(p.at || '').slice(0, 10)), by: p.by || '' })) + '</small></span>' +
+          '<button class="btn sm ghost" data-own-remove="' + HS.esc(p.id) + '">' + HS.esc(HS.t('own.remove')) + '</button></li>';
+      }).join('') + '</ul>' : '<p class="faint">' + HS.esc(HS.t('own.none')) + '</p>') +
+      (o.gateway ? '<form class="row wrap" data-own-add style="gap:.5rem"><input class="input grow" name="label" maxlength="60" placeholder="' + HS.esc(HS.t('own.labelPh')) + '" aria-label="' + HS.esc(HS.t('own.label')) + '">' +
+        '<button class="btn primary" type="submit">' + HS.icon('plus', 'sm') + HS.esc(HS.t('own.add')) + '</button></form>' : '<p class="faint">' + HS.esc(HS.t('own.needGw')) + '</p>') + '</section>';
+  }
   function body(s) {
     var hasUrl = !!s.url, hasSecrets = s.configured, tested = !!s.lastOk;
-    return '<section class="card stack"><header><span class="tile-ic">' + HS.icon('link') + '</span><h2>' + HS.esc(HS.t('set.tab.gateway')) + '</h2></header>' +
+    var own = s.centre ? '' : ' open';
+    return online(s) + (HS.me && HS.me.admin ? phones(ownerState) : '') + '<details class="card gw-own"' + (s.centre || (s.service && !s.configured) ? '' : own) + '><summary><b>' + HS.esc(HS.t(s.service ? 'gw.own.t' : 'set.tab.gateway')) + '</b></summary><div class="stack" style="margin-top:.6rem">' +
       '<p class="muted">' + HS.esc(HS.t('gw.intro')) + '</p>' +
       '<div data-gw-status role="status">' + statusHTML(s) + '</div>' +
       '<ol class="gw-steps">' +
@@ -38,8 +70,9 @@
       '<details class="gw-more"><summary>' + HS.esc(HS.t('gw.more')) + '</summary><div class="stack" style="margin-top:.6rem">' +
         '<p class="muted">' + HS.esc(HS.t('gw.otherPc')) + '</p><div class="row wrap" style="gap:.5rem"><button class="btn sm" data-gateway-code' + (hasSecrets ? '' : ' disabled') + '>' + HS.esc(HS.t('gateway.showCode')) + '</button></div>' +
         '<label class="field"><span class="lbl">' + HS.esc(HS.t('gateway.poll')) + '</span><input class="input" type="number" min="15" max="600" dir="ltr" data-gw-poll value="' + HS.esc(s.pollSeconds || 60) + '" style="max-width:8rem"></label>' +
-        '<div data-gateway-result role="status"></div><p class="faint">' + HS.esc(HS.t('gw.guide')) + '</p></div></details></section>';
+        '<div data-gateway-result role="status"></div><p class="faint">' + HS.esc(HS.t('gw.guide')) + '</p></div></details></div></details>';
   }
+  var ownerState = null;
   function reveal(root, label, text, help) {
     var box = root.querySelector('[data-gw-reveal]') || root.querySelector('[data-gateway-result]');
     box.innerHTML = '<label class="field"><span class="lbl">' + HS.esc(label) + '</span><textarea class="input" readonly dir="ltr" rows="2">' + HS.esc(text) + '</textarea><span class="help">' + HS.esc(help) + '</span></label>';
@@ -55,13 +88,27 @@
       if (!HS.can('gateway.manage')) return;
       var host = root.querySelector('[data-gw-root]');
       function paint(s) { st = s; host.innerHTML = body(s); }
-      function load() { return HS.get('/api/gateway').then(paint, function (e) { host.innerHTML = U.empty('alert', U.errorText(e)); }); }
+      function load() {
+        var own = HS.me && HS.me.admin ? HS.get('/api/owner/phones').then(function (o) { ownerState = o; }, function () { ownerState = null; }) : Promise.resolve();
+        return own.then(function () { return HS.get('/api/gateway'); }).then(paint, function (e) { host.innerHTML = U.empty('alert', U.errorText(e)); });
+      }
       load();
       function act(name, data, btn) {
         return U.run(HS.post('/api/gateway/' + name, data || {}), name === 'test' ? 'gw.tested' : name === 'send' ? 'gw.sent' : 'common.saved', btn)
           .then(function (r) { return load().then(function () { return r; }); }, function (e) { load(); throw e; });
       }
       host.addEventListener('submit', function (e) {
+        var add = e.target.closest('[data-own-add]');
+        if (add) {
+          e.preventDefault();
+          U.run(HS.post('/api/owner/phones', { label: add.label.value.trim() }), null, add.querySelector('button')).then(function (r) {
+            HS.dialog({ title: HS.t('own.t'), body: '<div class="phone-card"><div class="qr">' + qr(r.link) + '</div><div class="stack" style="gap:.7rem">' +
+              '<p>' + HS.esc(HS.t('own.scan')) + '</p><input class="input" readonly dir="ltr" value="' + HS.esc(r.link) + '"></div></div>',
+              footer: '<button class="btn primary" data-close>' + HS.esc(HS.t('common.done')) + '</button>' });
+            load();
+          }, function () {});
+          return;
+        }
         var f = e.target.closest('[data-gw-url]'); if (!f) return; e.preventDefault();
         act('save', { url: f.url.value.trim(), pollSeconds: (st && st.pollSeconds) || 60 }, f.querySelector('button')).catch(function () {});
       });
@@ -69,6 +116,20 @@
         if (e.target.matches('[data-gw-poll]')) act('save', { url: (st && st.url) || '', pollSeconds: Number(e.target.value) || 60 }).catch(function () {});
       });
       host.addEventListener('click', function (e) {
+        var rm = e.target.closest('[data-own-remove]');
+        if (rm) {
+          U.confirm({ title: HS.t('own.remove'), body: HS.t('own.remove.b'), danger: true, ok: HS.t('own.remove') }).then(function (yes) {
+            if (yes) U.run(HS.post('/api/owner/phones/remove', { id: rm.dataset.ownRemove }), 'common.saved', rm).then(load, function () {});
+          });
+          return;
+        }
+        var j = e.target.closest('[data-gw-join]');
+        if (j) {
+          var go = function (replace) { act('join', { replace: !!replace }, j).catch(function () {}); };
+          if (st && st.configured) U.confirm({ title: HS.t('gw.online.go'), body: HS.t('gw.online.replace'), danger: true, ok: HS.t('gw.online.go') }).then(function (yes) { if (yes) go(true); });
+          else go(false);
+          return;
+        }
         var b = e.target.closest('[data-gw]');
         if (b) {
           var a = b.dataset.gw;
