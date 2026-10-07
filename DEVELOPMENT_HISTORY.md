@@ -1,6 +1,13 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Hessa 1.2.0 release (2026-10-07)
+
+**What:** the owner asked for a new installer. Raised `VERSION` to 1.2.0 and described it in `docs/RELEASE_NOTES.md`
+(subscription, sign-in, Watch, click history, recycle bin, app window, guides). Merged, then the `v1.2.0` tag runs the
+Windows build. **Checks:** installer preflight, `test_unit`, `test_ci`. **Limits:** the WhatsApp button is empty unless the
+`HESSA_VENDOR_WHATSAPP` secret was set before the build; the trial sign-in (admin/123) is still on by the owner's choice.
+
 ## The seller's WhatsApp number in the build, not in the repository (2026-10-07)
 
 **What:** the owner gave the WhatsApp number for the renewal and password-recovery buttons. The repository is public and
