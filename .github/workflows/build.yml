@@ -83,6 +83,8 @@ jobs:
           python -m pip install "nuitka>=2.4,<3" ordered-set zstandard
           choco upgrade innosetup -y --no-progress
       - name: Build Hessa.exe and the installer
+        env:
+          HESSA_VENDOR_WHATSAPP: ${{ secrets.HESSA_VENDOR_WHATSAPP }}   # the seller's number for the renewal button
         run: python tools/build_windows.py
       - name: Check that the built program starts and serves its pages
         shell: pwsh
