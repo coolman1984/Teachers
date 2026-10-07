@@ -166,6 +166,14 @@ class Server:
 
     def cleanup(self):
         self.kill()
+        # a server error (HTTP 500) is written only to the PC's log: show it before the folder goes, or it can never be traced
+        try:
+            with open(os.path.join(self.data_dir, 'logs', 'server.log'), encoding='utf-8', errors='replace') as f:
+                text = f.read()
+            if ' ERROR ' in text or 'Traceback' in text:
+                sys.stderr.write(f'\n--- server errors of {self.name} ---\n' + text[text.find('ERROR') - 40 if 'ERROR' in text else 0:][-6000:] + '\n')
+        except OSError:
+            pass
         shutil.rmtree(self.root, ignore_errors=True)
 
 

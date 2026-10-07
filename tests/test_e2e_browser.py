@@ -37,6 +37,8 @@ class BrowserBase(unittest.TestCase):
         self.errors = []
         pg.on('console', lambda m: self.errors.append(m.text) if m.type == 'error' else None)
         pg.on('pageerror', lambda e: self.errors.append(str(e)))
+        # a server error names its request: a bare "500" in the console cannot be traced
+        pg.on('response', lambda r: self.errors.append(f'HTTP {r.status} {r.request.method} {r.url}') if r.status >= 500 else None)
         pg.goto(self.S.base)
         pg.wait_for_selector('#auth-form')
         pg.fill('#username', ADMIN[0])
