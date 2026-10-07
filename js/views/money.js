@@ -131,7 +131,7 @@
       var amount = Number(el.querySelector('#ex-a').value) || 0;
       btn.disabled = true;
       go.then(function () {
-        if (method !== 'cash') return true;
+        if (method !== 'cash' || cat.value === 'teacher_payout') return true;     // a teacher is often paid at month end from the safe
         // more cash out than the drawer holds: usually a typing mistake, sometimes money brought from the safe - ask
         return HS.get('/api/c/shift').then(function (sh) {
           if (!sh || sh.expected === undefined || amount <= sh.expected + 0.005) return true;
