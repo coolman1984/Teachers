@@ -23,6 +23,11 @@ for Meta's API + server), `test_owner_online`, `test_center_api`, `test_center_g
 **Mistakes/lessons:** the first test expected the forced round to send, but the background round (kicked by saving the settings)
 had already sent them - a test waits for the effect, not for the caller; a receipt keeps only the minute, so "since" compares
 receipt ids taken at the moment it was switched on.
+**Review fixes (PR 19):** with an owner's phone registered the PC ran a full round every 10 s (status + picture), about 17,000
+writes a day per idle centre on a shared service whose free quota is 100,000: now the status is asked every five minutes, the
+picture goes only when the data changed (checked locally every 10 s) plus a 3-minute heartbeat, and the Worker writes
+`seen_at` at most every ten minutes (`test_an_idle_centre_writes_little_to_the_shared_service`). The self-hosted upgrade
+guide now runs `migrate-v2.sql` (re-running `schema.sql` does not add columns to existing tables). Version raised to 1.3.0.
 
 ## Hessa online and the owner's live phone (2026-10-07)
 

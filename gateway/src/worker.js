@@ -169,7 +169,8 @@ async function officeAuth(request, env, url, bodyBytes) {
   if (!same(expected, sig)) throw new Fail(401, 'Unauthorised');
   const r = await env.DB.prepare('INSERT OR IGNORE INTO nonces(nonce, at) VALUES(?, ?)').bind(nonce, now()).run();
   if (!(r.meta ? r.meta.changes : r.changes)) throw new Fail(401, 'Replayed request');
-  if (centre) await env.DB.prepare('UPDATE centres SET seen_at = ? WHERE id = ?').bind(now(), centre.id).run();
+  // when the centre was last seen: written at most every ten minutes (each write counts against the service's daily quota)
+  if (centre && !(centre.seen_at > now() - 600)) await env.DB.prepare('UPDATE centres SET seen_at = ? WHERE id = ?').bind(now(), centre.id).run();
   return { id: centreId, row: centre };
 }
 

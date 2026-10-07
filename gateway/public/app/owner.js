@@ -1,9 +1,9 @@
 /* Hessa owner page: the centre live on the owner's phone. Read only - nothing here can change the centre's data.
    The centre PC gives the phone a key once (a QR code: /o/#k=<key>); the key is kept on this phone and sent in a header.
-   The PC sends a new picture within seconds of every change and at least every minute while it is on. */
+   The PC sends a new picture within seconds of every change and at least every three minutes while it is on. */
 (function () {
   'use strict';
-  var KEY = 'hs-owner-key', LANG = 'hs-owner-lang', EVERY = 10000;
+  var KEY = 'hs-owner-key', LANG = 'hs-owner-lang', EVERY = 15000;
   var W = {
     ar: {
       title: 'المالك', lang: 'English', today: 'دخل اليوم', egp: 'جنيه', expenses: 'المصروفات', net: 'الصافي', receipts: 'الإيصالات', voids: 'قيود عكسية',
@@ -101,7 +101,7 @@
     Array.prototype.forEach.call(app.querySelectorAll('[data-pct]'), function (el) { el.style.width = el.getAttribute('data-pct') + '%'; });
   }
   function head(s, r) {
-    var at = r.sentAt, fresh = at && (Date.now() - new Date(at).getTime()) < 3 * 60 * 1000 && !r.saved;
+    var at = r.sentAt, fresh = at && (Date.now() - new Date(at).getTime()) < 7 * 60 * 1000 && !r.saved;
     var d = (s && s.today) || {};
     return '<header class="hero"><div class="hero-top"><div class="brand"><img src="/app/icon-192.png" alt=""><h1>' + esc((s && s.centre) || (lang === 'ar' ? 'حصة' : 'Hessa')) + '</h1></div>' +
       '<button class="chip" data-lang>' + esc(t('lang')) + '</button></div>' +

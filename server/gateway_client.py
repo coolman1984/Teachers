@@ -274,6 +274,9 @@ def _published(store, exam_id):
 
 
 # --------------------------------------------------------------------------- the background service
+HEARTBEAT = 180        # seconds: the owner's phone says "PC off" after twice this without news
+
+
 class GatewaySync:
     def __init__(self, store, journal, node_id, secrets, save_file, log_fn=None, owner_fn=None, licence_fn=None):
         self.store, self.journal, self.node_id, self.secrets, self.save_file = store, journal, node_id, secrets, save_file
@@ -320,9 +323,9 @@ class GatewaySync:
         return Client(self.secrets.url, self.secrets.data['officeSecret'], centre=self.secrets.centre)
 
     def _loop(self):
-        delay = 5
+        delay, due = 5, 0
         while not self._stop:
-            self.wake.wait(delay if delay > 0 else 1)
+            woken = self.wake.wait(delay if delay > 0 else 1)
             self.wake.clear()
             if self._stop:
                 break
@@ -330,10 +333,17 @@ class GatewaySync:
                 delay = 30
                 continue
             try:
-                self.cycle()
-                delay = int(self.secrets.data.get('pollSeconds') or 60)
-                if self._phones_sig:          # an owner's phone is watching: changes reach it within seconds
-                    delay = min(delay, 10)
+                if not woken and self._phones_sig and time.time() < due:
+                    # between rounds, an owner's phone gets a change within seconds - and only a change: an idle centre
+                    # writes nothing extra to the shared service (its free daily writes serve every centre)
+                    if self.store.version() != getattr(self, '_owner_ver', None):
+                        with self.lock:
+                            self.push_owner()
+                    delay = 10
+                    continue
+                self.cycle(force=False)
+                due = time.time() + int(self.secrets.data.get('pollSeconds') or 60)
+                delay = 10 if self._phones_sig else int(self.secrets.data.get('pollSeconds') or 60)
             except GatewayError as e:
                 self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = str(e), e.key, e.vars
                 delay = min(max(delay * 2, 10), 600)
@@ -346,14 +356,18 @@ class GatewaySync:
         return {'configured': self.secrets.configured, 'url': self.secrets.url, 'pollSeconds': int(self.secrets.data.get('pollSeconds') or 60), **self.stat}
 
     # -- one round
-    def cycle(self):
+    def cycle(self, force=True):
+        """One round. The status question costs the shared service a write, so the background asks it every five minutes;
+        a person pressing "Send now" or "Test" (force) gets it at once."""
         with self.lock:
             self.stat['lastTry'] = _now()
             self.renew()
             self.push_cards()
             self.push_owner()
             self.send_whatsapp()
-            self.check()
+            if force or time.time() - getattr(self, '_checked_at', 0) >= 300:
+                self.check()
+                self._checked_at = time.time()
             self.stat['lastOk'] = _now()
             self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = None, None, {}
 
@@ -484,7 +498,7 @@ class GatewaySync:
         state, sig = None, None
         if hashes:
             ver = self.store.version()
-            if not force and not phones_changed and ver == getattr(self, '_owner_ver', None) and time.time() - self._owner_at < 60:
+            if not force and not phones_changed and ver == getattr(self, '_owner_ver', None) and time.time() - self._owner_at < HEARTBEAT:
                 return
             import owner
             state = self.owner_fn(want_state=True)[0]

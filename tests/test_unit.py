@@ -375,6 +375,46 @@ class NodeSafetyTest(unittest.TestCase):
             os.environ.pop('HS_MACHINE_ID', None)
             os.environ.pop('HS_AI_URL', None)
 
+    def test_an_idle_centre_writes_little_to_the_shared_service(self):
+        """Review of PR 19: with an owner's phone registered, every round asked the service's status and re-sent the picture,
+        about 17,000 writes a day per idle centre on a service whose free quota (100,000) serves every centre."""
+        import gateway_client as gwc
+        d = tempfile.mkdtemp()
+        try:
+            sec = gwc.Secrets(os.path.join(d, 'gateway.json'))
+            sec.data.update(url='https://gw.invalid', officeSecret='o' * 40, linkSecret='l' * 40, centre='c' * 32)
+            calls = []
+
+            class FakeClient:
+                def status(self):
+                    calls.append('status')
+                    return {'cards': 0}
+
+                def put_owner(self, state=None, devices=None):
+                    calls.append('owner')
+
+            class FakeStore:
+                v = 1
+
+                def version(self):
+                    return self.v
+
+            st = FakeStore()
+            g = gwc.GatewaySync(st, None, 'n', sec, None, owner_fn=lambda want_state=True: ({'today': {}} if want_state else None, ['a' * 64]))
+            g.client = lambda: FakeClient()
+            g.push_cards = lambda: None
+            for _ in range(5):
+                g.cycle(force=False)                 # five background rounds on an idle centre
+            self.assertEqual(calls.count('status'), 1)
+            self.assertEqual(calls.count('owner'), 1)
+            st.v = 2                                 # a change goes out at once
+            g.cycle(force=False)
+            self.assertEqual(calls.count('owner'), 2)
+            g.cycle()                                # "Send now" asks the status at once
+            self.assertEqual(calls.count('status'), 2)
+        finally:
+            shutil.rmtree(d)
+
     def test_rolled_back_journal_gets_new_epoch(self):
         from system import System
         d = tempfile.mkdtemp()
