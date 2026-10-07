@@ -300,7 +300,7 @@ async function office(request, env, url, parts) {
     if (stmts.length) await env.DB.batch(stmts);
     return reply(200, { ok: true });
   }
-  if (what === 'whatsapp' && m === 'PUT') return whatsapp(env, cid, json());
+  if (what === 'whatsapp' && m === 'PUT') return whatsapp(env, cid, json(), url.origin);
   if (what === 'whatsapp' && m === 'GET') {
     const month = new Date().toISOString().slice(0, 7);
     const u = await env.DB.prepare('SELECT n FROM wa_usage WHERE centre = ? AND month = ?').bind(cid, month).first();
@@ -314,13 +314,23 @@ async function office(request, env, url, parts) {
 // each message once (by its key), counts them per centre and month, and never keeps a phone number (only its hash).
 const WA_TEMPLATES = { hessa_report: 7, hessa_absence: 5, hessa_receipt: 5 };   // the number of values each approved template takes
 const WA_RE = /^20(10|11|12|15)\d{8}$/;                                         // Egyptian mobiles, international form
-async function whatsapp(env, cid, d) {
+// The seller pays for every message and lends the number's reputation: a centre (or anyone who copied its office secret) may
+// send at most WA_DAILY_CAP messages a day (default 1500 - a big centre's absences, receipts and a weekly report), and a value
+// may carry only this service's own parent link - any other web address is taken out, so the number cannot carry phishing.
+async function whatsapp(env, cid, d, origin) {
   if (!env.WA_TOKEN || !env.WA_PHONE_ID) throw new Fail(503, 'WhatsApp is not set up on the service yet', { whatsapp: false });
-  const out = [], month = new Date().toISOString().slice(0, 7);
+  const out = [], month = new Date().toISOString().slice(0, 7), day = 'day:' + new Date().toISOString().slice(0, 10);
+  const cap = Number(env.WA_DAILY_CAP) || 1500;
+  const used = await env.DB.prepare('SELECT n FROM wa_usage WHERE centre = ? AND month = ?').bind(cid, day).first();
+  let left = cap - (used ? used.n : 0);
+  if (left <= 0) throw new Fail(429, 'The daily WhatsApp limit of this centre is reached', { limit: cap });
   let sent = 0;
+  const clean = (p) => String(p === null || p === undefined || p === '' ? '—' : p).replace(/[\n\t]+/g, ' ').replace(/ {4,}/g, '   ')
+    .replace(/(?:https?:\/\/|www\.)\S+/gi, (u) => (u.startsWith(origin + '/t/') ? u : '—')).slice(0, 300);
   for (const msg of (d.messages || []).slice(0, 40)) {
     const key = String(msg.key || '').slice(0, 120), to = String(msg.to || ''), tpl = String(msg.template || '');
-    const params = Array.isArray(msg.params) ? msg.params.map((p) => String(p === null || p === undefined || p === '' ? '—' : p).replace(/[\n\t]+/g, ' ').replace(/ {4,}/g, '   ').slice(0, 300)) : [];
+    if (left <= 0) { out.push({ key, status: 'failed', error: 'daily limit' }); continue; }
+    const params = Array.isArray(msg.params) ? msg.params.map(clean) : [];
     if (!key || !WA_RE.test(to) || !(tpl in WA_TEMPLATES) || params.length !== WA_TEMPLATES[tpl]) { out.push({ key, status: 'refused' }); continue; }
     const had = await env.DB.prepare('SELECT status, wamid FROM wa_sent WHERE centre = ? AND key = ?').bind(cid, key).first();
     if (had && had.status === 'sent') { out.push({ key, status: 'sent', wamid: had.wamid, again: true }); continue; }
@@ -337,10 +347,10 @@ async function whatsapp(env, cid, d) {
     } catch (e) { error = 'network'; }
     await env.DB.prepare('INSERT INTO wa_sent(centre, key, to_hash, status, wamid, error, at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(centre, key) DO UPDATE SET status = excluded.status, wamid = excluded.wamid, error = excluded.error, at = excluded.at')
       .bind(cid, key, await sha256Hex('wa|' + to), status, wamid, error, now()).run();
-    if (status === 'sent') sent++;
+    if (status === 'sent') { sent++; left--; }
     out.push({ key, status, ...(error ? { error } : {}) });
   }
-  if (sent) await env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,?) ON CONFLICT(centre, month) DO UPDATE SET n = n + excluded.n').bind(cid, month, sent).run();
+  if (sent) await env.DB.batch([month, day].map((k) => env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,?) ON CONFLICT(centre, month) DO UPDATE SET n = n + excluded.n').bind(cid, k, sent)));
   return reply(200, { results: out });
 }
 
@@ -399,6 +409,7 @@ export default {
       env.DB.prepare('DELETE FROM nonces WHERE at < ?').bind(now() - 3600),
       env.DB.prepare('DELETE FROM rate WHERE window < ?').bind(Math.floor(now() / WINDOW) - 2),
       env.DB.prepare('DELETE FROM wa_sent WHERE at < ?').bind(now() - 90 * 86400),
+      env.DB.prepare("DELETE FROM wa_usage WHERE month LIKE 'day:%' AND month < ?").bind('day:' + new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
     ]);
   },
 };

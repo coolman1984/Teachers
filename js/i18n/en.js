@@ -3159,5 +3159,11 @@
     'srv.emptyFile': 'The file is empty.',
     'srv.login': 'Please sign in.',
     'srv.trialRemote': 'The trial password works only on the centre PC itself. Change it there first.',
+    'err.notActive': 'This enrolment has already ended. Open the student again to see the current groups.',
+    'err.beforeStart': 'The day cannot be before the student joined this group.',
+    'err.walletSpent': 'This credit was already used to pay fees. Reverse those receipts first (available now: {have}).',
+    'err.groupInUse': 'This group still has {n} student(s) or money owed. End their enrolments and settle the money first.',
+    'wa.err.limit': 'The daily WhatsApp limit of this centre is reached. The rest goes tomorrow; ask the seller for a higher limit.',
+    'srv.ownPage': 'This is changed only on its own page, by an administrator.',
   };
 })();

@@ -126,3 +126,20 @@ test('WhatsApp: the service sends each message once with an approved template, c
   const off = serviceEnv(), b = await joinCentre(off, CODES.pc2);
   assert.equal((await officeAs(off, b.j.centre, b.secret, 'PUT', '/office/whatsapp', { messages: [] })).status, 503);
 });
+
+test('WhatsApp: a daily cap per centre, and no web address but the service\'s own parent link', async () => {
+  const env = { ...serviceEnv(), WA_TOKEN: 't', WA_PHONE_ID: '1', WA_DAILY_CAP: '3' };
+  const a = await joinCentre(env, CODES.pc1);
+  const calls = [], real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { calls.push(JSON.parse(init.body)); return new Response(JSON.stringify({ messages: [{ id: 'w' + calls.length }] }), { status: 200 }); };
+  try {
+    const msg = (k, link) => ({ key: k, to: '201012345678', template: 'hessa_absence', lang: 'ar', params: ['C', 'S visit http://evil.example/x now', '7/10', 'G', link] });
+    const r = await (await officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', { messages: [msg('k1', 'http://gw.test/t/Tk_abc'), msg('k2', 'https://evil.example'), msg('k3', ''), msg('k4', '')] })).json();
+    assert.deepEqual(r.results.map((x) => x.status), ['sent', 'sent', 'sent', 'failed']);
+    const p = calls[0].template.components[0].parameters.map((x) => x.text);
+    assert.equal(p[1], 'S visit — now', 'an outside address is taken out');
+    assert.equal(p[4], 'http://gw.test/t/Tk_abc', 'the service\'s own parent link stays');
+    assert.equal(calls[1].template.components[0].parameters[4].text, '—');
+    assert.equal((await officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', { messages: [msg('k5', '')] })).status, 429);
+  } finally { globalThis.fetch = real; }
+});

@@ -141,6 +141,14 @@ def normalize_ops(store, ops, pc_index=0):
         return ops
     reserved_codes = set()
     for op in ops:
+        if isinstance(op, dict) and op.get('op') == 'del' and op.get('e') == 'groups':
+            # a group with students in it, or money still owed either way, cannot be removed: its debts would vanish
+            gid = op.get('id')
+            ens = [e for e in store.rows('enrollments', 'group_id=?', (gid,)) if _active(e, date.today().isoformat())]
+            owed = [b for b in balances(store, store.rows('enrollments', 'group_id=?', (gid,))).values() if abs(b.get('balance') or 0) >= 0.01]
+            if ens or owed:
+                raise Problem('err.groupInUse', 'This group still has {n} student(s) or money owed. End their enrolments and settle the money first.',
+                              n=len(ens) or len(owed))
         if not isinstance(op, dict) or op.get('op') != 'put' or not isinstance(op.get('row'), dict):
             continue
         e, row = op.get('e'), op['row']
@@ -812,7 +820,7 @@ def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
     if not st or not g:
         raise Problem('err.notFound', 'Student or group not found.')
     ctx.need_teacher(g.get('teacherId'))
-    day = start or date.today().isoformat()
+    day = _day(start)
     if any(e['groupId'] == group_id for e in active_enrollments(ctx.store, student_id, date.fromisoformat(day))):
         raise Problem('err.alreadyEnrolled', 'The student is already in this group.')
     _check_capacity(ctx, g, day)
@@ -827,6 +835,23 @@ def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
     eid = new_id('en')
     ctx.commit(f'Enrol {st["name"]} in {g["name"]}', [{'e': 'enrollments', 'id': eid, 'op': 'put', 'row': row}])
     return {'id': eid}
+
+
+def _day(value, default=None):
+    """A day as the database keeps it (YYYY-MM-DD). A missing value gives default (today); anything else that is not a real
+    day is refused - a date stored in another shape ('20260901', 'tomorrow') breaks every comparison made on it."""
+    if value in (None, ''):
+        return (default or date.today()).isoformat()
+    text = str(value).strip()
+    d = D.as_date(text) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text) else None
+    if not d:
+        raise Problem('err.date', 'Choose the day.')
+    return d.isoformat()
+
+
+def _still_active(e):
+    if (e.get('status') or 'active') != 'active' or e.get('to'):
+        raise Problem('err.notActive', 'This enrolment has already ended. Open the student again to see the current groups.')
 
 
 def _next_month(day):
@@ -856,7 +881,12 @@ def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     ctx.need_teacher(g.get('teacherId'))
     if e['groupId'] == to_group_id:
         raise Problem('err.sameGroup', 'Choose another group.')
-    day = day or date.today().isoformat()
+    _still_active(e)                                     # a stale screen or a second PC must not move a student twice
+    day = _day(day)
+    if day < (e.get('from') or ''):                  # the same day is fine: the wrong group was chosen this morning
+        raise Problem('err.beforeStart', 'The day cannot be before the student joined this group.')
+    if any(x['groupId'] == to_group_id for x in active_enrollments(ctx.store, e['studentId'], date.fromisoformat(day))):
+        raise Problem('err.alreadyEnrolled', 'The student is already in this group.')
     _check_capacity(ctx, g, day)
     prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     st = ctx.store.row('students', e['studentId']) or {}
@@ -881,7 +911,10 @@ def end_enrollment(ctx, enrollment_id, day=None, reason=''):
     if not e:
         raise Problem('err.notFound', 'Enrolment not found.')
     ctx.need_teacher(e.get('teacherId'))
-    day = day or date.today().isoformat()
+    _still_active(e)                                     # leaving twice would charge the months between again
+    day = _day(day)
+    if day < (e.get('from') or ''):
+        raise Problem('err.beforeStart', 'The day cannot be before the student joined this group.')
     st = ctx.store.row('students', e['studentId']) or {}
     ctx.commit(f'{st.get("name")} left the group', [{'e': 'enrollments', 'id': e['id'], 'op': 'put', 'ver': e['ver'],
                                                     'row': {**_strip(e), 'to': day, 'status': 'left', 'note': D.norm_text(reason)[:200]}}])
@@ -1191,6 +1224,10 @@ def void_payment(ctx, payment_id, reason):
         ctx.need_teacher(p['teacherId'])
     if ctx.store.rows('payments', 'void_of=?', (payment_id,)):
         raise Problem('err.voided', 'This receipt is already reversed.')
+    if p.get('kind') == 'wallet_topup' and wallet(ctx.store, p.get('studentId')) + 0.001 < float(p.get('amount') or 0):
+        # the credit was already spent on fees: giving the cash back would leave those fees paid by nobody
+        raise Problem('err.walletSpent', 'This credit was already used to pay fees. Reverse those receipts first (available now: {have}).',
+                      have=round(wallet(ctx.store, p.get('studentId')), 2))
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
     if (p.get('method') or 'cash') == 'cash' and not shift:
         raise Problem('err.noShift', 'Open your cash shift first (the money leaves your drawer).')
@@ -1704,8 +1741,10 @@ def dashboard(store, scopes=None, d=None):
     with store.lock:
         c = store.conn
         checked = c.execute("SELECT COUNT(DISTINCT student_id) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND date=?" + tf, (day, *ta)).fetchone()[0]
+        # money that came in today: a fee paid from the student's credit (wallet) or credit moved between groups (transfer)
+        # was already counted when it came in
         today_money = {r[0] or 'cash': float(r[1] or 0) for r in c.execute(
-            "SELECT method, SUM(amount) FROM payments WHERE deleted=0 AND date=?" + tf + " GROUP BY method", (day, *ta))}
+            "SELECT method, SUM(amount) FROM payments WHERE deleted=0 AND date=? AND COALESCE(method,'cash') NOT IN ('wallet','transfer')" + tf + " GROUP BY method", (day, *ta))}
         month_money = float(c.execute("SELECT SUM(amount) FROM payments WHERE deleted=0 AND kind<>'wallet_topup' AND date>=? AND date<=?" + tf, (first, day, *ta)).fetchone()[0] or 0)
         month_exp = float(c.execute("SELECT SUM(amount) FROM expenses WHERE deleted=0 AND date>=? AND date<=?" + tf, (first, day, *ta)).fetchone()[0] or 0)
         open_shifts = c.execute("SELECT COUNT(*) FROM shifts WHERE deleted=0 AND status='open'").fetchone()[0]

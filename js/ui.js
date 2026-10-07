@@ -225,6 +225,7 @@
     [/^File type (.+) is not allowed$/, 'fileType'],
     [/^Empty file$/, 'emptyFile'],
     [/^Please log in\.$/, 'login'],
+    [/^This is changed only on its own page, by an administrator\.$/, 'ownPage'],
     [/^The trial password works only on the centre PC itself\. Change it there first\.$/, 'trialRemote'],
   ];
   var PERM_AT = { replaceAll: 1, notAllowed: 3, needPerm: 1 };     // which captured value is a permission label

@@ -161,6 +161,8 @@ class Client:
                 raise GatewayError('This subscription code is already connected. On another PC of the centre use "Paste the setup code".', 'gw.err.joined')
             if e.code == 400 and path == '/office/join':
                 raise GatewayError('The online service did not accept the subscription code. Activate the program first.', 'gw.err.licence')
+            if e.code == 429 and path.startswith('/office/whatsapp'):
+                raise GatewayError('The daily WhatsApp limit of this centre is reached. The rest goes tomorrow; ask the seller for a higher limit.', 'wa.err.limit')
             if e.code == 503 and path.startswith('/office/whatsapp'):
                 raise GatewayError('WhatsApp is not set up on the Hessa online service yet. Ask the seller.', 'wa.err.notReady')
             if e.code == 503:

@@ -514,8 +514,30 @@ class Handler(BaseHTTPRequestHandler):
     def https(self):
         return self.via_proxy and ((self.headers.get('X-Forwarded-Proto') or '').lower() == 'https' or '"https"' in (self.headers.get('Cf-Visitor') or ''))
 
+    def host_ok(self):
+        """A web page cannot pretend to be this program (DNS rebinding: a site whose name suddenly points at 127.0.0.1 would
+        otherwise count as "the PC itself"). Inside the centre the program is opened by an address, by "localhost" or by
+        the PC's network name; names of web sites (with a dot) only arrive through the tunnel, which says so in its headers."""
+        if self.via_proxy:
+            return True
+        host = (self.headers.get('Host') or '').strip().lower()
+        name = host.rsplit(':', 1)[0].strip('[]') if host.count(':') <= 1 or host.startswith('[') else host
+        if not name or name == 'localhost' or '.' not in name or name.endswith(('.local', '.lan', '.home', '.localdomain')):
+            return True
+        try:
+            ipaddress.ip_address(name)
+            return True
+        except ValueError:
+            pass
+        if name in {str(h).lower() for h in CFG.get('allowed_hosts') or []}:
+            return True
+        self.send(421, {'error': 'This address cannot open the program.'})
+        return False
+
     def remote_gate(self):
         """Requests through the tunnel: refused while the owner has not switched remote work on for this PC."""
+        if not self.host_ok():
+            return False
         if not self.outside:
             return True
         REMOTE_SEEN.update(at=datetime.now().isoformat(timespec='seconds'), ip=self.ip)
@@ -956,7 +978,8 @@ class Handler(BaseHTTPRequestHandler):
                 too_many_failures(self.ip, add=True)
                 time.sleep(0.6)  # slows down password guessing
                 raise
-            if AUTH.dev_default(u['id']) and (self.ip not in LOCAL_IPS or self.via_proxy):
+            trial = AUTH.dev_default(u['id']) or (u['username'] == DEV_USER and d.get('password') == DEV_PASSWORD)
+            if trial and (self.ip not in LOCAL_IPS or self.via_proxy):
                 # the trial password 123 is public knowledge: it opens the program only on the centre PC itself
                 AUTH.logout(token, u, self.ip)
                 AUTH.log(u['display'], self.ip, 'login-failed', u['username'], 'Trial password refused away from the centre PC')
@@ -1086,6 +1109,9 @@ class Handler(BaseHTTPRequestHandler):
             raw_ops = d.get('ops')
             if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') == 'settings' and o.get('id') == watch.REVIEWS for o in raw_ops):
                 raise Forbidden('Alerts are reviewed on the Watch page by an administrator.')   # nobody hides an alert about himself
+            if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') == 'settings' and o.get('id') in (owner.DEVICES, wa_auto.SETTING) for o in raw_ops):
+                # the owner's phones and the automatic WhatsApp are changed only on their own card (administrators, whole centre)
+                raise Forbidden('This is changed only on its own page, by an administrator.')
             if not is_admin(self.u) and isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') == 'settings' and str(o.get('id')).startswith('watch') for o in raw_ops):
                 raise Forbidden('Only an administrator changes what the Watch looks for.')
             if isinstance(raw_ops, list) and any(isinstance(o, dict) and o.get('e') in ('payments', 'expenses', 'shifts', 'settlements', 'attendance') for o in raw_ops):
@@ -1381,8 +1407,10 @@ class Handler(BaseHTTPRequestHandler):
                       'date': center.date.today().isoformat(), 'amount': qs.get('amount', ''),
                       'balance': str(round(sum((e.get('money') or {}).get('balance', 0) for e in file['enrollments']), 2)),
                       'center': str(cfg.get('systemName') or 'Hessa'), 'link': SECRETS.url + '/t/' + token if token else ''}
+            if not self.can('money.view', 'money.collect'):
+                values['balance'] = ''                 # the money stays with the people allowed to see it
             if '{summary}' in text:
-                values['summary'] = parent_report.summary(STORE, sid, lang, values['link'])
+                values['summary'] = parent_report.summary(STORE, sid, lang, values['link'], scopes=sc, money=self.can('money.view', 'money.collect'))
             for key, value in values.items():
                 text = text.replace('{' + key + '}', value)
             return self.send(200, {'to': center.D.wa_number(st.get('parentMobile')), 'text': text})
