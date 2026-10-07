@@ -1,6 +1,13 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The seller's WhatsApp number in the build, not in the repository (2026-10-07)
+
+**What:** the owner gave the WhatsApp number for the renewal and password-recovery buttons. The repository is public and
+CLAUDE.md forbids real phone numbers in it, so `tools/build_windows.py` writes `server/_vendor.py` from the GitHub secret
+`HESSA_VENDOR_WHATSAPP` (01xxxxxxxxx becomes 201xxxxxxxxx for wa.me), compiles it in and deletes it; `.gitignore` keeps
+it out. **Checks:** `test_unit` (number format, never committed), installer preflight. **Next:** the owner adds the secret.
+
 ## Monthly subscription with per-PC activation codes and password recovery (2026-10-07)
 
 **Why/source:** the owner rents Hessa monthly and wants the .exe to stop being useful when copied or not paid for, with

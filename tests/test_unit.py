@@ -633,3 +633,15 @@ class AppWindowTest(unittest.TestCase):
         self.assertEqual(corner[3], 0)                       # rounded tile: transparent corner
         self.assertGreater(centre[0], 200)                   # amber cap in the middle
         self.assertLess(make_app_icons.pixel(16, 29, 32)[0], 60)   # navy below it
+
+    def test_the_sellers_whatsapp_is_written_as_wa_me_wants_and_never_committed(self):
+        sys_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server')
+        import sys as _sys
+        _sys.path.insert(0, sys_path)
+        from version import wa_international
+        self.assertEqual(wa_international('01012345678'), '201012345678')
+        self.assertEqual(wa_international('+20 10 1234 5678'), '201012345678')
+        self.assertEqual(wa_international('12345'), '')
+        root = os.path.dirname(sys_path)
+        self.assertIn('server/_vendor.py', open(os.path.join(root, '.gitignore'), encoding='utf-8').read())
+        self.assertNotIn('VENDOR_WHATSAPP = \'2', open(os.path.join(sys_path, 'version.py'), encoding='utf-8').read())
