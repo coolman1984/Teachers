@@ -1022,3 +1022,23 @@ button.chip { cursor: pointer; }
 .welcome-bar.bad { background: var(--bad-soft); color: var(--bad); }
 .pay-left { margin: -.3rem 0 0; font-weight: 600; }
 .pay-left.owe { color: var(--warn); }
+
+/* ---------- the subscription (js/views/license.js) ---------- */
+.lic-bar { position: fixed; z-index: 70; inset-inline: 0; inset-block-end: 0; display: flex; gap: .7rem; align-items: center; padding: .65rem 1rem calc(.65rem + env(safe-area-inset-bottom));
+  background: var(--info-soft); color: var(--ink); border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgb(15 27 51 / .12); }
+.lic-bar.warn { background: var(--warn-soft); } .lic-bar.warn > .ic { color: var(--warn); }
+.lic-bar.bad { background: var(--bad); color: #fff; } .lic-bar.bad .icon-btn { color: #fff; }
+@media (max-width: 760px) { .lic-bar { inset-block-end: calc(3.9rem + env(safe-area-inset-bottom)); } }
+@media print { .lic-bar { display: none; } }
+.lic-state { display: grid; gap: .2rem; padding: .9rem 1rem; border-radius: var(--r-2); background: var(--ok-soft); }
+.lic-state.warn { background: var(--warn-soft); } .lic-state.bad { background: var(--bad-soft); color: var(--bad); } .lic-state.info { background: var(--info-soft); }
+.lic-state b { font-size: 1.15rem; }
+.lic-code { background: var(--surface-2); border: 1px dashed var(--line); border-radius: var(--r-2); padding: .8rem 1rem; text-align: center; }
+.lic-code code { font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; word-break: break-all; user-select: all; }
+.lic-input { font-family: ui-monospace, Consolas, monospace; letter-spacing: .04em; }
+.lic-points { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+.lic-points li { display: flex; gap: .5rem; align-items: flex-start; line-height: 1.6; } .lic-points .ic { color: var(--ok); margin-top: .3rem; flex: none; }
+.auth-box-lic:empty { display: none; } .auth-box-lic { margin-bottom: 1rem; display: grid; gap: .7rem; }
+.main > .lic-bar { position: sticky; inset-inline: auto; z-index: 30; }   /* in the page column: never over the menu */
+body > .lic-bar ~ .auth, body:has(> .lic-bar) .auth { padding-bottom: 5.5rem; }
+.main:has(> .lic-bar) { display: flex; flex-direction: column; min-height: 100vh; } .main > .lic-bar { margin-top: auto; }

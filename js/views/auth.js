@@ -68,11 +68,14 @@
           '<p class="faint" style="font-size:.85rem;margin:0">' + HS.icon('shield', 'sm') + ' ' + HS.esc(HS.t('auth.watched')) + '</p>' +
           '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div>' +
           '<button class="btn primary" type="submit">' + HS.esc(HS.t('auth.login.btn')) + '</button>' +
+          (trialForm ? '' : '<button class="btn ghost sm" type="button" data-forgot>' + HS.icon('key', 'sm') + HS.esc(HS.t('fp.link')) + '</button>') +
           (trialForm ? '<button class="btn ghost" type="button" data-back>' + HS.icon('left', 'sm mirror') + HS.esc(HS.t('common.back')) + '</button>' : '') + '</form>';
       }
-      root.innerHTML = '<div class="auth">' + hero() + '<div class="panel">' + body + '</div></div><div id="overlay"></div><div id="toasts"></div>';
+      root.innerHTML = '<div class="auth">' + hero() + '<div class="panel"><div class="auth-box-lic" data-lic-auth></div>' + body + '</div></div><div id="overlay"></div><div id="toasts"></div>';
       bindLang(root);
       wirePasswords(root);
+      if (HS.license) HS.license.authNotice(root, status);
+      var fg = root.querySelector('[data-forgot]'); if (fg && HS.license) fg.addEventListener('click', HS.license.forgot);
       var form = HS.$('#auth-form', root);
       if (!form) return;
       var back = form.querySelector('[data-back]');

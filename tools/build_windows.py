@@ -35,13 +35,13 @@ def compile_program(v4):
     run([sys.executable, '-m', 'nuitka', '--standalone', '--assume-yes-for-downloads', '--windows-console-mode=attach',
          f'--output-dir={BUILD}', '--output-filename=Hessa.exe', f'--windows-icon-from-ico={os.path.join(BUILD, "hessa.ico")}',
          f'--company-name={DEVELOPER}', f'--product-name={PRODUCT}', f'--file-description={PRODUCT}', f'--file-version={v4}',
-         f'--product-version={v4}', f'--copyright={COPYRIGHT}', '--include-module=nodectl', '--include-module=_assets',
+         f'--product-version={v4}', f'--copyright={COPYRIGHT}', '--include-module=nodectl', '--include-module=_assets', '--include-module=license_key',
          '--nofollow-import-to=tkinter,unittest,pydoc,test', os.path.join('server', 'hs_main.py')])
 
 
 # every file the installer or the release page ships; checked before the long compile so a missing one fails in a second
 SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/migrate-v1.sql', 'gateway/build.js', 'gateway/src/worker.js',
-           'installer/hessa.iss', 'server/hs_main.py', 'server/appwindow.py', 'tools/make_assets.py', 'tools/make_icon.py', 'tools/make_app_icons.py')
+           'installer/hessa.iss', 'server/hs_main.py', 'server/appwindow.py', 'server/license.py', 'server/license_key.py', 'tools/make_assets.py', 'tools/make_icon.py', 'tools/make_app_icons.py')
 
 
 def preflight():

@@ -6,7 +6,7 @@
   'use strict';
   var HS = window.HS, U = HS.ui, A = HS.audit;
   var PAGE = 100;
-  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
+  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad', 'license-refused': 'bad', 'license-activated': 'ok',
     'user-unlocked': 'warn', 'forced-logout': 'warn', 'password-reset': 'warn', 'admin-reset': 'warn', 'user-disabled': 'warn', 'user-deleted': 'warn',
     'profile-deleted': 'warn', 'link-created': 'warn', 'node-enrolled': 'warn', 'node-revoked': 'warn', 'pairing-code': 'warn', 'pairing-request': 'warn',
     'pairing-rejected': 'warn', 'pc-adding-open': 'warn', 'authority-exported': 'warn', 'authority-imported': 'warn', 'backup-set': 'warn', 'backup-removed': 'warn',
@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), clicks: blank(), security: blank() };
@@ -46,6 +46,10 @@
   var DETAIL = [
     [/^First administrator account created on this PC \(it is now the administrator PC\)$/, 'setup'],
     [/^Trial administrator created with the trial password - change it before real use$/, 'trial'],
+    [/^Password recovered on the centre PC with the seller's reset code$/, 'recovered'],
+    [/^Activation code refused: (\w+)$/, 'licRefused'],
+    [/^Activated until (\S+)$/, 'licOk'],
+    [/^Password reset code refused$/, 'resetRefused'],
     [/^Unknown user name$/, 'unknownUser'],
     [/^Account is locked until (.+)$/, 'lockedUntil'],
     [/^Wrong password \(attempt (\d+) of (\d+)\)$/, 'wrongPassword'],

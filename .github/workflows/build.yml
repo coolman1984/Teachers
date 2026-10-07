@@ -40,7 +40,7 @@ jobs:
         run: node --test --no-warnings test/gateway.test.js
       - name: Office tests (engine, centre, Excel, samples and two PCs)
         working-directory: tests
-        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_center_watch test_qbank test_ai test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration test_sync_files
+        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_center_watch test_license test_qbank test_ai test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration test_sync_files
 
   browser:
     # the screens in a real browser (Chromium of the runner): the core journeys, both languages, the parent page and phones
