@@ -107,3 +107,22 @@ class SharedConnectionTest(unittest.TestCase):
         for t in threads:
             t.join()
         self.assertEqual(errors, [])
+
+
+class SamplePasswordTest(unittest.TestCase):
+    """Review of PR 20: a sample load that stopped half way left the demo accounts behind; the next load showed a new
+    password that none of them accepted. Every demo account takes the password the administrator is shown."""
+
+    def test_the_shown_password_always_opens_the_demo_accounts(self):
+        s = Server('sample-pw').start()
+        self.addCleanup(s.cleanup)
+        c = make_authority(s)
+        first = c.post('/api/c/sample', {})['password']
+        settings = c.get('/api/state')['settingsVer']
+        # what a load that stopped before its data looks like: the accounts exist, the sample centre does not
+        c.post('/api/commit', {'label': 'x', 'ops': [{'e': 'settings', 'id': 'smp-centre', 'op': 'del', 'ver': settings.get('smp-centre')}]})
+        second = c.post('/api/c/sample', {})['password']
+        self.assertNotEqual(first, second)
+        self.assertTrue(s.client().login('desk1', second))
+        with self.assertRaises(ApiError):
+            s.client().login('desk1', first)

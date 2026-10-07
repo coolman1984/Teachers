@@ -284,6 +284,8 @@ def load(ctx, auth, actor, password=None):
         user_ids={};profiles={p['id']:p for p in auth.profiles()}
         for username,name,profile,scopes in ACCOUNT_SPECS:
             if username in existing and existing[username]['active']:
+                # an account left by an earlier load that stopped half way: it gets the password shown now, not an unknown one
+                auth.reset_password(actor,ctx.ip,existing[username]['id'],password)
                 user_ids[username]=existing[username]['id'];continue
             old=auth.public(auth.get(existing[username]['id'])) if username in existing else {}
             saved=auth.save_user(actor,ctx.ip,{**old,'username':username,'full_name':name,'password':password,

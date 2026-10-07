@@ -322,18 +322,22 @@ async function whatsapp(env, cid, d, origin) {
   const out = [], month = new Date().toISOString().slice(0, 7), day = 'day:' + new Date().toISOString().slice(0, 10);
   const cap = Number(env.WA_DAILY_CAP) || 1500;
   const used = await env.DB.prepare('SELECT n FROM wa_usage WHERE centre = ? AND month = ?').bind(cid, day).first();
-  let left = cap - (used ? used.n : 0);
-  if (left <= 0) throw new Fail(429, 'The daily WhatsApp limit of this centre is reached', { limit: cap });
+  if ((used ? used.n : 0) >= cap) throw new Fail(429, 'The daily WhatsApp limit of this centre is reached', { limit: cap });
+  // each message takes its place in the day's count BEFORE it is sent, in one statement (two requests at the same time can
+  // never both use the last place); a message that does not go out gives its place back
+  const reserve = () => env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,1) ON CONFLICT(centre, month) DO UPDATE SET n = n + 1 WHERE wa_usage.n < ? RETURNING n')
+    .bind(cid, day, cap).first();
+  const release = () => env.DB.prepare('UPDATE wa_usage SET n = n - 1 WHERE centre = ? AND month = ? AND n > 0').bind(cid, day).run();
   let sent = 0;
   const clean = (p) => String(p === null || p === undefined || p === '' ? '—' : p).replace(/[\n\t]+/g, ' ').replace(/ {4,}/g, '   ')
     .replace(/(?:https?:\/\/|www\.)\S+/gi, (u) => (u.startsWith(origin + '/t/') ? u : '—')).slice(0, 300);
   for (const msg of (d.messages || []).slice(0, 40)) {
     const key = String(msg.key || '').slice(0, 120), to = String(msg.to || ''), tpl = String(msg.template || '');
-    if (left <= 0) { out.push({ key, status: 'failed', error: 'daily limit' }); continue; }
     const params = Array.isArray(msg.params) ? msg.params.map(clean) : [];
     if (!key || !WA_RE.test(to) || !(tpl in WA_TEMPLATES) || params.length !== WA_TEMPLATES[tpl]) { out.push({ key, status: 'refused' }); continue; }
     const had = await env.DB.prepare('SELECT status, wamid FROM wa_sent WHERE centre = ? AND key = ?').bind(cid, key).first();
     if (had && had.status === 'sent') { out.push({ key, status: 'sent', wamid: had.wamid, again: true }); continue; }
+    if (!await reserve()) { out.push({ key, status: 'failed', error: 'daily limit' }); continue; }
     let status = 'failed', wamid = '', error = '';
     try {
       const r = await fetch(`${env.WA_API || 'https://graph.facebook.com'}/v21.0/${env.WA_PHONE_ID}/messages`, {
@@ -347,10 +351,11 @@ async function whatsapp(env, cid, d, origin) {
     } catch (e) { error = 'network'; }
     await env.DB.prepare('INSERT INTO wa_sent(centre, key, to_hash, status, wamid, error, at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(centre, key) DO UPDATE SET status = excluded.status, wamid = excluded.wamid, error = excluded.error, at = excluded.at')
       .bind(cid, key, await sha256Hex('wa|' + to), status, wamid, error, now()).run();
-    if (status === 'sent') { sent++; left--; }
+    if (status === 'sent') sent++;
+    else await release();
     out.push({ key, status, ...(error ? { error } : {}) });
   }
-  if (sent) await env.DB.batch([month, day].map((k) => env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,?) ON CONFLICT(centre, month) DO UPDATE SET n = n + excluded.n').bind(cid, k, sent)));
+  if (sent) await env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,?) ON CONFLICT(centre, month) DO UPDATE SET n = n + excluded.n').bind(cid, month, sent).run();
   return reply(200, { results: out });
 }
 
