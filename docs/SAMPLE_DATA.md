@@ -25,7 +25,7 @@ Repeated loading while the sample is active makes no changes.
 | t.ahmed | Teacher | Sample teacher 4 |
 | asst.mona | Assistant | Sample teacher 4 |
 
-Their initial password is `Hessa-2026!`. A password change is required before writes.
+Their initial password is new for every load and shown only to administrators ("Demo password"). A password change is required before writes.
 These accounts are created through the normal signed account-management workflow;
 their account ids are regular ids and their notes explicitly identify sample accounts.
 Loading refuses to replace an existing unrelated account using one of these usernames.

@@ -231,10 +231,16 @@
   }
 
 
+  var shown = 'appearance';     // the tab really shown (a tab this person cannot use opens Appearance instead)
   HS.views.settings = HS.withData({
     render: function (ctx) {
-      var tab = TABS.indexOf(ctx.route.q.tab) >= 0 ? ctx.route.q.tab : 'appearance';
-      var tabs = '<div class="seg" role="tablist" style="max-width:100%;overflow:auto">' + TABS.map(function (t) {
+      // only the tabs this person can use: a tab that only says "for administrators" is noise at the front desk
+      var admin = HS.me && HS.me.admin;
+      var mine = TABS.filter(function (t) {
+        return t === 'gateway' ? HS.can('gateway.manage') : t === 'access' ? HS.can('users.manage') : ['remote', 'ai', 'license'].indexOf(t) >= 0 ? admin : true;
+      });
+      var tab = shown = mine.indexOf(ctx.route.q.tab) >= 0 ? ctx.route.q.tab : 'appearance';
+      var tabs = '<div class="seg tabs-scroll" role="tablist" style="max-width:100%;overflow-x:auto;flex-wrap:nowrap">' + mine.map(function (t) {
         return '<button type="button" role="tab" data-tab="' + t + '" aria-pressed="' + (t === tab) + '">' + HS.esc(HS.t('set.tab.' + t)) + '</button>';
       }).join('') + '</div>';
       return '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('set.title')) + '</h1><p>' + HS.esc(HS.t('set.sub')) + '</p></div></div>' +
@@ -250,16 +256,16 @@
           : settingsBody(tab));
     },
     mount: function (root, ctx) {
-      if (['centre','rules','messages'].indexOf(ctx.route.q.tab) >= 0) mountSettings(root, ctx.route.q.tab);
-      if (ctx.route.q.tab === 'centre') mountExtras(root);
-      if (ctx.route.q.tab === 'lists') HS.lists.mount(root);
-      if (ctx.route.q.tab === 'data') HS.dataTab.mount(root);
-      if (ctx.route.q.tab === 'license') HS.licenseTab.mount(root);
-      if (ctx.route.q.tab === 'gateway') HS.mailboxTab.mount(root);
-      if (ctx.route.q.tab === 'remote') remote.mount(root);
-      if (ctx.route.q.tab === 'ai') aiTab.mount(root);
+      if (['centre','rules','messages'].indexOf(shown) >= 0) mountSettings(root, shown);
+      if (shown === 'centre') mountExtras(root);
+      if (shown === 'lists') HS.lists.mount(root);
+      if (shown === 'data') HS.dataTab.mount(root);
+      if (shown === 'license') HS.licenseTab.mount(root);
+      if (shown === 'gateway') HS.mailboxTab.mount(root);
+      if (shown === 'remote') remote.mount(root);
+      if (shown === 'ai') aiTab.mount(root);
       mountWindow(root);
-      if (ctx.route.q.tab === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
+      if (shown === 'access') { HS.data.load().then(function () { HS.accessTab.mount(root); }); }
       root.addEventListener('click', function (e) {
         var b = e.target.closest('[data-pref]');
         if (b) { var v = b.dataset.v; HS.prefs.set(b.dataset.pref, v); if (b.dataset.pref !== 'lang') HS.rerender(); return; }

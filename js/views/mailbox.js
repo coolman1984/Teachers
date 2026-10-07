@@ -1,4 +1,4 @@
-/* Hessa - Settings → Parent links: the guided setup of the internet mailbox (docs/GATEWAY_SETUP.md) and its live status.
+/* Hessa - Settings → Online & WhatsApp: the guided setup of the internet mailbox (docs/GATEWAY_SETUP.md) and its live status.
    Four steps the owner follows once - address, secrets, the office secret pasted on Cloudflare, a test - and then one line
    that says whether parents see today's data. The secrets stay in gateway.json on each PC, never in the shared data. */
 (function () {
@@ -69,7 +69,8 @@
       '<div class="row wrap" style="gap:.5rem;align-items:flex-end"><label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.report')) + '</span><select class="input" name="report">' +
         ['off', 'weekly', 'monthly'].map(function (k) { return '<option value="' + k + '"' + (c.report === k ? ' selected' : '') + '>' + HS.esc(HS.t('wauto.report.' + k)) + '</option>'; }).join('') + '</select></label>' +
         '<label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.day')) + '</span><select class="input" name="day">' + days + '</select></label>' +
-        '<label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.hour')) + '</span><input class="input" type="number" min="0" max="23" dir="ltr" name="hour" value="' + HS.esc(c.hour === undefined ? 19 : c.hour) + '" style="max-width:6rem"></label></div>' +
+        '<label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.hour')) + '</span><select class="input" name="hour" dir="ltr">' + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].map(function (h) {
+          return '<option value="' + h + '"' + (Number(c.hour === undefined ? 19 : c.hour) === h ? ' selected' : '') + '>' + HS.fmt.pad(h) + ':00</option>'; }).join('') + '</select></label></div>' +
       '<div class="row wrap" style="gap:.5rem"><button class="btn primary" type="submit"' + (w.online ? '' : ' disabled') + '>' + HS.esc(HS.t('common.save')) + '</button>' +
         '<button class="btn" type="button" data-wauto-run' + (w.online && w.sender ? '' : ' disabled') + '>' + HS.icon('sync', 'sm') + HS.esc(HS.t('wauto.run')) + '</button>' +
         (svc.ready ? '<span class="grow faint" style="align-self:center">' + HS.esc(HS.t('wauto.month', { n: svc.sent || 0 })) + '</span>' : '') + '</div></form>' +

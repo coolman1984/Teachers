@@ -65,7 +65,11 @@
   }
   function picked(c) { return c.candidates.filter(function (x) { return x.session.id === c.pick; })[0]; }
   // not enrolled in this subject: one free trial session per group, then "enrol in this group" is one click away
+  var lastCheckin = null;     // {studentId, sessionId, at}: the check-in just made here reads "done now", not "already recorded"
   function checkinButton(c, done, canCheck) {
+    if (done && lastCheckin && lastCheckin.studentId === c.student.id && lastCheckin.sessionId === done.session.id) {
+      return '<div class="done-banner now">' + HS.icon('check') + '<span>' + HS.esc(HS.t('door.doneNow', { status: HS.t('att.' + done.status), at: lastCheckin.at })) + '</span></div>';
+    }
     if (done) return '<div class="done-banner">' + HS.icon('check') + '<span>' + HS.esc(HS.t('door.already', { status: HS.t('att.' + done.status) })) + '</span></div>';
     var x = picked(c);
     if (x && x.trial) {
@@ -120,11 +124,15 @@
 
   function payDialog(card, enrolment, done) {
     var m = enrolment.money || {}, g = HS.data.get('groups', enrolment.groupId) || {};
-    var suggested = m.due || m.unit || '';   // what clears the debt, else one unit (a session, a month or a package)
+    // what clears the debt; when nothing is due the amount stays empty (a full month typed in for a paid-up student was paid twice)
+    var paidUp = (Number(m.balance) || 0) >= 0 && !m.due;
+    var suggested = paidUp ? '' : (m.due || m.unit || '');
+    var nextMonth = (function () { var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + 1); return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1); })();
     ensureShift().then(function () {
       var method = 'cash';
       var el = HS.dialog({ title: HS.t('pay.title', { name: card.student.name }), body:
         '<div class="tip">' + HS.icon('layers') + '<span><b>' + HS.esc(g.name || '') + '</b> · ' + HS.esc(HS.t('fee.' + (m.feeType || 'session'))) + (m.balance < 0 ? ' · ' + HS.esc(HS.t('door.owes')) + ' ' + U.money(-m.balance) : '') + '</span></div>' +
+        (paidUp ? '<div class="tip ok">' + HS.icon('check') + '<span>' + HS.esc(HS.t('pay.paidUp')) + '</span></div>' : '') +
         '<div class="field"><label for="pay-a">' + HS.esc(HS.t('pay.amount')) + '</label><input class="input big-num" id="pay-a" type="number" inputmode="decimal" min="0" step="any" dir="ltr" value="' + HS.esc(suggested) + '"></div>' +
         '<p class="faint pay-left" data-left hidden aria-live="polite"></p>' +
         '<div class="field"><span class="lbl">' + HS.esc(HS.t('pay.method')) + '</span><div class="seg wrap" role="group" data-methods>' + METHODS.filter(function (x) { return x !== 'wallet' || card.wallet > 0; }).map(function (x) {
@@ -132,7 +140,7 @@
         '<div class="field" data-ref hidden><label for="pay-r">' + HS.esc(HS.t('pay.ref')) + '</label><input class="input" id="pay-r" dir="ltr" autocomplete="off"></div>' +
         '<div class="field" data-cash><label for="pay-g">' + HS.esc(HS.t('pay.given')) + '</label><div class="row"><input class="input" id="pay-g" type="number" inputmode="decimal" min="0" step="any" dir="ltr" placeholder="' + HS.esc(HS.t('pay.given.ph')) + '">' +
           '<b class="change num" data-change aria-live="polite"></b></div></div>' +
-        (m.feeType === 'month' ? '<div class="field"><label for="pay-p">' + HS.esc(HS.t('pay.period')) + '</label><input class="input" id="pay-p" type="month" value="' + U.today().slice(0, 7) + '"></div>' : '') +
+        (m.feeType === 'month' ? '<div class="field"><label for="pay-p">' + HS.esc(HS.t('pay.period')) + '</label><input class="input" id="pay-p" type="month" value="' + (paidUp ? nextMonth : U.today().slice(0, 7)) + '"></div>' : '') +
         '<div class="tip bad" data-err hidden role="alert"></div>',
         footer: '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.icon('check', 'sm') + HS.esc(HS.t('pay.save')) + '</button>' });
       var amount = el.querySelector('#pay-a'); amount.focus(); amount.select();
@@ -387,8 +395,16 @@
         var btn = cardBox.querySelector('[data-checkin]'); if (btn) btn.disabled = true;
         var x = picked(card);
         if (x && x.trial && x.trialUsed) { beep('warn'); return; }
+        if (x && !x.now && !x.confirmed) {
+          // a class hours away (or already over) is usually a slip of the finger: ask once
+          U.confirm({ title: HS.t('door.notNowTitle'), body: HS.t('door.notNowBody', { start: x.session.start || '', group: groupLabel(x.session.groupId) }), ok: HS.t('door.checkin') })
+            .then(function (yes) { if (btn) btn.disabled = false; if (yes) { x.confirmed = true; checkin(); } });
+          return;
+        }
+        var sid = card.student.id, sess = card.pick;
         HS.post('/api/c/checkin', { studentId: card.student.id, sessionId: card.pick, via: fromScanner ? 'scan' : 'code', trial: !!(x && x.trial) }).then(function (r) {
           beep(r.already ? 'warn' : 'ok');
+          if (!r.already) { var t = new Date(); lastCheckin = { studentId: sid, sessionId: sess, at: HS.fmt.pad(t.getHours()) + ':' + HS.fmt.pad(t.getMinutes()) }; }
           HS.toast(HS.t(r.already ? 'door.already' : r.trial ? 'door.trialDone' : 'door.done', { name: card.student.name, status: HS.t('att.' + r.status) }), r.already ? 'bad' : '');
           q.value = ''; lastQuery = ''; list = []; paintResults(); q.focus();
           paintToday();

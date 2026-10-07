@@ -159,6 +159,11 @@ class OwnerOnlineTest(unittest.TestCase):
             with self.assertRaises(ApiError) as caught:
                 call()
             self.assertIn(caught.exception.code, (400, 403))
+        # not even an administrator writes them through the general save (a non-administrator with "settings" could add his phone)
+        for sid in ('ownerPhones', 'waAuto'):
+            for who in (self.c, desk):
+                with self.assertRaises(ApiError):
+                    who.post('/api/commit', {'label': 'x', 'ops': [{'e': 'settings', 'id': sid, 'op': 'put', 'row': {'value': {'phones': []}}}]})
 
     @SKIP
     def test_c_the_phone_page(self):

@@ -99,6 +99,25 @@ class AutoWhatsAppTest(unittest.TestCase):
         t = self.c.get('/api/c/wa?studentId=wa-b&kind=report&lang=en')['text']
         self.assertIn('Attendance: 0 of 1 classes · missed 1', t)
 
+    def test_a2_a_teacher_sees_only_his_own_group_and_no_money(self):
+        """Security review: the report written for a teacher showed another teacher's group and the student's debt."""
+        c = self.c
+        ops = [('teachers', 'wa-t2', {'name': 'Other Teacher'}),
+               ('groups', 'wa-g2', {'name': 'WA Chemistry', 'teacherId': 'wa-t2', 'subjectId': 'wa-sub', 'gradeCode': 'S1', 'feeType': 'month', 'fee': 140,
+                                    'capacity': 30, 'active': True, 'slots': []})]
+        c.post('/api/commit', {'label': 'x', 'ops': [{'e': e, 'id': i, 'op': 'put', 'row': r} for e, i, r in ops]})
+        c.post('/api/c/enroll', {'studentId': 'wa-a', 'groupId': 'wa-g2'})
+        profiles = {p['name']: p['perms'] for p in c.get('/api/users')['profiles']}
+        c.post('/api/users/save', {'username': 'teacher.wa', 'full_name': 'Synthetic Teacher User', 'password': 'Lesson-plan-77', 'must_change': False,
+                                   'role': 'Teacher', 'perms': profiles['Teacher'] + ['messages.send', 'contacts.view'], 'scopes': ['wa-t']})
+        t = self.s.client()
+        t.login('teacher.wa', 'Lesson-plan-77')
+        text = t.get('/api/c/wa?studentId=wa-a&kind=report&lang=en')['text']
+        self.assertNotIn('Account', text)
+        self.assertNotIn('140', text)
+        self.assertNotIn('Chemistry', text)
+        self.assertIn('Attendance: 1 of 1', text)
+
     def test_b_automatic_messages_go_once_to_parents_who_agreed(self):
         c, today = self.c, date.today()
         with self.assertRaises(ApiError):                                  # not before the centre is on Hessa online

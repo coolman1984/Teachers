@@ -1,6 +1,6 @@
 """Program version and owner. The installer build reads VERSION from here (tools/build_windows.py)."""
 import re
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 PRODUCT = 'Hessa'
 DEVELOPER = 'Mohamed Fawzy'
 COPYRIGHT = f'© 2026 {DEVELOPER}. All rights reserved.'

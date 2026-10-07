@@ -50,6 +50,7 @@
     [/^Activation code refused: (\w+)$/, 'licRefused'],
     [/^Activated until (\S+)$/, 'licOk'],
     [/^Password reset code refused$/, 'resetRefused'],
+    [/^Trial password refused away from the centre PC$/, 'trialRemote'],
     [/^Owner phone added: (.+)$/, 'ownerPhoneAdded'],
     [/^Owner phone removed$/, 'ownerPhoneRemoved'],
     [/^Unknown user name$/, 'unknownUser'],

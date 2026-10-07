@@ -463,6 +463,73 @@ class TrialLoginTest(unittest.TestCase):
             c.login('admin', '123')
         self.assertFalse(c.get('/api/auth/status')['hasUsers'])
 
+    def test_d_the_trial_password_never_opens_the_program_from_another_device(self):
+        """Full review (2026-10-07): "123" is public knowledge, so after the trial administrator exists another PC or phone on
+        the centre's network must not sign in with it - only the centre PC itself can, until the password is changed."""
+        lan = _lan_address()                                  # no packet is sent: this only picks the network address of this PC
+        if not lan:
+            self.skipTest('no network address on this PC')
+        s = Server('trial-lan', extra_cfg={'dev_login': True, 'host': '0.0.0.0'}).start()
+        self.addCleanup(s.cleanup)
+        s.client().login('admin', '123')                         # the centre PC itself: the trial administrator is made
+        from harness import Client
+        other = Client(f'http://{lan}:{s.port}')
+        with self.assertRaises(ApiError) as caught:
+            other.login('admin', '123')
+        self.assertIn('centre PC itself', str(caught.exception))
+        with self.assertRaises(ApiError):
+            other.get('/api/me')                                 # and no session was left behind
+        c = s.client()
+        c.login('admin', '123')
+        c.post('/api/auth/password', {'old': '123', 'new': 'Centre-Owner-2026'})
+        other.login('admin', 'Centre-Owner-2026')                # a real password works from any PC of the centre
+        events = [r['detail'] for r in c.get('/api/security?limit=50')['rows']]
+        self.assertIn('Trial password refused away from the centre PC', events)
+
+    def test_e_the_trial_password_is_refused_away_on_every_pc(self):
+        """Security review: the trial flag lives only on the administrator PC; a PC that received the account by sync
+        still must not open with "123" from another device."""
+        lan = _lan_address()
+        if not lan:
+            self.skipTest('no network address on this PC')
+        s = Server('trial-member', extra_cfg={'dev_login': True, 'host': '0.0.0.0'}).start()
+        self.addCleanup(s.cleanup)
+        s.client().login('admin', '123')
+        os.remove(os.path.join(s.data_dir, 'trial-login.json'))     # what a member PC looks like: the account, no local flag
+        from harness import Client
+        with self.assertRaises(ApiError):
+            Client(f'http://{lan}:{s.port}').login('admin', '123')
+
+
+def _lan_address():
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.connect(('192.0.2.1', 9))
+            lan = probe.getsockname()[0]
+        except OSError:
+            return None
+    return None if lan.startswith('127.') else lan
+
+
+class HostNameTest(unittest.TestCase):
+    """Security review: a web site whose name is made to point at 127.0.0.1 (DNS rebinding) is refused, so a page in the
+    centre PC's browser can never act as "the PC itself"; addresses, localhost and the PC's network name keep working."""
+
+    def test_only_this_pc_s_own_names_open_the_program(self):
+        s = Server('hostname').start()
+        self.addCleanup(s.cleanup)
+        make_authority(s)
+        c = s.client()
+        for host in ('evil.example', f'evil.example:{s.port}', 'attacker.co.uk'):
+            with self.assertRaises(ApiError) as caught:
+                c.call('GET', '/api/auth/status', headers={'Host': host})
+            self.assertEqual(caught.exception.code, 421, host)
+            with self.assertRaises(ApiError):
+                c.call('POST', '/api/auth/login', {'username': 'boss', 'password': 'Strong-pass1'}, headers={'Host': host, 'Origin': f'http://{host}'})
+        for host in (f'127.0.0.1:{s.port}', f'localhost:{s.port}', f'reception-pc:{s.port}', f'192.168.1.20:{s.port}', f'reception.local:{s.port}'):
+            self.assertIn('hasUsers', c.call('GET', '/api/auth/status', headers={'Host': host}), host)
+
     def test_c_not_through_a_tunnel(self):
         s = Server('trial-proxy', extra_cfg={'dev_login': True}).start()
         self.addCleanup(s.cleanup)

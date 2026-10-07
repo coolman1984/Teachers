@@ -23,12 +23,12 @@ def _short_date(d, lang):
     return f'{tr(lang, "day." + str(D.weekday(d)))} {d.day}/{d.month}' if d else ''
 
 
-def facts(store, student_id, lang='ar', today=None, now=None):
+def facts(store, student_id, lang='ar', today=None, now=None, scopes=None, money=True):
     """Each line of the report as text in lang (a missing fact is DASH). Only this child, only published marks."""
     from gateway_client import _published
     today = today or date.today()
     now = now or datetime.now()
-    f = center.student_file(store, student_id)
+    f = center.student_file(store, student_id, scopes)   # a teacher sees only the groups of his own teachers
     st = f['student']
     first = today.replace(day=1).isoformat()
     month = [a for a in f['attendance'] if (a.get('date') or '') >= first and (a.get('date') or '') <= today.isoformat()]
@@ -61,9 +61,9 @@ def facts(store, student_id, lang='ar', today=None, now=None):
     else:
         mark = DASH
     balance = round(sum((e.get('money') or {}).get('balance', 0) for e in f['enrollments']), 2)
-    money = tr(lang, 'pr.owes', a=_num(-balance)) if balance < -0.009 else tr(lang, 'pr.credit', a=_num(balance)) if balance > 0.009 else tr(lang, 'pr.settled')
+    money = DASH if not money else tr(lang, 'pr.owes', a=_num(-balance)) if balance < -0.009 else tr(lang, 'pr.credit', a=_num(balance)) if balance > 0.009 else tr(lang, 'pr.settled')
     nxt = DASH
-    mine = [g for g in store.rows('groups') if g['id'] in groups]
+    mine = [g for g in store.rows('groups', scopes=scopes) if g['id'] in groups]
     for i in range(8):
         d = today + timedelta(days=i)
         slots = sorted(((sl['start'], g) for g in mine for sl in D.slots_on(g, d) if i or sl['start'] > now.strftime('%H:%M')), key=lambda x: x[0])
@@ -76,12 +76,12 @@ def facts(store, student_id, lang='ar', today=None, now=None):
             'attendance': att, 'mark': mark, 'money': money, 'next': nxt, 'balance': _num(balance), 'groups': ', '.join(names.get(g, '') for g in groups if names.get(g))}
 
 
-def summary(store, student_id, lang='ar', link='', today=None, now=None):
+def summary(store, student_id, lang='ar', link='', today=None, now=None, scopes=None, money=True):
     """The neat few lines for a manual WhatsApp message (the {summary} of the "report" message)."""
-    x = facts(store, student_id, lang, today, now)
+    x = facts(store, student_id, lang, today, now, scopes, money)
     lines = [f'📚 *{x["centre"]}*', tr(lang, 'pr.head', student=x['student'], period=x['period']), '',
              '✅ ' + tr(lang, 'pr.l.att') + ' ' + x['attendance'], '📝 ' + tr(lang, 'pr.l.mark') + ' ' + x['mark'],
-             '💰 ' + tr(lang, 'pr.l.money') + ' ' + x['money'], '⏰ ' + tr(lang, 'pr.l.next') + ' ' + x['next']]
+             *(['💰 ' + tr(lang, 'pr.l.money') + ' ' + x['money']] if money else []), '⏰ ' + tr(lang, 'pr.l.next') + ' ' + x['next']]
     if link:
         lines += ['', '🔗 ' + tr(lang, 'pr.l.link') + ' ' + link]
     lines += ['', tr(lang, 'pr.thanks')]

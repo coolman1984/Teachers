@@ -179,7 +179,10 @@ class Journal:
             return {o: [h[0], h[1]] for o, h in self.heads.items()}
 
     def meta(self, key, default=None):
-        r = self.conn.execute('SELECT value FROM meta WHERE key=?', (key,)).fetchone()
+        # every read takes the lock too: one connection is shared by all threads, and a read made while another thread uses
+        # it could receive that thread's row (it did: /api/c/status failed now and then with KeyError 'node')
+        with self.lock:
+            r = self.conn.execute('SELECT value FROM meta WHERE key=?', (key,)).fetchone()
         return json.loads(r[0]) if r else default
 
     def set_meta(self, key, value):
@@ -191,14 +194,16 @@ class Journal:
             return {r['id']: dict(r) for r in self.conn.execute('SELECT * FROM nodes')}
 
     def hash_at(self, origin, cseq):
-        r = self.conn.execute('SELECT hash FROM changes WHERE origin=? AND cseq=?', (origin, cseq)).fetchone()
+        with self.lock:
+            r = self.conn.execute('SELECT hash FROM changes WHERE origin=? AND cseq=?', (origin, cseq)).fetchone()
         return r[0] if r else None
 
     def deps_of(self, origin, cseq):
         key = (origin, cseq)
         d = self._deps_cache.get(key)
         if d is None:
-            r = self.conn.execute('SELECT body FROM changes WHERE origin=? AND cseq=?', (origin, cseq)).fetchone()
+            with self.lock:
+                r = self.conn.execute('SELECT body FROM changes WHERE origin=? AND cseq=?', (origin, cseq)).fetchone()
             d = json.loads(r[0])['deps'] if r else {}
             if len(self._deps_cache) > 20000:
                 self._deps_cache.clear()

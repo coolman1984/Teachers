@@ -70,7 +70,7 @@
     var contacts = HS.can('contacts.view');
     return '<form class="grid cols-2 form-grid" data-sform autocomplete="off">' +
       f('name', inp('name', 'text', ' required'), true) +
-      f('gradeCode', '<select class="input" id="sf-gradeCode" name="gradeCode">' + opts(GRADES, 'grade.', s.gradeCode) + '</select>') +
+      f('gradeCode', '<select class="input" id="sf-gradeCode" name="gradeCode">' + opts(GRADES, 'grade.', s.gradeCode, s.gradeCode ? null : HS.t('stu.chooseGrade')) + '</select>') +
       f('system', '<select class="input" id="sf-system" name="system">' + opts(sys, 'system.', s.system, '–') + '</select>') +
       f('track', '<select class="input" id="sf-track" name="track"' + (tracks.length && !(s.system === 'bac' && s.gradeCode === 'S1') ? '' : ' disabled') + '>' + opts(tracks, 'track.', s.track, '–') + '</select>') +
       f('gender', '<select class="input" id="sf-gender" name="gender">' + opts(['m', 'f'], 'gender.', s.gender, '–') + '</select>') +
@@ -107,24 +107,48 @@
     delete row.id; delete row.ver;
     return row;
   }
+  var DIGITS = { '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9' };
+  function digits(v) { return String(v || '').replace(/[٠-٩]/g, function (d) { return DIGITS[d]; }).replace(/\D/g, ''); }
+  function phoneOk(v) {    // an Egyptian mobile (01x xxxx xxxx, with or without 20), or a landline (02 ...)
+    var d = digits(v).replace(/^0020/, '').replace(/^20(?=1)/, '0');
+    return !d || /^01[0125]\d{8}$/.test(d) || /^0[2-9]\d{7,8}$/.test(d);
+  }
+  function studentWarnings(row, id) {
+    var out = [], norm = function (x) { return String(x || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
+    ['parentMobile', 'mobile', 'parentMobile2'].forEach(function (k) { if (row[k] && !phoneOk(row[k])) out.push(HS.t('stu.check.mobile', { f: HS.t('f.' + k), v: row[k] })); });
+    var others = D.list('students').filter(function (s) { return s.id !== id; });
+    var same = others.filter(function (s) { return norm(s.name) === norm(row.name); });
+    if (same.length) out.push(HS.t('stu.check.name', { code: same.map(function (s) { return s.code; }).join('، ') }));
+    var pm = digits(row.parentMobile);
+    var sib = pm.length >= 10 ? others.filter(function (s) { return digits(s.parentMobile) === pm && norm(s.name) !== norm(row.name); }) : [];
+    if (sib.length) out.push(HS.t('stu.check.family', { names: sib.slice(0, 3).map(function (s) { return s.name; }).join('، ') }));
+    return out;
+  }
   function editStudent(id) {
     var cur = id ? D.get('students', id) : null;
     if (!HS.can('students.manage')) return;
-    HS.panel.open({ title: HS.t(cur ? 'stu.edit' : 'stu.new'), body: formHTML(cur || { gradeCode: 'S1', active: true }),
+    HS.panel.open({ title: HS.t(cur ? 'stu.edit' : 'stu.new'), body: formHTML(cur || { active: true }),
       footer: '<span class="grow faint">' + HS.esc(HS.t(cur ? 'stu.edit.hint' : 'stu.new.hint')) + '</span><button class="btn primary" data-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('common.save')) + '</button>',
       mount: function (p) {
         wireForm(p);
         var name = p.querySelector('[name=name]'); setTimeout(function () { name.focus(); }, 50);
-        function save() {
+        function save(checked) {
           var row = readForm(p, cur), err = p.querySelector('[data-err]');
           if (!row.name) { err.hidden = false; err.textContent = HS.t('form.missing', { f: HS.t('f.name') }); name.focus(); return; }
+          if (!row.gradeCode) { err.hidden = false; err.textContent = HS.t('form.missing', { f: HS.t('f.gradeCode') }); var gc = p.querySelector('[name=gradeCode]'); if (gc) gc.focus(); return; }
+          // mistakes that break fees, WhatsApp and reports later: say them now, once, and let the person decide
+          var warn = checked === true ? [] : studentWarnings(row, id);
+          if (warn.length) {
+            U.confirm({ title: HS.t('stu.check.title'), bodyHtml: '<ul class="notes">' + warn.map(function (w) { return '<li>' + HS.esc(w) + '</li>'; }).join('') + '</ul>', ok: HS.t('stu.check.save') }).then(function (yes) { if (yes) save(true); });
+            return;
+          }
           var newId = id || D.newId('st');
           U.run(D.save('students', newId, row, (cur ? 'Edit student ' : 'New student ') + row.name), 'common.saved', p.querySelector('[data-save]')).then(function () {
             HS.panel.close();
             if (!cur) setTimeout(function () { openStudent(newId, 'groups'); }, 280); else refresh();
           }, function (e) { err.hidden = false; err.textContent = U.errorText(e); });
         }
-        p.querySelector('[data-save]').addEventListener('click', save);
+        p.querySelector('[data-save]').addEventListener('click', function () { save(); });
         p.querySelector('[data-sform]').addEventListener('submit', function (e) { e.preventDefault(); save(); });
       } });
   }
@@ -167,7 +191,7 @@
         var m = e.money || {}, g = D.get('groups', e.groupId) || {};
         return '<li><div class="grow"><b>' + HS.esc(g.name || e.groupId) + '</b><span class="muted">' + HS.esc(D.teacherName(g.teacherId)) + ' · ' + HS.esc(HS.t('fee.' + (m.feeType || g.feeType || 'session'))) +
           ' · ' + HS.esc(HS.t('stu.since', { d: U.day(e.from).replace(/<[^>]+>/g, '') })) + ' · ' + HS.esc(HS.t('stu.held', { n: e.held || 0 })) + '</span></div>' +
-          (seesMoney() ? '<span class="bal ' + ((m.balance || 0) < 0 ? 'bad' : 'ok') + '">' + U.money(Math.abs(m.balance || 0)) + '<small>' + HS.esc(HS.t((m.balance || 0) < 0 ? 'door.owes' : 'door.credit')) + '</small></span>' : '') +
+          (seesMoney() ? '<span class="bal ' + ((m.balance || 0) < -0.005 ? 'bad' : (m.balance || 0) > 0.005 ? 'ok' : '') + '">' + U.money(Math.abs(m.balance || 0)) + '<small>' + HS.esc(HS.t((m.balance || 0) < -0.005 ? 'door.owes' : (m.balance || 0) > 0.005 ? 'door.credit' : 'door.clear')) + '</small></span>' : '') +
           (HS.can('students.transfer') ? '<span class="row" style="gap:.3rem"><button class="btn sm" data-transfer="' + HS.esc(e.id) + '">' + HS.esc(HS.t('stu.transfer')) + '</button><button class="btn sm ghost" data-leave="' + HS.esc(e.id) + '">' + HS.esc(HS.t('stu.leave')) + '</button></span>' : '') + '</li>';
       }).join('') + '</ul>' : U.empty('layers', HS.t('door.noGroups'), HS.t('stu.enrol.b'))) +
         (HS.can('students.manage') ? '<button class="btn primary" data-enrol>' + HS.icon('plus', 'sm') + HS.esc(HS.t('stu.enrol')) + '</button>' : '') +
@@ -224,7 +248,7 @@
     return '<div class="stu-head"><span class="avatar">' + HS.esc(String(s.name || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('')) + '</span><div class="grow">' +
         '<div class="row wrap" style="gap:.4rem"><span class="badge signal num">' + U.bdi(s.code || '') + '</span><span class="badge">' + U.grade(s.gradeCode, s.system, s.track) + '</span>' +
         (s.active === false ? '<span class="badge bad">' + HS.esc(HS.t('f.inactive')) + '</span>' : '') + '</div></div>' +
-        (seesMoney() ? '<span class="bal ' + (total < 0 ? 'bad' : 'ok') + '">' + U.money(Math.abs(total)) + '<small>' + HS.esc(HS.t(total < 0 ? 'door.owes' : 'door.credit')) + '</small></span>' : '') + '</div>' +
+        (seesMoney() ? '<span class="bal ' + (total < -0.005 ? 'bad' : total > 0.005 ? 'ok' : '') + '">' + U.money(Math.abs(total)) + '<small>' + HS.esc(HS.t(total < -0.005 ? 'door.owes' : total > 0.005 ? 'door.credit' : 'door.clear')) + '</small></span>' : '') + '</div>' +
       '<div class="tabs" role="tablist">' + tabs().map(function (t) { return '<button role="tab" data-tab="' + t + '" aria-selected="' + (t === tab) + '">' + HS.esc(HS.t('stu.tab.' + t)) + '</button>'; }).join('') + '</div>' +
       '<div class="stack" data-tabbody>' + tabBody(tab, f) + '</div>';
   }

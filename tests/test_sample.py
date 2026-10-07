@@ -133,7 +133,9 @@ class SampleApiTest(unittest.TestCase):
             print('Sample performance:',json.dumps({'card_ms':round(card_seconds*1000),'dashboard_ms':round(dashboard_seconds*1000),
                 'state_ms':round(state_seconds*1000),'state_bytes':state_bytes,'risk_rows':len(risk),'signals':sorted(signals)}))
             self.assertLess(card_seconds,0.150);self.assertLess(dashboard_seconds,0.400);self.assertLess(state_seconds,1.5);self.assertLess(state_bytes,6*1024*1024)
-            teacher=server.client();teacher.login('t.ahmed',sample.PASSWORD)
+            pw=loaded['password'];self.assertNotIn('Hessa-2026',pw);self.assertEqual(client.get('/api/c/sample/password')['password'],pw)
+            teacher=server.client();teacher.login('t.ahmed',pw)
+            with self.assertRaises(ApiError): teacher.get('/api/c/sample/password')   # only an administrator sees it
             # Must-change accounts can read their scoped state while writes await password change.
             scoped=teacher.get('/api/state')
             self.assertTrue(scoped['groups'])
@@ -151,10 +153,10 @@ class SampleApiTest(unittest.TestCase):
                 if isinstance(value,list):self.assertFalse(any(r.get('id','').startswith('smp-') for r in value))
             self.assertTrue(client.get('/api/trash'))
             self.assertTrue(client.post('/api/devices/verify',{'all':True})['ok'])
-            with self.assertRaises(ApiError): server.client().login('desk1',sample.PASSWORD)
-            self.assertEqual(client.post('/api/c/sample',{})['students'],420)
+            with self.assertRaises(ApiError): server.client().login('desk1',pw)
+            again=client.post('/api/c/sample',{});self.assertEqual(again['students'],420);self.assertNotEqual(again['password'],pw)
             self.assertEqual(len(client.get('/api/state')['students']),421)
-            self.assertTrue(server.client().login('desk1',sample.PASSWORD))
+            self.assertTrue(server.client().login('desk1',again['password']))
             client.post('/api/c/sample/delete',{})
             self.assertTrue(client.post('/api/devices/verify',{'all':True})['ok'])
         finally:

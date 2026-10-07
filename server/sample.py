@@ -5,11 +5,15 @@ Dates are relative to the supplied day; no generated data is read from a user's 
 import math
 import random
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import domain as D
 
-PASSWORD = 'Hessa-2026!'
+def new_password():
+    """The demo accounts' first password: new for every centre (a password written in the public guides would let anyone
+    who read them sign in as the sample owner). Shown only to the administrator who loads the sample."""
+    import secrets
+    return 'Demo-' + secrets.token_hex(3) + '-' + str(secrets.randbelow(90) + 10)
 SUBJECTS = [('لغة عربية', 'Arabic'), ('رياضيات', 'Mathematics'), ('علوم', 'Science'), ('لغة إنجليزية', 'English'),
             ('فيزياء', 'Physics'), ('كيمياء', 'Chemistry'), ('أحياء', 'Biology'), ('تاريخ', 'History'),
             ('جغرافيا', 'Geography'), ('فلسفة ومنطق', 'Philosophy and logic')]
@@ -17,6 +21,14 @@ MALE = 'أحمد محمد محمود علي عمر يوسف إبراهيم مص�
 FEMALE = 'مريم فاطمة نور سارة هاجر ياسمين سلمى آية ملك جنى ندى منة إيمان دعاء أسماء حبيبة رنا رقية ليلى هنا نادين روان رحمة بسمة دينا هبة شيماء زينب نجلاء نهى سهى نسرين هند أميرة ريم شهد ريتاج تمارا لجين لينا فرح فريدة يارا هيا مي مها سمر سلوى نادية عبير أمل أحلام رباب سحر صفاء وفاء صباح بثينة داليا نانسي'.split()
 FAMILY = 'حسن حسين علي إبراهيم محمود محمد عبدالعزيز عبدالرحمن عبدالحميد عبدالفتاح عبداللطيف عبدالله عبدالهادي عبدالسلام عبدالمنعم عبدالقادر عادل سعيد صالح فؤاد جمال طارق شريف ياسر أشرف هاني أحمد مصطفى عمر خالد سامح وليد نادر ناصر منصور سالم سلامة رمضان رجب شعبان جلال كمال زكي توفيق كامل صبري صابر مراد إسماعيل عثمان سليمان داود خليل عوض شعبان عبدالباسط عبدالجواد راضي رشدي فهمي'.split()
 GRADES = ['P4','P4','P5','P5','P6','P6','M1','M1','M2','M2','M3','M3','S1','S1','S1','S2','S2','S2','S2','S3','S3','S3','S3','S3']
+
+
+def _clip(day, hm, today):
+    """Today's demo times never lie in the future (a drawer "opened at 14:00" seen at 10:20 confuses a first look)."""
+    if day != today or today != date.today():
+        return hm
+    now = datetime.now().strftime('%H:%M')
+    return min(hm, now)
 
 
 def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
@@ -34,12 +46,12 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
     for i, (name, en) in enumerate(SUBJECTS):
         add('subjects', 'smp-sub'+str(i), {'name':name,'nameEn':en,'order':i,'color':'signal','active':True})
     for i, (name, cap, cost) in enumerate([('A',40,20),('B',30,20),('C',25,20),('Lab',20,1500)]):
-        add('rooms','smp-room'+str(i),{'name':name,'capacity':cap,'costPerHour':cost,'active':True,'notes':'Fictional sample room'})
+        add('rooms','smp-room'+str(i),{'name':name,'capacity':cap,'costPerHour':cost,'active':True,'notes':'قاعة تجريبية افتراضية'})
     terms = [('centerPct',20),('centerPct',30),('rentSession',150),('rentSession',300),('rentStudent',10),('rentStudent',15),('rentMonth',3000),('mixed',1500)]
     for i, (model, amount) in enumerate(terms):
         row={'name':'أستاذ '+MALE[i]+' '+FAMILY[i], 'nameKey':D.key_text('أستاذ '+MALE[i]+' '+FAMILY[i]), 'mobile':'010'+str(90001000+i),
              'settleModel':model,'subjectIds':['smp-sub'+str(i)],'gradeCodes':sorted(set(GRADES[i*3:i*3+3])),
-             'color':['signal','ok','info','warn'][i%4], 'active':True,'bio':'معلم تجريبي — بيانات غير حقيقية','notes':'Fictional sample teacher'}
+             'color':['signal','ok','info','warn'][i%4], 'active':True,'bio':'معلم تجريبي — بيانات غير حقيقية','notes':'معلم تجريبي افتراضي'}
         row.update({'rentMonth':amount,'centerPct':10} if model=='mixed' else {model:amount})
         add('teachers','smp-t'+str(i),row)
     for i, grade in enumerate(GRADES):
@@ -73,7 +85,7 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         row={'name':name,'nameKey':D.key_text(name),'code':code,'gradeCode':grade,'system':g['system'],'track':g['track'],'gender':gender,
              'parentName':father+' '+FAMILY[fam], 'parentMobile':['010','011','012','015'][(k if sib else i)%4]+str(90000000+(k if sib else i)),
              'school':['مدرسة النور التجريبية','مدرسة الأمل التجريبية','مدرسة المستقبل التجريبية'][i%3], 'active':True,
-             'consent':True,'consentAt':first_day.isoformat(),'joinedAt':first_day.isoformat(),'notes':'Fictional sample student; do not contact this number.'}
+             'consent':True,'consentAt':first_day.isoformat(),'joinedAt':first_day.isoformat(),'notes':'طالب تجريبي افتراضي؛ لا تتصل بهذا الرقم.'}
         if i<60: row.update(familyKey='smp-family'+str(i//2),discountPct=10+(i//2)%4*5,discountReason='أشقاء — بيانات تجريبية')
         if 60<=i<66: row.update(exempt=True,discountReason='إعفاء تجريبي')
         add('students',sid,row)
@@ -113,7 +125,7 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         for username in ('desk1','desk2'):
             shid='smp-sh-'+day.isoformat()+'-'+username
             row={'no':D.doc_no('S',day.year,'DEMO',offset*2+(1 if username=='desk1' else 2)), 'user':username,'userId':user_ids[username],
-                 'node':node_id,'openedAt':day.isoformat()+'T14:00:00','openingCash':200,'status':'open' if day==today else 'closed'}
+                 'node':node_id,'openedAt':day.isoformat()+'T'+_clip(day,'14:00',today)+':00','openingCash':200,'status':'open' if day==today else 'closed'}
             shifts[(day.isoformat(),username)] = (shid,row)
             add('shifts',shid,row)
     visits=Counter(); group_sessions={}; risky={'smp-s'+str(i) for i in range(25)}
@@ -145,9 +157,9 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         if not sh:
             day=day+timedelta(days=1) if day==first_day else day-timedelta(days=1); sh=shifts[(day.isoformat(),username)]
         method=rng.choices(['cash','vodafone','instapay','fawry'],weights=[70,18,9,3])[0]
-        row={'no':D.doc_no('R',day.year,'DEMO',pay_sequence),'date':day.isoformat(),'at':'18:00','studentId':student,
+        row={'no':D.doc_no('R',day.year,'DEMO',pay_sequence),'date':day.isoformat(),'at':_clip(day,'18:00',today),'studentId':student,
              'groupId':group or '', 'teacherId':(entities['groups'].get(group) or {}).get('teacherId') or '', 'kind':kind,
-             'amount':round(amount,2),'method':method,'shiftId':sh[0],'by':username,'note':'Fictional sample payment',**extra}
+             'amount':round(amount,2),'method':method,'shiftId':sh[0],'by':username,'note':'دفعة تجريبية',**extra}
         rid=add('payments','smp-pa'+str(pay_sequence),row)
         return rid,row
     for eid,e in entities['enrollments'].items():
@@ -181,7 +193,7 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         receipt('smp-s'+str(i),None,120,today,kind='material',materialId=mid,qty=3,teacherId=tid)
     for i in range(4):
         original,row=receipt('smp-s'+str(100+i),'smp-g12',50,today)
-        receipt(row['studentId'],row['groupId'],-50,today,voidOf=original,note='Synthetic correction',method=row['method'])
+        receipt(row['studentId'],row['groupId'],-50,today,voidOf=original,note='تصحيح تجريبي',method=row['method'])
     # what the owner's watch is for (server/watch.py), so the sample shows it: desk2 takes 300 from a student, reverses it
     # "by mistake" and takes it again as 200 the same day - the 100 stayed in a pocket, and the student still owes it
     skim_e=next(e for e in entities['enrollments'].values() if e['studentId']=='smp-s200')
@@ -194,10 +206,10 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
         expense_seq+=1;username='desk1';sh=shifts.get((day.isoformat(),username))
         if not sh:
             day=day+timedelta(days=1) if day==first_day else day-timedelta(days=1);sh=shifts[(day.isoformat(),username)]
-        add('expenses','smp-exp'+str(expense_seq),{'no':D.doc_no('E',day.year,'DEMO',expense_seq),'date':day.isoformat(),'at':'20:00',
+        add('expenses','smp-exp'+str(expense_seq),{'no':D.doc_no('E',day.year,'DEMO',expense_seq),'date':day.isoformat(),'at':_clip(day,'20:00',today),
             'category':category,'amount':amount,'teacherId':teacher,'groupId':group,'method':'cash','shiftId':sh[0],
-            'by':username,'note':'Fictional sample expense'})
-    for category,amount in [('rent',8000),('electricity',900),('salaries',5000),('printing',600)]: expense(category,amount,today)
+            'by':username,'note':'مصروف تجريبي'})
+    for category,amount in [('rent',8000),('utilities',900),('salary',5000),('printing',600)]: expense(category,amount,today)
     month_end=today.replace(day=1)-timedelta(days=1)
     for i in range(6): expense('teacher_payout',500,month_end,'smp-t'+str(i))
     for (day,username),(shid,row) in shifts.items():
@@ -246,13 +258,13 @@ def build(today=None, used_codes=(), user_ids=None, node_id="sample-node"):
     return ops
 
 
-ACCOUNT_SPECS = [('owner','Centre manager','full-access',None), ('desk1','Sample front desk 1','secretary',None),
-                 ('desk2','Sample front desk 2','secretary',None), ('t.ahmed','Sample teacher','teacher',['smp-t4']),
-                 ('asst.mona','Sample assistant','assistant',['smp-t4'])]
+ACCOUNT_SPECS = [('owner','مدير المركز التجريبي','full-access',None), ('desk1','موظفة الاستقبال الأولى','secretary',None),
+                 ('desk2','موظف الاستقبال الثاني','secretary',None), ('t.ahmed','أحمد سامي (تجريبي)','teacher',['smp-t4']),
+                 ('asst.mona','منى المساعدة (تجريبي)','assistant',['smp-t4'])]
 ACCOUNT_MARKER = 'smp-account: fictional demo account'
 
 
-def load(ctx, auth, actor):
+def load(ctx, auth, actor, password=None):
     """Append sample data once, without overwriting real rows or accounts."""
     from center import Problem
     ctx.need('data.import'); ctx.need('users.manage')
@@ -268,21 +280,22 @@ def load(ctx, auth, actor):
         for username,_,_,_ in ACCOUNT_SPECS:
             if username in existing and (existing[username].get('notes')!=ACCOUNT_MARKER or existing[username]['deleted']):
                 raise Problem('err.sampleAccount','A sample username is already used by another account.',name=username)
+        password=password or new_password()
         user_ids={};profiles={p['id']:p for p in auth.profiles()}
         for username,name,profile,scopes in ACCOUNT_SPECS:
             if username in existing and existing[username]['active']:
                 user_ids[username]=existing[username]['id'];continue
             old=auth.public(auth.get(existing[username]['id'])) if username in existing else {}
-            saved=auth.save_user(actor,ctx.ip,{**old,'username':username,'full_name':name,'password':PASSWORD,
+            saved=auth.save_user(actor,ctx.ip,{**old,'username':username,'full_name':name,'password':password,
                 'role':profiles[profile]['name'],'perms':profiles[profile]['perms'],'scopes':scopes,'active':True,
                 'must_change':True,'notes':ACCOUNT_MARKER})
-            if old: auth.reset_password(actor,ctx.ip,saved['id'],PASSWORD)
+            if old: auth.reset_password(actor,ctx.ip,saved['id'],password)
             user_ids[username]=saved['id']
         codes=[r[0] for r in ctx.store.conn.execute('SELECT code FROM students')]
         ops=build(used_codes=codes,user_ids=user_ids,node_id=ctx.node_id)
         result=ctx.store.commit(ctx.user,ctx.ip,'Sample centre',ops,force=True,user_id=ctx.user_id)
         ctx.store.mark_initialized()
-        return {**result,'already':False,'students':420,'groups':24,'accounts':[a[0] for a in ACCOUNT_SPECS]}
+        return {**result,'already':False,'students':420,'groups':24,'accounts':[a[0] for a in ACCOUNT_SPECS],'password':password}
 
 
 def remove(ctx, auth, actor):

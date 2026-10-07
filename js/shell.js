@@ -136,7 +136,7 @@
     var bar = document.createElement('div');
     bar.className = 'welcome-bar' + (w.failed ? ' bad' : '');
     bar.setAttribute('role', w.failed ? 'alert' : 'status');
-    bar.innerHTML = HS.icon(w.failed ? 'alert' : 'shield') + '<span class="grow">' + HS.esc(HS.t('auth.last', { when: HS.ui.dt(w.last).replace(/<[^>]+>/g, ''), ip: w.lastIp || '–' })) +
+    bar.innerHTML = HS.icon(w.failed ? 'alert' : 'shield') + '<span class="grow">' + HS.esc(HS.t('auth.last', { when: HS.ui.dt(w.last).replace(/<[^>]+>/g, ''), ip: !w.lastIp ? '–' : /^(127\.|::1$|::ffff:127\.)/.test(w.lastIp) ? HS.t('auth.thisPc') : w.lastIp })) +
       (w.failed ? ' <b>' + HS.esc(HS.t('auth.failedSince', { n: w.failed })) + '</b>' : '') + '</span><button class="icon-btn" aria-label="' + HS.esc(HS.t('common.close')) + '">' + HS.icon('x', 'sm') + '</button>';
     var main = HS.$('.main'), view = HS.$('#view');
     if (!main || !view) return;

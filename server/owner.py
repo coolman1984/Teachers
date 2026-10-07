@@ -98,7 +98,8 @@ def snapshot(store, watch_fn=None, online=(), centre_name='', pc_name='', now=No
     pays = store.rows('payments', 'date=?', (day,))
     exps = store.rows('expenses', 'date=?', (day,))
     voided = {p.get('voidOf') for p in pays if p.get('voidOf')}
-    income = sum(p.get('amount') or 0 for p in pays)          # receipts minus their reversals: the money taken today
+    # receipts minus their reversals: the money taken today (a fee paid from credit or moved between groups is not new money)
+    income = sum(p.get('amount') or 0 for p in pays if (p.get('method') or 'cash') not in ('wallet', 'transfer'))
     spent = sum(e.get('amount') or 0 for e in exps)
 
     feed = []

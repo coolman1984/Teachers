@@ -8,6 +8,31 @@ owner agreed to this change. **What:** a small `new-version` job reads `server/v
 release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
 merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
 
+## Full review before sale; version 1.4.0 (2026-10-07)
+
+**Why:** the owner asked for a complete, carefully reviewed program for sale. **How:** three independent reviews ran in
+parallel and every finding was reproduced before it was fixed: the money/attendance core against a real server, security
+against a real server and the gateway, and the experience in Chromium (28 pages x phone/desktop x Arabic/English x day/night,
+plus the daily journeys by hand). **Money:** a spent credit refunded in cash; leaving/moving an ended enrolment charged months
+again; moving into a group already joined; dates in other shapes stored raw; deleting a group erased its debts; today's money
+counted credit twice. **Security:** the owner's phones and automatic WhatsApp were writable through the generic save by anyone
+with the settings permission; the trial password worked from the LAN on member PCs; the WhatsApp report leaked another teacher's
+group and money; the seller's WhatsApp had no cap and carried any link; DNS rebinding passed the "this PC" checks; the sample
+password was public and shown to the front desk. **Experience:** English errors in the Arabic sign-in (all fixed server
+sentences now go through `js/ui.js`), a paid-up monthly student offered a full month again, "already recorded" right after a
+check-in, check-ins into a class hours away, no checks on new students (grade defaulted, duplicate names, wrong mobiles), a zero
+balance labelled credit, the forced password change without its rules, tabs that only say "administrators only", raw expense
+category keys, colloquial words, English sample data, sample times in the future, an unclear drawer difference.
+**Mistake/lesson:** a server guard refusing cash expenses above the drawer blocked the month-end teacher payout from the safe -
+the review asked for a warning, not a block; it is now a confirmation in the dialog. The browser suite caught it.
+**Checks:** the full suite, the gateway tests and a scripted browser walk-through of each fixed screen.
+**The intermittent 500 (open since 2026-10-06) found:** the browser tests now name the request behind a server error and the
+harness prints the server's error log before deleting it. That showed `/api/c/status` failing with KeyError 'node' and
+"bad parameter or other API misuse": `journal.meta()` (and `hash_at`, `deps_of`, `store._visible`, `_txn_label`) read the one
+shared SQLite connection without the lock, so a read could receive another thread's row. Reproduced 3 of 3 times with six
+parallel clients (`SharedConnectionTest`), 0 of 5 after taking the lock. Lesson: on a shared connection every read takes the
+lock, not only writes; and a flaky test is a bug report - log enough to trace it instead of re-running it.
+
 ## WhatsApp to parents: the short report and automatic messages; version 1.3.0 (2026-10-07)
 
 **Why:** the owner decided parents get no app: "a small, neat report on WhatsApp", sent automatically on WhatsApp.

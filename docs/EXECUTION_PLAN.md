@@ -384,7 +384,7 @@ delete exactly them in one changeset). Content (Egypt-realistic, fake names):
 - Exams: weekly per secondary group (8 weeks), monthly per group; marks normal(68%, 15%) clipped; ranks.
 - Follow-ups for 10 risky students. Settlements of last month approved for 6 teachers.
 - Users: `owner` (Centre manager), `desk1`, `desk2` (Front desk), `t.ahmed` (Teacher, scope = his teacher id),
-  `asst.mona` (Assistant). Passwords printed in the console and in `docs/GUIDE_ADMIN.md` sample section (`Hessa-2026!`),
+  `asst.mona` (Assistant). Passwords printed in the console and in `docs/GUIDE_ADMIN.md` sample section (a new password per load, shown to administrators only),
   `must_change` on.
 Test `tests/test_sample.py`: build twice → identical ops (determinism); load into a fresh server; `/api/c/dashboard`
 numbers non-zero; risk list 10–40; profitability has every signal at least once; delete-all-sample leaves 0 rows.
