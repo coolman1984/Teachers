@@ -80,3 +80,30 @@ class MoneyReviewTest(unittest.TestCase):
         g = next(x for x in c.get('/api/state')['groups'] if x['id'] == 'mr-gm2')
         self.key(lambda: c.post('/api/commit', {'label': 'del', 'ops': [{'e': 'groups', 'id': 'mr-gm2', 'op': 'del', 'ver': g['ver']}]}), 'err.groupInUse')
         self.assertIn('mr-s5', c.get('/api/c/balances')['students'])
+
+
+class SharedConnectionTest(unittest.TestCase):
+    """Full review: /api/c/status failed now and then with KeyError 'node' - journal.meta() read the one shared database
+    connection without the lock, so under load it could receive another thread's row. Many pages at once must never fail."""
+
+    def test_status_and_pages_at_the_same_time(self):
+        import threading
+        s = Server('shared-conn').start()
+        self.addCleanup(s.cleanup)
+        make_authority(s)
+        errors = []
+
+        def hammer(path):
+            c = s.client()
+            c.login('boss', 'Strong-pass1')
+            for _ in range(40):
+                try:
+                    c.get(path)
+                except ApiError as e:
+                    errors.append((path, e.code, str(e)[:120]))
+        threads = [threading.Thread(target=hammer, args=(p,)) for p in ('/api/c/status', '/api/c/status', '/api/state', '/api/version', '/api/c/dashboard', '/api/c/status')]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])

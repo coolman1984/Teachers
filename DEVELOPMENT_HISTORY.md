@@ -26,6 +26,12 @@ category keys, colloquial words, English sample data, sample times in the future
 **Mistake/lesson:** a server guard refusing cash expenses above the drawer blocked the month-end teacher payout from the safe -
 the review asked for a warning, not a block; it is now a confirmation in the dialog. The browser suite caught it.
 **Checks:** the full suite, the gateway tests and a scripted browser walk-through of each fixed screen.
+**The intermittent 500 (open since 2026-10-06) found:** the browser tests now name the request behind a server error and the
+harness prints the server's error log before deleting it. That showed `/api/c/status` failing with KeyError 'node' and
+"bad parameter or other API misuse": `journal.meta()` (and `hash_at`, `deps_of`, `store._visible`, `_txn_label`) read the one
+shared SQLite connection without the lock, so a read could receive another thread's row. Reproduced 3 of 3 times with six
+parallel clients (`SharedConnectionTest`), 0 of 5 after taking the lock. Lesson: on a shared connection every read takes the
+lock, not only writes; and a flaky test is a bug report - log enough to trace it instead of re-running it.
 
 ## WhatsApp to parents: the short report and automatic messages; version 1.3.0 (2026-10-07)
 

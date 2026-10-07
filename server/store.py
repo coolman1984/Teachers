@@ -320,8 +320,9 @@ class Store:
             return None, None
         allowed = set(scopes)
         marks = ','.join('?' * len(allowed)) or "''"
-        students = {r[0] for r in self.conn.execute(
-            f'SELECT DISTINCT student_id FROM enrollments WHERE deleted=0 AND teacher_id IN ({marks})', tuple(allowed))}
+        with self.lock:      # the shared connection: an unlocked read could get another thread's rows
+            students = {r[0] for r in self.conn.execute(
+                f'SELECT DISTINCT student_id FROM enrollments WHERE deleted=0 AND teacher_id IN ({marks})', tuple(allowed))}
         return allowed, students
 
     def _filter(self, entity, rows, allowed, students):
@@ -701,7 +702,8 @@ class Store:
         return self.commit(user, ip, 'Restore deleted: ' + (t[0] or txn), ops, force=True)
 
     def _txn_label(self, txn):
-        t = self.conn.execute('SELECT label FROM transactions WHERE id=?', (txn,)).fetchone()  # saved before the upgrade
+        with self.lock:
+            t = self.conn.execute('SELECT label FROM transactions WHERE id=?', (txn,)).fetchone()  # saved before the upgrade
         if t:
             return t[0]
         d = self.journal.describe(txn=txn) if self.journal else None
