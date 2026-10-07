@@ -161,6 +161,8 @@ class Client:
                 raise GatewayError('This subscription code is already connected. On another PC of the centre use "Paste the setup code".', 'gw.err.joined')
             if e.code == 400 and path == '/office/join':
                 raise GatewayError('The online service did not accept the subscription code. Activate the program first.', 'gw.err.licence')
+            if e.code == 503 and path.startswith('/office/whatsapp'):
+                raise GatewayError('WhatsApp is not set up on the Hessa online service yet. Ask the seller.', 'wa.err.notReady')
             if e.code == 503:
                 raise GatewayError('The mailbox is running but has no secret yet. Set OFFICE_SECRET on it (see the setup guide).', 'gw.err.noSecret')
             raise GatewayError(f'The mailbox answered with an error ({e.code}).', 'gw.err.status', code=e.code)
@@ -278,6 +280,7 @@ class GatewaySync:
         self.owner_fn = owner_fn            # () -> (state or None, [phone token hashes]) - the owner's live picture
         self.licence_fn = licence_fn        # () -> this PC's subscription code, sent again when it is renewed
         self._owner_sig, self._owner_at, self._phones_sig = None, 0, None
+        self.wa = None                      # server/wa_auto.Sender - automatic WhatsApp through the seller's service
         self.say = log_fn or (lambda *a: None)
         self.lock = threading.Lock()
         self.wake = threading.Event()
@@ -349,6 +352,7 @@ class GatewaySync:
             self.renew()
             self.push_cards()
             self.push_owner()
+            self.send_whatsapp()
             self.check()
             self.stat['lastOk'] = _now()
             self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = None, None, {}
@@ -441,6 +445,18 @@ class GatewaySync:
         self.stat['owners'] = st.get('owners')
         if 'until' in st:
             self.stat['until'], self.stat['active'] = st.get('until'), st.get('active')
+
+    def send_whatsapp(self, force=False):
+        """Automatic WhatsApp (seller's service only). Its own problems are shown on its own card, never as a broken mailbox."""
+        if not self.wa or not self.secrets.centre:
+            return 0
+        try:
+            n = self.wa.run(self.client(), force)
+            self.wa.last_error = None
+            return n
+        except GatewayError as e:
+            self.wa.last_error = {'key': e.key, 'vars': e.vars, 'text': str(e)}
+            return 0
 
     def renew(self):
         """On the seller's service: after the subscription was renewed on this PC, the service learns the new last day."""

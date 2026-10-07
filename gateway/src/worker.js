@@ -299,7 +299,48 @@ async function office(request, env, url, parts) {
     if (stmts.length) await env.DB.batch(stmts);
     return reply(200, { ok: true });
   }
+  if (what === 'whatsapp' && m === 'PUT') return whatsapp(env, cid, json());
+  if (what === 'whatsapp' && m === 'GET') {
+    const month = new Date().toISOString().slice(0, 7);
+    const u = await env.DB.prepare('SELECT n FROM wa_usage WHERE centre = ? AND month = ?').bind(cid, month).first();
+    return reply(200, { ready: !!(env.WA_TOKEN && env.WA_PHONE_ID), month, sent: u ? u.n : 0 });
+  }
   throw new Fail(404, 'Not found');
+}
+
+// ---------------------------------------------------------------- WhatsApp: the seller's official WhatsApp Business number sends the
+// centre's messages with templates approved by Meta (docs/HESSA_ONLINE.md). The centre PC decides what to send; the service sends
+// each message once (by its key), counts them per centre and month, and never keeps a phone number (only its hash).
+const WA_TEMPLATES = { hessa_report: 7, hessa_absence: 5, hessa_receipt: 5 };   // the number of values each approved template takes
+const WA_RE = /^20(10|11|12|15)\d{8}$/;                                         // Egyptian mobiles, international form
+async function whatsapp(env, cid, d) {
+  if (!env.WA_TOKEN || !env.WA_PHONE_ID) throw new Fail(503, 'WhatsApp is not set up on the service yet', { whatsapp: false });
+  const out = [], month = new Date().toISOString().slice(0, 7);
+  let sent = 0;
+  for (const msg of (d.messages || []).slice(0, 40)) {
+    const key = String(msg.key || '').slice(0, 120), to = String(msg.to || ''), tpl = String(msg.template || '');
+    const params = Array.isArray(msg.params) ? msg.params.map((p) => String(p === null || p === undefined || p === '' ? '—' : p).replace(/[\n\t]+/g, ' ').replace(/ {4,}/g, '   ').slice(0, 300)) : [];
+    if (!key || !WA_RE.test(to) || !(tpl in WA_TEMPLATES) || params.length !== WA_TEMPLATES[tpl]) { out.push({ key, status: 'refused' }); continue; }
+    const had = await env.DB.prepare('SELECT status, wamid FROM wa_sent WHERE centre = ? AND key = ?').bind(cid, key).first();
+    if (had && had.status === 'sent') { out.push({ key, status: 'sent', wamid: had.wamid, again: true }); continue; }
+    let status = 'failed', wamid = '', error = '';
+    try {
+      const r = await fetch(`${env.WA_API || 'https://graph.facebook.com'}/v21.0/${env.WA_PHONE_ID}/messages`, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + env.WA_TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'template', template: { name: tpl, language: { code: msg.lang === 'en' ? 'en' : 'ar' },
+          components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }] } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.messages && j.messages[0]) { status = 'sent'; wamid = String(j.messages[0].id || ''); }
+      else error = String((j.error && (j.error.message || j.error.code)) || r.status).slice(0, 200);
+    } catch (e) { error = 'network'; }
+    await env.DB.prepare('INSERT INTO wa_sent(centre, key, to_hash, status, wamid, error, at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(centre, key) DO UPDATE SET status = excluded.status, wamid = excluded.wamid, error = excluded.error, at = excluded.at')
+      .bind(cid, key, await sha256Hex('wa|' + to), status, wamid, error, now()).run();
+    if (status === 'sent') sent++;
+    out.push({ key, status, ...(error ? { error } : {}) });
+  }
+  if (sent) await env.DB.prepare('INSERT INTO wa_usage(centre, month, n) VALUES(?,?,?) ON CONFLICT(centre, month) DO UPDATE SET n = n + excluded.n').bind(cid, month, sent).run();
+  return reply(200, { results: out });
 }
 
 // ---------------------------------------------------------------- static pages and the entry point
@@ -356,6 +397,7 @@ export default {
       env.DB.prepare('DELETE FROM cards WHERE expires_at IS NOT NULL AND expires_at < ?').bind(now() - 7 * 86400),
       env.DB.prepare('DELETE FROM nonces WHERE at < ?').bind(now() - 3600),
       env.DB.prepare('DELETE FROM rate WHERE window < ?').bind(Math.floor(now() / WINDOW) - 2),
+      env.DB.prepare('DELETE FROM wa_sent WHERE at < ?').bind(now() - 90 * 86400),
     ]);
   },
 };

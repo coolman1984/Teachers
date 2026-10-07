@@ -31,9 +31,9 @@ HERE_PC = 'synthetic-guid-owner-centre'
 class Service:
     """The seller's gateway: no OFFICE_SECRET, only centres that join with a subscription code signed by SEED."""
 
-    def __init__(self):
+    def __init__(self, **extra):
         self.port = free_port()
-        env = {**os.environ, 'PORT': str(self.port), 'OFFICE_SECRET': '', 'GATEWAY_DB': ':memory:', 'SELLER_PUB': PUB.hex()}
+        env = {**os.environ, 'PORT': str(self.port), 'OFFICE_SECRET': '', 'GATEWAY_DB': ':memory:', 'SELLER_PUB': PUB.hex(), **extra}
         self.p = subprocess.Popen(['node', '--no-warnings', os.path.join(ROOT, 'gateway', 'dev', 'server.js')], env=env,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         line = self.p.stdout.readline()

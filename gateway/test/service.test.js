@@ -101,3 +101,28 @@ test('the older one-centre gateway (OFFICE_SECRET) also has the owner\'s phone',
   assert.equal((await r.json()).state.ok, true);
   void worker;
 });
+
+test('WhatsApp: the service sends each message once with an approved template, counts it, and keeps no phone number', async () => {
+  const env = { ...serviceEnv(), WA_TOKEN: 'test-token', WA_PHONE_ID: '123' };
+  const a = await joinCentre(env, CODES.pc1);
+  const calls = [], real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), body: JSON.parse(init.body) }); return new Response(JSON.stringify({ messages: [{ id: 'wamid.' + calls.length }] }), { status: 200 }); };
+  try {
+    const msg = { key: 'abs:st1:2026-10-07', to: '201012345678', template: 'hessa_absence', lang: 'ar', params: ['Centre', 'Child', '7/10', 'Physics', ''] };
+    const r1 = await (await officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', { messages: [msg, { ...msg, key: 'x', to: '0101234' }, { ...msg, key: 'y', template: 'marketing' }] })).json();
+    assert.deepEqual(r1.results.map((x) => x.status), ['sent', 'refused', 'refused']);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /graph\.facebook\.com\/v\d+\.\d+\/123\/messages$/);
+    assert.equal(calls[0].body.template.name, 'hessa_absence');
+    assert.equal(calls[0].body.template.components[0].parameters[4].text, '—', 'WhatsApp refuses empty values');
+    const r2 = await (await officeAs(env, a.j.centre, a.secret, 'PUT', '/office/whatsapp', { messages: [msg] })).json();
+    assert.equal(r2.results[0].again, true, 'the same message is never sent twice');
+    assert.equal(calls.length, 1);
+    const st = await (await officeAs(env, a.j.centre, a.secret, 'GET', '/office/whatsapp')).json();
+    assert.equal(st.sent, 1);
+    assert.equal(st.ready, true);
+    assert.ok(!JSON.stringify((await env.DB.prepare('SELECT * FROM wa_sent').all()).results).includes('201012345678'));
+  } finally { globalThis.fetch = real; }
+  const off = serviceEnv(), b = await joinCentre(off, CODES.pc2);
+  assert.equal((await officeAs(off, b.j.centre, b.secret, 'PUT', '/office/whatsapp', { messages: [] })).status, 503);
+});

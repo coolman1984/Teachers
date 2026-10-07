@@ -31,6 +31,8 @@ sys.path.insert(0, HERE)  # the portable (embedded) Python does not add the scri
 import backup as backup_mod  # noqa: E402
 import appwindow  # noqa: E402
 import owner  # noqa: E402
+import parent_report  # noqa: E402
+import wa_auto  # noqa: E402
 import watch  # noqa: E402
 import license as license_mod  # noqa: E402
 import xlsx  # noqa: E402
@@ -286,9 +288,19 @@ def service_address():
     return service_url(CFG.get('service_url')) or SERVICE_URL
 
 
+def parent_link(st):
+    """The parent link of a student who has one ('' otherwise), as the automatic WhatsApp messages carry it."""
+    if not SECRETS.configured or not st.get('portalNonce'):
+        return ''
+    return SECRETS.url + '/t/' + gwc.link_token(SECRETS.data.get('linkSecret', ''), st['id'], st['portalNonce'])
+
+
 if INSTANCE:
     GATE = gwc.GatewaySync(STORE, JOURNAL, NODE.id, SECRETS, store_bytes, log_fn=say, owner_fn=owner_picture,
                            licence_fn=lambda: LICENSE.data.get('code') or '')
+    # one sender per centre: the administrator PC; it writes each message in the follow-up history as "Hessa online (automatic)"
+    GATE.wa = wa_auto.Sender(STORE, DATA_DIR, lambda: center.Ctx(STORE, JOURNAL, NODE.id, wa_auto.WHO, '', 'system', None, ['followup.log']),
+                             parent_link, is_sender=lambda: NODE.is_authority and not LICENSE.blocked())
 PLACEHOLDER = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" fill="#eef1f5"/>'
                b'<text x="160" y="96" font-family="Segoe UI,Arial" font-size="15" text-anchor="middle" fill="#6b7785">Photo is being copied</text>'
                b'<text x="160" y="118" font-family="Segoe UI,Arial" font-size="12" text-anchor="middle" fill="#8a95a3">from another PC\xe2\x80\xa6</text></svg>')
@@ -819,6 +831,20 @@ class Handler(BaseHTTPRequestHandler):
             self.need('trash.restore')
             self.need_all_scopes()
             return self.send(200, STORE.trash())
+        if p == '/api/wa-auto':            # automatic WhatsApp (server/wa_auto.py): administrators of the whole centre only
+            self.need_admin()
+            self.need_all_scopes()
+            studs = [x for x in STORE.rows('students') if x.get('active') is not False]
+            mobile = [x for x in studs if center.D.wa_number(x.get('parentMobile'))]
+            service = {}
+            if SECRETS.centre:
+                try:
+                    service = GATE.client().call('GET', '/office/whatsapp')
+                except gwc.GatewayError as e:
+                    service = {'error': {'key': e.key, 'text': str(e)}}
+            return self.send(200, {'config': wa_auto.config(STORE), 'online': bool(SECRETS.centre), 'sender': NODE.is_authority, 'service': service,
+                                   'students': len(studs), 'withMobile': len(mobile), 'consented': len([x for x in mobile if x.get('consent')]),
+                                   **GATE.wa.status()})
         if p == '/api/owner/phones':       # the owner's phones (server/owner.py): administrators of the whole centre only
             self.need_admin()
             self.need_all_scopes()
@@ -1076,6 +1102,20 @@ class Handler(BaseHTTPRequestHandler):
             self.need('contacts.view')
             data, name = self.body(30 * 1048576), qs.get('name', '')[:120]
             return self.send(200, center.import_preview(STORE, data, name, qs.get('grade', ''), qs.get('group', ''), self.u.get('scopes')))
+        if p in ('/api/wa-auto', '/api/wa-auto/run'):
+            self.need_admin()
+            self.need_all_scopes()
+            if p.endswith('/run'):
+                if not SECRETS.centre:
+                    raise center.Problem('own.err.noGateway', 'Connect to Hessa online first (Settings, Parent links).')
+                n = GATE.send_whatsapp(force=True)
+                err = GATE.wa.last_error
+                if err:
+                    raise center.Problem(err['key'], err['text'], **(err.get('vars') or {}))
+                return self.send(200, {'sent': n, **GATE.wa.status()})
+            res = wa_auto.save(self.ctx(), self.json_body())
+            GATE.kick()
+            return self.send(200, {'config': res})
         if p in ('/api/owner/phones', '/api/owner/phones/remove'):
             self.need_admin()
             self.need_all_scopes()
@@ -1336,6 +1376,8 @@ class Handler(BaseHTTPRequestHandler):
                       'date': center.date.today().isoformat(), 'amount': qs.get('amount', ''),
                       'balance': str(round(sum((e.get('money') or {}).get('balance', 0) for e in file['enrollments']), 2)),
                       'center': str(cfg.get('systemName') or 'Hessa'), 'link': SECRETS.url + '/t/' + token if token else ''}
+            if '{summary}' in text:
+                values['summary'] = parent_report.summary(STORE, sid, lang, values['link'])
             for key, value in values.items():
                 text = text.replace('{' + key + '}', value)
             return self.send(200, {'to': center.D.wa_number(st.get('parentMobile')), 'text': text})

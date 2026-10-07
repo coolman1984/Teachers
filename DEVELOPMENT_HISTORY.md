@@ -8,6 +8,22 @@ owner agreed to this change. **What:** a small `new-version` job reads `server/v
 release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
 merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
 
+## WhatsApp to parents: the short report and automatic messages; version 1.3.0 (2026-10-07)
+
+**Why:** the owner decided parents get no app: "a small, neat report on WhatsApp", sent automatically on WhatsApp.
+**What:** `server/parent_report.py` writes the few lines (attendance this month with the missed classes, the latest published
+mark and rank, the account, the next class, the link) from the dictionaries; the report/monthly messages now default to
+`{summary}`. Automatic sending uses only the official WhatsApp Business API through the seller's service (an unofficial sender
+gets numbers banned): the gateway sends approved templates (`hessa_report`, `hessa_absence`, `hessa_receipt`, values without new
+lines), once per key per centre, counts per month and keeps only a hash of the number. `server/wa_auto.py` on the administrator
+PC decides what is due (absence after the class ends, receipts from the moment it was switched on, weekly/monthly reports),
+only for parents who gave consent, and writes each message in the follow-up history. Settings → Parent links has the card.
+Version 1.3.0 so the merge publishes the installer. **Checks:** gateway tests (23), `test_wa_auto` (real gateway + a stand-in
+for Meta's API + server), `test_owner_online`, `test_center_api`, `test_center_gateway`, `test_unit`, `test_ci`, frontend tests.
+**Mistakes/lessons:** the first test expected the forced round to send, but the background round (kicked by saving the settings)
+had already sent them - a test waits for the effect, not for the caller; a receipt keeps only the minute, so "since" compares
+receipt ids taken at the moment it was switched on.
+
 ## Hessa online and the owner's live phone (2026-10-07)
 
 **Why:** the owner researched the market (competitors sell a parent app and live owner control) and asked for one online

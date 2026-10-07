@@ -16,6 +16,7 @@ export function makeEnv(extra = {}) {
     DB: new D1(process.env.GATEWAY_DB || ':memory:'),
     OFFICE_SECRET: process.env.OFFICE_SECRET || '',
     ...(process.env.SELLER_PUB ? { SELLER_PUB: process.env.SELLER_PUB } : {}),
+    ...Object.fromEntries(['WA_TOKEN', 'WA_PHONE_ID', 'WA_API'].filter((k) => process.env[k]).map((k) => [k, process.env[k]])),   // a test WhatsApp stand-in
     ASSETS: {
       async fetch(req) {
         const p = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^([/\\])+/, '');

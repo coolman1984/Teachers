@@ -210,7 +210,7 @@
       var preview = form.querySelector('[data-message-preview]');
       function update(e) {
         var text = e && e.target && e.target.tagName === 'TEXTAREA' ? e.target.value : form.querySelector('textarea').value;
-        var examples = { student:HS.t('msg.exampleStudent'), group:HS.t('msg.exampleGroup'), date:HS.ui.today(), amount:'100', balance:'-50', center:'Hessa', link:'https://example.invalid/parent' };
+        var examples = { student:HS.t('msg.exampleStudent'), group:HS.t('msg.exampleGroup'), date:HS.ui.today(), amount:'100', balance:'-50', center:'Hessa', link:'https://example.invalid/parent', summary:HS.t('msg.exampleSummary') };
         Object.keys(examples).forEach(function (key) { text = text.split('{' + key + '}').join(examples[key]); });
         preview.textContent = text;
       }

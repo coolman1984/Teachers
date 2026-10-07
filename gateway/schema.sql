@@ -36,3 +36,7 @@ CREATE TABLE IF NOT EXISTS licences (serial INTEGER PRIMARY KEY, centre TEXT NOT
 CREATE TABLE IF NOT EXISTS owner_state (centre TEXT PRIMARY KEY, body TEXT NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS owner_devices (token_hash TEXT PRIMARY KEY, centre TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS cards_centre ON cards (centre, student_id);
+-- WhatsApp sent by the service for a centre: each message once (key), no phone number (only a hash), counted per month.
+CREATE TABLE IF NOT EXISTS wa_sent (centre TEXT NOT NULL, key TEXT NOT NULL, to_hash TEXT NOT NULL, status TEXT NOT NULL, wamid TEXT,
+  error TEXT, at INTEGER NOT NULL, PRIMARY KEY (centre, key));
+CREATE TABLE IF NOT EXISTS wa_usage (centre TEXT NOT NULL, month TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (centre, month));

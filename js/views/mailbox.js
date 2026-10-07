@@ -51,10 +51,38 @@
       (o.gateway ? '<form class="row wrap" data-own-add style="gap:.5rem"><input class="input grow" name="label" maxlength="60" placeholder="' + HS.esc(HS.t('own.labelPh')) + '" aria-label="' + HS.esc(HS.t('own.label')) + '">' +
         '<button class="btn primary" type="submit">' + HS.icon('plus', 'sm') + HS.esc(HS.t('own.add')) + '</button></form>' : '<p class="faint">' + HS.esc(HS.t('own.needGw')) + '</p>') + '</section>';
   }
+  /* automatic WhatsApp to parents (server/wa_auto.py): what goes out by itself through Hessa online */
+  function waAuto(w) {
+    if (!w) return '';
+    var c = w.config || {}, svc = w.service || {}, tip = '';
+    if (!w.online) tip = '<p class="faint">' + HS.esc(HS.t('own.needGw')) + '</p>';
+    else if (svc.error || !svc.ready) tip = '<div class="tip warn">' + HS.icon('alert') + '<span>' + HS.esc(svc.error ? HS.t(svc.error.key) : HS.t('wa.err.notReady')) + '</span></div>';
+    else if (!w.sender) tip = '<div class="tip">' + HS.icon('info') + '<span>' + HS.esc(HS.t('wauto.notSender')) + '</span></div>';
+    else if (w.lastError) tip = '<div class="tip bad">' + HS.icon('alert') + '<span>' + HS.esc(HS.t(w.lastError.key, w.lastError.vars || {})) + '</span></div>';
+    var days = [0, 1, 2, 3, 4, 5, 6].map(function (d) { return '<option value="' + d + '"' + (Number(c.day) === d ? ' selected' : '') + '>' + HS.esc(HS.t('day.' + d)) + '</option>'; }).join('');
+    var log = (w.log || []).slice(0, 12);
+    return '<section class="card stack" data-wauto><header><span class="tile-ic">' + HS.icon('chat') + '</span><h2>' + HS.esc(HS.t('wauto.t')) + '</h2></header>' +
+      '<p class="muted">' + HS.esc(HS.t('wauto.b')) + '</p>' + tip +
+      '<p><b>' + HS.esc(HS.t('wauto.consent', { n: w.consented || 0, m: w.withMobile || 0 })) + '</b><br><small class="faint">' + HS.esc(HS.t('wauto.consent.h')) + '</small></p>' +
+      '<form class="stack" data-wauto-form><label class="row" style="gap:.5rem"><input type="checkbox" name="absence"' + (c.absence ? ' checked' : '') + '><span>' + HS.esc(HS.t('wauto.absence')) + '</span></label>' +
+      '<label class="row" style="gap:.5rem"><input type="checkbox" name="receipt"' + (c.receipt ? ' checked' : '') + '><span>' + HS.esc(HS.t('wauto.receipt')) + '</span></label>' +
+      '<div class="row wrap" style="gap:.5rem;align-items:flex-end"><label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.report')) + '</span><select class="input" name="report">' +
+        ['off', 'weekly', 'monthly'].map(function (k) { return '<option value="' + k + '"' + (c.report === k ? ' selected' : '') + '>' + HS.esc(HS.t('wauto.report.' + k)) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.day')) + '</span><select class="input" name="day">' + days + '</select></label>' +
+        '<label class="field"><span class="lbl">' + HS.esc(HS.t('wauto.hour')) + '</span><input class="input" type="number" min="0" max="23" dir="ltr" name="hour" value="' + HS.esc(c.hour === undefined ? 19 : c.hour) + '" style="max-width:6rem"></label></div>' +
+      '<div class="row wrap" style="gap:.5rem"><button class="btn primary" type="submit"' + (w.online ? '' : ' disabled') + '>' + HS.esc(HS.t('common.save')) + '</button>' +
+        '<button class="btn" type="button" data-wauto-run' + (w.online && w.sender ? '' : ' disabled') + '>' + HS.icon('sync', 'sm') + HS.esc(HS.t('wauto.run')) + '</button>' +
+        (svc.ready ? '<span class="grow faint" style="align-self:center">' + HS.esc(HS.t('wauto.month', { n: svc.sent || 0 })) + '</span>' : '') + '</div></form>' +
+      (log.length ? '<details><summary class="muted">' + HS.esc(HS.t('wauto.log')) + '</summary><ul class="list">' + log.map(function (x) {
+        return '<li class="row" style="gap:.5rem"><small class="faint num">' + HS.esc(String(x.at || '').slice(5, 16).replace('T', ' ')) + '</small><span class="grow">' + HS.esc(HS.t('wauto.k.' + x.kind)) + ' · ' + HS.esc(x.name) + '</span>' +
+          '<span class="badge ' + (x.status === 'sent' ? 'ok' : 'bad') + '">' + HS.esc(HS.t('wauto.s.' + (x.status || 'failed'))) + '</span></li>';
+      }).join('') + '</ul></details>' : '') + '</section>';
+  }
+  var waState = null;
   function body(s) {
     var hasUrl = !!s.url, hasSecrets = s.configured, tested = !!s.lastOk;
     var own = s.centre ? '' : ' open';
-    return online(s) + (HS.me && HS.me.admin ? phones(ownerState) : '') + '<details class="card gw-own"' + (s.centre || (s.service && !s.configured) ? '' : own) + '><summary><b>' + HS.esc(HS.t(s.service ? 'gw.own.t' : 'set.tab.gateway')) + '</b></summary><div class="stack" style="margin-top:.6rem">' +
+    return online(s) + (HS.me && HS.me.admin ? phones(ownerState) + waAuto(waState) : '') + '<details class="card gw-own"' + (s.centre || (s.service && !s.configured) ? '' : own) + '><summary><b>' + HS.esc(HS.t(s.service ? 'gw.own.t' : 'set.tab.gateway')) + '</b></summary><div class="stack" style="margin-top:.6rem">' +
       '<p class="muted">' + HS.esc(HS.t('gw.intro')) + '</p>' +
       '<div data-gw-status role="status">' + statusHTML(s) + '</div>' +
       '<ol class="gw-steps">' +
@@ -89,7 +117,8 @@
       var host = root.querySelector('[data-gw-root]');
       function paint(s) { st = s; host.innerHTML = body(s); }
       function load() {
-        var own = HS.me && HS.me.admin ? HS.get('/api/owner/phones').then(function (o) { ownerState = o; }, function () { ownerState = null; }) : Promise.resolve();
+        var own = HS.me && HS.me.admin ? Promise.all([HS.get('/api/owner/phones').then(function (o) { ownerState = o; }, function () { ownerState = null; }),
+          HS.get('/api/wa-auto').then(function (w) { waState = w; }, function () { waState = null; })]) : Promise.resolve();
         return own.then(function () { return HS.get('/api/gateway'); }).then(paint, function (e) { host.innerHTML = U.empty('alert', U.errorText(e)); });
       }
       load();
@@ -98,6 +127,13 @@
           .then(function (r) { return load().then(function () { return r; }); }, function (e) { load(); throw e; });
       }
       host.addEventListener('submit', function (e) {
+        var wf = e.target.closest('[data-wauto-form]');
+        if (wf) {
+          e.preventDefault();
+          U.run(HS.post('/api/wa-auto', { absence: wf.absence.checked, receipt: wf.receipt.checked, report: wf.report.value, day: Number(wf.day.value), hour: Number(wf.hour.value) }),
+            'common.saved', wf.querySelector('[type=submit]')).then(load, function () {});
+          return;
+        }
         var add = e.target.closest('[data-own-add]');
         if (add) {
           e.preventDefault();
@@ -116,6 +152,11 @@
         if (e.target.matches('[data-gw-poll]')) act('save', { url: (st && st.url) || '', pollSeconds: Number(e.target.value) || 60 }).catch(function () {});
       });
       host.addEventListener('click', function (e) {
+        var run = e.target.closest('[data-wauto-run]');
+        if (run) {
+          U.run(HS.post('/api/wa-auto/run', {}), null, run).then(function (r) { HS.toast(HS.t('wauto.ran', { n: r.sent || 0 })); load(); }, function () { load(); });
+          return;
+        }
         var rm = e.target.closest('[data-own-remove]');
         if (rm) {
           U.confirm({ title: HS.t('own.remove'), body: HS.t('own.remove.b'), danger: true, ok: HS.t('own.remove') }).then(function (yes) {
