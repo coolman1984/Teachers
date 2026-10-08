@@ -8,7 +8,7 @@ Fork of the owner's Trip Orders engine (`coolman1984/Yousef-Transportation`) –
 Start with `docs/EXECUTION_PLAN.md` (the playbook – read all of it), then `TASKS.md` (where to continue).
 
 ## Always
-1. Same commit: code + tests + **both** dictionaries (`js/i18n/en.js`, `js/i18n/ar.js` – Arabic is **Formal Arabic**) + docs,
+1. Same commit: code + tests + **both** dictionaries (`js/i18n/en.js`, `js/i18n/ar.js` – screens in **Formal Arabic**; help texts `gd./sit./hq./help./guide./sup./tour./slide.` in **polished Egyptian Arabic** a 12-year-old understands, owner 2026-10-08) + docs,
    `TASKS.md` tick, `DEVELOPMENT_HISTORY.md` entry (newest first: what, why, mistakes, lessons).
 2. Run the checks in EXECUTION_PLAN Part G before every push; a regression test for every bug.
 3. Server: Python standard library only. Browser: plain JS like the existing files. No frameworks.

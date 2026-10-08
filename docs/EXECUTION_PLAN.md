@@ -633,6 +633,7 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | AI key, video hosting | default: features hidden until configured |
 | 2026-10-05 | Remote work (owner: run on the client PC, work from phone or another PC over the internet) | Outbound tunnel (Tailscale recommended, Cloudflare Tunnel alternative), no own relay; remote work off until switched on at the centre, only `remote.use`; a laptop with its own copy covers the PC being off (`docs/REMOTE_ACCESS.md`) |
 | 2026-10-05 | Version | 1.1.0 (continues after the engine's 1.0.2, never lowered) |
+| 2026-10-08 | Help language | Help texts (guides, "Solve a problem", questions, support, tour) in **polished, respectful Egyptian Arabic** that a 12-year-old understands; screens stay Formal Arabic; every problem offers "Take me there" and "Guide me" (Apps-Factory HELP-01..04) |
 | 2026-10-08 | First sign-in and appearance | **No slideshow on the first sign-in** (slides only from Help); defaults: **daylight theme + system font**; help texts to become polished Egyptian Arabic with a "Solve a problem" section (Apps-Factory ADR-0005) |
 | open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |
 | open | Forgive the debt of a student who left for good | default: no — the debt stays visible, marked “left” |
