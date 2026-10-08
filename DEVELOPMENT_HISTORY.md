@@ -1,6 +1,14 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## No slideshow on the first sign-in; daylight and the system font by default (2026-10-08)
+
+**Why:** the owner finds the slides on the first sign-in in the way and chose the daylight theme and the system font as the
+look of the program. **What:** `js/shell.js` no longer opens the slides by itself (Help still opens them); `js/prefs.js` and
+`js/boot.js` default to `daylight` and `system`. People who already chose a theme or font keep their choice. **Checks:**
+`test_frontend` (defaults), `test_e2e_browser` (first sign-in: no slides, daylight, system font; slides from Help still work),
+`test_design`, `test_acceptance`, `test_e2e_center`. **Lesson:** a first-run show is a decision of the owner, not of the engine.
+
 ## The link to the seller's Control Center (2026-10-08)
 
 **Why:** the owner wants every sold program to report to one Control Center (Apps-Factory `apps/control-center`), so a centre can

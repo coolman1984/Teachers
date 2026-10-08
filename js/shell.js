@@ -121,7 +121,7 @@
       refreshThemeButton();
       window.addEventListener('hashchange', renderRoute);
       renderRoute();
-      if (!HS.prefs.data.welcomed) setTimeout(function () { HS.slides.open(true); }, 500);
+      // owner's decision 2026-10-08: no slideshow on the first sign-in; the slides stay available from Help
       showWelcome();
     },
     stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); },
