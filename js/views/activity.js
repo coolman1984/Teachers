@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused', 'owner-phone'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused', 'owner-phone', 'support'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), clicks: blank(), security: blank() };
@@ -101,6 +101,12 @@
     [/^Work from outside the centre switched on$/, 'remoteOn'],
     [/^AI key saved$/, 'aiKeySaved'],
     [/^AI key removed$/, 'aiKeyRemoved'],
+    [/^Link to the seller saved$/, 'supLinkSaved'],
+    [/^Link to the seller removed$/, 'supLinkRemoved'],
+    [/^Help request sent to the seller$/, 'supTicket'],
+    [/^Seller support window opened for (\d+) minutes$/, 'supWindowOpen'],
+    [/^Seller support window ended$/, 'supWindowEnd'],
+    [/^Seller repair run: ([a-z_]+)$/, 'supRepair'],
     [/^Work from outside the centre switched off$/, 'remoteOff']
   ];
   var PART = [

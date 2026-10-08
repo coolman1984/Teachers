@@ -1,6 +1,21 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The link to the seller's Control Center (2026-10-08)
+
+**Why:** the owner wants every sold program to report to one Control Center (Apps-Factory `apps/control-center`), so a centre can
+ask for help from inside Hessa and the seller can diagnose and repair remotely with the centre's permission instead of a visit.
+**What:** `server/vendorlink.py` + Help → "Contact the seller": a self-check (backup age, free disk, subscription, sync, errors of
+7 days) for everyone; a help request that shows the person exactly what leaves the PC and removes phone numbers (also in Arabic
+digits), e-mails, national ids and secrets before sending; a support window that only an administrator opens, for 30/60/120
+minutes with named scopes, ended at any time; repairs only from a short safe list (data check, backup, error list) and only
+while the window is open, each written in the security log; a heartbeat every 6 hours with a fixed list of numbers. It stays off
+until an administrator enters the address and install code on the centre PC itself; the code lives in `support.json` on that PC
+(never in the shared data or logs, shown only as its last 4 letters). Standard library only. **Checks:** `tests/test_support.py`
+(9 server tests against a stand-in Control Center + a Chromium test on a 360 px phone in Arabic and English) and the Part G
+suites. **Not done:** a real Control Center over HTTPS on a real centre PC (TASKS FS14). **Lesson:** a support channel is only
+trustworthy if the customer can see what leaves and can close the door; both are tested, not promised.
+
 ## A raised version merged into main publishes its installer (2026-10-07)
 
 **Why:** pushing the `v1.2.0` tag from the cloud session was refused (403), and so was a manual workflow start; the

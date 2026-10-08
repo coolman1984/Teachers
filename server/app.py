@@ -41,6 +41,7 @@ import center  # noqa: E402
 import formats  # noqa: E402
 import gateway_client as gwc  # noqa: E402
 import ai  # noqa: E402
+import vendorlink  # noqa: E402
 import store as store_mod  # noqa: E402
 from store import BadRequest, Conflict, now  # noqa: E402
 from upgrade import DataFromNewerVersion, UpgradeVerificationFailed, check_now  # noqa: E402
@@ -301,6 +302,29 @@ if INSTANCE:
     # one sender per centre: the administrator PC; it writes each message in the follow-up history as "Hessa online (automatic)"
     GATE.wa = wa_auto.Sender(STORE, DATA_DIR, lambda: center.Ctx(STORE, JOURNAL, NODE.id, wa_auto.WHO, '', 'system', None, ['followup.log']),
                              parent_link, is_sender=lambda: NODE.is_authority and not LICENSE.blocked())
+SUPPORT = None
+if INSTANCE:
+    def support_facts():
+        """Plain facts for the self-check, the heartbeat and a help request (server/vendorlink.py) - no names, no money."""
+        backups = BACKUPS.list()
+        errs = STORE.query_log('activity', typ='server-error', frm=vendorlink.since(7), limit=5, admin=True, contacts=False)
+        return {'lastBackup': backups[0]['time'] if backups else None, 'backupError': BACKUPS.last_error,
+                'diskFreeMb': vendorlink.disk_free_mb(DATA_DIR), 'licence': LICENSE.status().get('state'),
+                'sync': SYNC.summary().get('state'), 'errors': errs.get('total', len(errs['rows'])),
+                'errorSamples': [r.get('detail') or r.get('action') or '' for r in errs['rows']]}
+
+    def support_integrity():
+        res = check_now(SYSTEM)
+        return 'Data check OK' if res['ok'] else f"{len(res['problems'])} problem(s): " + '; '.join(res['problems'][:5])
+
+    def support_errors():
+        f = support_facts()
+        return f"{f['errors']} server error(s) in 7 days\n" + '\n'.join(str(x)[:300] for x in f['errorSamples'])
+
+    SUPPORT = vendorlink.Link(DATA_DIR, VERSION, support_facts,
+                              {'integrity_check': support_integrity, 'retry_failed_backup': lambda: 'Backup ' + BACKUPS.create('support'),
+                               'collect_extended_logs': support_errors},
+                              log_fn=say, security_fn=lambda detail: AUTH.log('Hessa', '', 'support', NODE.name, detail))
 PLACEHOLDER = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" fill="#eef1f5"/>'
                b'<text x="160" y="96" font-family="Segoe UI,Arial" font-size="15" text-anchor="middle" fill="#6b7785">Photo is being copied</text>'
                b'<text x="160" y="118" font-family="Segoe UI,Arial" font-size="12" text-anchor="middle" fill="#8a95a3">from another PC\xe2\x80\xa6</text></svg>')
@@ -734,6 +758,36 @@ class Handler(BaseHTTPRequestHandler):
         start = max(start, end - timedelta(days=366))
         return watch_all(start.isoformat(), end.isoformat())
 
+    def support_post(self, action):
+        """Help request (anyone signed in), the link settings (an administrator on this PC) and the support window (administrators)."""
+        d = self.json_body()
+        try:
+            if action == 'ticket':
+                res = SUPPORT.send_ticket(d.get('subject'), d.get('message'), bool(d.get('attach', True)), self.u['display'])
+                STORE.log_activity(self.user, self.ip, [{'type': 'save', 'action': 'Help request sent', 'target': 'Seller'}])
+                return self.send(200, res)
+            self.need_admin()
+            if action == 'link':
+                if self.ip not in LOCAL_IPS or self.via_proxy:
+                    raise Forbidden('Set up the link to the seller on the centre PC itself.')
+                if d.get('clear'):
+                    SUPPORT.clear()
+                    AUTH.log(self.u['display'], self.ip, 'support', NODE.name, 'Link to the seller removed')
+                else:
+                    SUPPORT.save(d.get('url'), d.get('token'))
+                    AUTH.log(self.u['display'], self.ip, 'support', NODE.name, 'Link to the seller saved')   # never the code itself
+                return self.send(200, SUPPORT.status())
+            if action == 'window':
+                SUPPORT.open_window(int(d.get('minutes') or 0), d.get('scopes') or [], self.u['display'])
+                return self.send(200, SUPPORT.status())
+            if action == 'window/end':
+                return self.send(200, SUPPORT.end_window())
+            if action == 'check':
+                return self.send(200, {**SUPPORT.check(), 'link': SUPPORT.status()})
+        except vendorlink.LinkError as e:
+            raise center.Problem(e.key, str(e))
+        self.send(404, {'error': 'Not found'})
+
     def license_activate(self):
         code = self.json_body().get('code')
         try:
@@ -892,6 +946,18 @@ class Handler(BaseHTTPRequestHandler):
             self.need_admin()
             return self.send(200, AUTH.query_log(qs.get('q', ''), qs.get('user', ''), qs.get('type', ''), qs.get('from', ''), qs.get('to', ''),
                                                  max(1, min(1000, int(qs.get('limit', 200)))), max(0, int(qs.get('offset', 0))), qs.get('node', '')))
+        if p == '/api/support':  # the Help page: self-check for everyone; the link and the support window for administrators
+            facts = support_facts()
+            out = {'checks': vendorlink.checks(facts), 'configured': SUPPORT.configured, 'admin': is_admin(self.u),
+                   'here': self.ip in LOCAL_IPS and not self.via_proxy, 'preview': SUPPORT.bundle(facts)}
+            if is_admin(self.u):
+                out['link'] = SUPPORT.status()
+            return self.send(200, out)
+        if p == '/api/support/tickets':
+            try:
+                return self.send(200, {'tickets': SUPPORT.tickets()})
+            except vendorlink.LinkError as e:
+                raise center.Problem(e.key, str(e))
         if p == '/api/ai':      # is the question generator set up on this PC? (never the key itself)
             self.need('exams.manage', 'settings.edit')
             return self.send(200, {**AI_KEY.status(), 'admin': is_admin(self.u)})
@@ -1250,6 +1316,8 @@ class Handler(BaseHTTPRequestHandler):
             res = check_now(SYSTEM)
             STORE.log_activity(self.user, self.ip, [{'type': 'backup', 'action': 'Data check', 'target': 'ok' if res['ok'] else 'problems found'}])
             return self.send(200, res)
+        if p.startswith('/api/support/'):
+            return self.support_post(p[len('/api/support/'):])
         if p == '/api/ai/key':
             self.need_admin()
             d = self.json_body()
@@ -1792,6 +1860,7 @@ def main(background=False):
     BACKUPS.start()
     SYNC.start()
     GATE.start()
+    SUPPORT.start()
 
     print('=' * 64)
     print(' Hessa is running')
