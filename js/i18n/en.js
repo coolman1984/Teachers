@@ -2290,7 +2290,7 @@
     'prof.accountant': 'Accountant',
     'prof.viewer': 'Viewer',
     'help.view.guides': 'Step-by-step guides',
-    'help.view.situations': 'Situations and problems',
+    'help.view.situations': 'Solve a problem',
     'help.view.faq': 'Questions',
     'guide.title': 'Learn by doing it once',
     'guide.sub': 'Choose a job and press "Guide me". A small card stays at the side of the screen, opens the right page and outlines the exact button to press. You do the clicks yourself, so the second time you will not need it.',

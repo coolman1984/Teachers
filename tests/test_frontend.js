@@ -542,3 +542,19 @@ test('owner 2026-10-08: daylight theme and the system font by default, no slides
   assert.match(js('boot.js'), /p\.font \|\| 'system'/);
   assert.doesNotMatch(js('shell.js'), /welcomed\) setTimeout\(function \(\) \{ HS\.slides\.open/);
 });
+
+test('owner 2026-10-08: every problem\'s "Guide me" points to a real guide, and help reads in polished Egyptian Arabic', () => {
+  const HS = startup('ar');
+  const guides = new Set(HS.guides.list.map(g => g.id)), sits = new Set(HS.guides.situations.map(x => x[0]));
+  for (const [sid, gid] of Object.entries(HS.guides.sitGuide)) {
+    assert.ok(sits.has(sid), 'unknown situation ' + sid);
+    assert.ok(guides.has(gid), 'unknown guide ' + gid);
+  }
+  assert.ok(Object.keys(HS.guides.sitGuide).length >= 40);
+  const fs = require('fs'), path = require('path');
+  const ar = fs.readFileSync(path.join(__dirname, '..', 'js', 'i18n', 'ar.js'), 'utf8');
+  const help = ar.split('\n').filter(l => /^\s{4}'(gd|sit|hq|help|guide|sup|tour|slide)\./.test(l));
+  assert.ok(help.length > 700);
+  const heavy = /(يُرجى|نظرًا ل|يتعذّر|تعذّر|يجب عليك|الرجاء)/;
+  assert.deepEqual(help.filter(l => heavy.test(l)), []);
+});

@@ -131,7 +131,16 @@
     ['pcBroke', 'settings?tab=data', 'admin'], ['virus', 'settings?tab=data', 'admin'], ['newPc', 'settings?tab=data', 'admin'], ['trialPassword', 'overview', 'admin']
   ];
 
+  // owner 2026-10-08: every problem also offers "Guide me" through the guide that fixes it (situation id -> guide id)
+  var SIT_GUIDE = { forgotCard: 'checkin', sameName: 'checkin', wrongGroup: 'checkin', lateArrival: 'roll', makeup: 'checkin', trial: 'enrol',
+    powerCut: 'dayoff', teacherAbsent: 'dayoff', halfPay: 'pay', claimsPaid: 'void', wallet: 'pay', noChange: 'pay', torn: 'close',
+    drawerShort: 'close', forgotClose: 'close', wrongAmount: 'void', refund: 'void', advance: 'pay', teacherCash: 'expense', priceRise: 'price',
+    siblings: 'family', orphan: 'discount', lateMonth: 'enrol', phoneChanged: 'student', duplicate: 'restore', leaves: 'move', comesBack: 'enrol',
+    noPhone: 'student', excelMess: 'import', ramadan: 'ramadan', exams: 'dayoff', roomClash: 'group', groupFull: 'group', moveGroup: 'move',
+    theft: 'watch', cashNoReceipt: 'watch', staffAccount: 'people', deletedWrong: 'restore', staffLeaves: 'people', forgotPassword: 'people',
+    pcBroke: 'backup', virus: 'backup', trialPassword: 'first' };
   function allowed(g) { return !g.perm || HS.can(g.perm); }
+  function guideFor(sid) { var id = SIT_GUIDE[sid]; return GUIDES.filter(function (g) { return g.id === id && allowed(g); })[0]; }
   function label(key) { return HS.has(key) ? HS.t(key) : key; }
   // a step's text: escaped, with [[dictionary.key]] shown as «that label» in bold
   function rich(text) {
@@ -250,10 +259,11 @@
   }
   function situationHTML(x) {
     return '<details class="situation" data-scat="' + x[2] + '"><summary>' + HS.icon('life', 'sm') + '<span class="grow">' + HS.esc(HS.t('sit.' + x[0] + '.q')) + '</span></summary>' +
-      '<div class="guide-body"><p>' + rich(HS.t('sit.' + x[0] + '.a')) + '</p><a class="btn sm" href="#/' + x[1] + '">' + HS.esc(HS.t('help.open')) + HS.icon('right', 'sm mirror') + '</a></div></details>';
+      '<div class="guide-body"><p>' + rich(HS.t('sit.' + x[0] + '.a')) + '</p><div class="row wrap"><a class="btn sm" href="#/' + x[1] + '">' + HS.esc(HS.t('help.open')) + HS.icon('right', 'sm mirror') + '</a>' +
+      (guideFor(x[0]) ? '<button class="btn sm primary" data-guide="' + guideFor(x[0]).id + '">' + HS.icon('compass', 'sm') + HS.esc(HS.t('guide.start')) + '</button>' : '') + '</div></div></details>';
   }
   HS.guides = {
-    list: GUIDES, situations: SITUATIONS, cats: CATS, kinds: KINDS, rich: rich,
+    list: GUIDES, situations: SITUATIONS, sitGuide: SIT_GUIDE, cats: CATS, kinds: KINDS, rich: rich,
     // guides that act on this page first, then the rest; each category in its own block
     html: function (forPage) {
       var list = GUIDES.filter(allowed), mine = forPage ? list.filter(function (g) { return g.steps.some(function (s) { return pageOf(s.page) === forPage; }); }) : [];

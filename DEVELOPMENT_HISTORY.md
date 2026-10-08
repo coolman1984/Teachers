@@ -1,6 +1,17 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The whole help in polished Egyptian Arabic; "Solve a problem" with "Guide me" (2026-10-08)
+
+**Why:** the owner found the Formal Arabic of the guides heavy for centre staff and wants help that a 12-year-old understands, in
+respectful, professional Egyptian Arabic, so nobody needs to call to learn the program (Apps-Factory ADR-0005, HELP-01..04).
+**What:** 761 Arabic help texts rewritten (31 guides, 48 situations, the questions, the support section, the tour and slides,
+the coach's words); screens stay Formal Arabic. "Situations and problems" is now "Solve a problem" and 42 of its 48 problems
+carry a "Guide me" button next to "Take me there" (`SIT_GUIDE` in `js/views/guides.js`). A small tool refused any change of
+`{placeholders}` or `[[button names]]` while rewriting. **Checks:** `test_frontend` (every link points to a real guide and
+problem; no heavy formal words in help), `test_design`, browser suites. **Lesson:** help is read by the busiest person at the
+front desk; one idea per sentence, the button's name, and what happens next.
+
 ## No slideshow on the first sign-in; daylight and the system font by default (2026-10-08)
 
 **Why:** the owner finds the slides on the first sign-in in the way and chose the daylight theme and the system font as the

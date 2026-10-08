@@ -23,7 +23,8 @@ Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Recor
 - [x] FS14 Link to the seller's Control Center (owner's request 2026-10-08, Apps-Factory ADR-0002): Help → "Contact the seller" - self-check for everyone, help request with the exact preview and phones/e-mails/national ids/secrets removed, support window opened only by an administrator (30-120 min, named scopes, code to read on the phone, end at any time), safe repairs only from a short list and only while the window is open, a fixed-field heartbeat; off until an administrator sets it up on the centre PC itself; install code in `support.json` on this PC only (`server/vendorlink.py`, `tests/test_support.py`)
   - [ ] Field check: a real Control Center over HTTPS and a real centre PC
 - [x] FS15 Owner 2026-10-08: no slideshow on the first sign-in (still in Help), daylight theme and the system font by default (`test_frontend` defaults test, `test_e2e_browser.test_no_slides_first_time_but_available_from_help`)
-  - [ ] Help texts in polished Egyptian Arabic and a "Solve a problem" section (Apps-Factory HELP-03/HELP-04)
+  - [x] Help texts in polished Egyptian Arabic (761 texts: guides, situations, questions, support, tour) and "Solve a problem" with "Take me there" + "Guide me" on 42 of 48 problems (`test_frontend` guide-map and heavy-words test)
+  - [ ] A non-developer reads the Arabic help once before the release (Apps-Factory HELP-04)
 - [ ] FS10 field check: the seller's real Cloudflare service, `HESSA_SERVICE_URL` secret, an owner's Android phone on 4G
 - [ ] FS11 field check: Meta Business verification, the three templates approved, `WA_TOKEN`/`WA_PHONE_ID` on the service, a real parent phone
   - [ ] Make the GitHub repository private before selling widely (the source runs without the check)
