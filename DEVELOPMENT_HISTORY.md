@@ -1,6 +1,17 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The dashboard's quick-access rail (2026-10-08)
+
+**Why:** the owner wants every form one click from the dashboard, on the side (the left in Arabic), with information and alerts,
+so nobody hunts through menus. **What:** the side column of the overview now starts with "Quick access": three groups of
+shortcuts (Register, Today's work, Follow-up and reports), each shown only when the person may use it and, for the extra
+pages, only when the page is switched on in the menu; above them "Needs attention now" shows the advisor items, students at
+risk and students who owe money, each a link to its page. Phones keep the big buttons under the thumb. **Mistake:** an
+apostrophe in "Today's" broke the English dictionary until it was escaped; `test_frontend` caught it at once. **Checks:**
+`tests/test_dashboard_rail.py` (every shortcut opens its page without a script error, Arabic and English, the rail is on the
+left in Arabic, extra pages hidden in the basic menu), `test_design`, `test_frontend`.
+
 ## The whole help in polished Egyptian Arabic; "Solve a problem" with "Guide me" (2026-10-08)
 
 **Why:** the owner found the Formal Arabic of the guides heavy for centre staff and wants help that a 12-year-old understands, in

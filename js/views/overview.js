@@ -52,6 +52,52 @@
       '<div class="hint">' + (opts.live ? '<span class="pulse-dot"></span> ' : '') + '<span data-h="' + key + '">' + HS.esc(HS.t('ov.hint.' + key)) + '</span></div></a>';
   }
 
+  // owner 2026-10-08: a quick-access rail at the side of the dashboard (the left in Arabic): every form one click away,
+  // grouped, then today's alerts. A shortcut shows only when the person may act and the page is in the menu (extra pages).
+  var RAIL = [
+    { id: 'reg', items: [
+      { id: 'student', icon: 'users', perm: 'students.manage', go: 'students?new=1', key: 'N' },
+      { id: 'group', icon: 'layers', perm: 'groups.manage', go: 'groups?new=1' },
+      { id: 'teacher', icon: 'user', perm: 'teachers.manage', go: 'groups?tab=teachers' },
+      { id: 'import', icon: 'upload', perm: 'students.manage', go: 'students/import' } ] },
+    { id: 'today', items: [
+      { id: 'door', icon: 'board', perm: 'door.use', go: 'door', key: 'D' },
+      { id: 'roll', icon: 'check', perm: 'attendance.mark', go: 'groups?tab=today' },
+      { id: 'pay', icon: 'sheet', perm: 'money.collect', go: 'money?pay=1' },
+      { id: 'expense', icon: 'doc', perm: 'expenses.add', go: 'money?expense=1' },
+      { id: 'shift', icon: 'lock', perm: ['shifts.close', 'shifts.manage'], go: 'money?tab=shift' } ] },
+    { id: 'follow', items: [
+      { id: 'calls', icon: 'bell', perm: 'followup.view', go: 'followup', page: 'followup' },
+      { id: 'debts', icon: 'alert', perm: 'followup.view', go: 'followup?tab=debts', page: 'followup' },
+      { id: 'marks', icon: 'star', perm: 'marks.enter', go: 'exams', page: 'exams' },
+      { id: 'reports', icon: 'chart', perm: 'reports.view', go: 'reports' },
+      { id: 'backup', icon: 'shield', perm: 'backups.manage', go: 'settings?tab=data' } ] }
+  ];
+  function railItem(a, i) {
+    return '<a class="rail-btn" href="#/' + a.go + '" data-rail="' + a.id + '" style="--i:' + i + '"><span class="q-ic">' + HS.icon(a.icon, 'sm') + '</span><span class="grow">' + HS.esc(HS.t('ov.act.' + a.id)) + '</span>' +
+      (a.key ? '<i class="kbd">' + a.key + '</i>' : '') + '</a>';
+  }
+  function shown(a) { return HS.can(a.perm) && (!a.page || HS.EXTRAS.indexOf(a.page) < 0 || HS.extraOn(a.page)); }
+  function railHTML() {
+    var groups = RAIL.map(function (g) { var xs = g.items.filter(shown); return xs.length ? '<div class="rail-group"><h4>' + HS.esc(HS.t('ov.rail.' + g.id)) + '</h4>' + xs.map(railItem).join('') + '</div>' : ''; }).join('');
+    if (!groups) return '';
+    return '<section class="card rail" data-tour="actions" aria-label="' + HS.esc(HS.t('ov.rail.title')) + '"><header><span class="tile-ic">' + HS.icon('spark') + '</span><h3>' + HS.esc(HS.t('ov.rail.title')) + '</h3></header>' +
+      '<div class="rail-alerts" data-rail-alerts hidden><h4>' + HS.esc(HS.t('ov.rail.alerts')) + '</h4><ul class="st-list" data-rail-list></ul></div>' + groups + '</section>';
+  }
+  function railAlerts(root, d, advN) {
+    var box = root.querySelector('[data-rail-alerts]'), list = root.querySelector('[data-rail-list]');
+    if (!box || !list) return;
+    var rows = [];
+    function row(icon, key, n, tone, page) { if (n > 0) rows.push('<li><a class="st-row ' + tone + '" href="#/' + page + '">' + HS.icon(icon, 'sm') + '<span class="grow">' + HS.esc(HS.t(key)) + '</span><span class="badge ' + tone + ' num">' + HS.fmt.num(n) + '</span></a></li>'); }
+    if (advN !== undefined) row('spark', 'ov.rail.a.advice', advN, 'warn', 'overview');
+    if (d) {
+      if (HS.can('followup.view')) row('bell', 'ov.rail.a.risk', d.risk || 0, 'warn', 'followup');
+      if (d.debtors !== undefined) row('alert', 'ov.rail.a.debtors', d.debtors || 0, 'bad', 'followup?tab=debts');
+    }
+    list.innerHTML = rows.join('');
+    box.hidden = !rows.length;
+  }
+
   // the big buttons: every daily job one click from the first screen
   var ACTIONS = [
     { id: 'door', icon: 'board', perm: 'door.use', go: 'door', key: 'D' },
@@ -205,7 +251,7 @@
             (money ? '<section class="card"><header><h3>' + HS.esc(HS.t('ov.trend.money')) + '</h3></header><div data-chart="money"></div></section>' : '') + '</div>' +
         '</div><div class="stack">' +
           (HS.me && HS.me.admin && !(HS.me.scopes && HS.me.scopes.length) ? '<div data-watch></div>' : '') +
-          '<div class="desk-only">' + actions() + '</div>' + guideHTML() + '<div data-status></div>' +
+          '<div class="desk-only">' + railHTML() + '</div>' + guideHTML() + '<div data-status></div>' +
           '<section class="card"><header><h3>' + HS.esc(HS.t('ov.tips.title')) + '</h3></header><div class="stack" style="gap:.8rem">' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('search') + '<span>' + HS.esc(HS.t('ov.tip.search')) + ' <i class="kbd">Ctrl K</i></span></div>' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('keyboard') + '<span>' + HS.esc(HS.t('ov.tip.keys')) + ' <i class="kbd">?</i></span></div>' +
@@ -215,6 +261,7 @@
         '</div></div>';
     },
     mount: function (root) {
+      var lastDash = null, lastAdv;
       HS.mountSampleControls(root);
       // the owner's watch in one line: what needs their eyes from the last 7 days (js/views/watch.js)
       var wbox = root.querySelector('[data-watch]');
@@ -240,6 +287,7 @@
         HS.get('/api/c/dashboard').then(function (d) {
           if (root.isConnected === false) return;
           count('checked', d.checkedIn); count('sessions', d.sessions.length); count('students', d.students); count('risk', d.risk);
+          lastDash = d; railAlerts(root, d, lastAdv);
           if (d.todayTotal !== undefined) { setText('money', U.money(d.todayTotal)); setText('owed', U.money(d.owed));
             var h = root.querySelector('[data-h="owed"]'); if (h) h.textContent = HS.t('ov.hint.owedN', { n: HS.fmt.num(d.debtors || 0) }); }
           var running = d.sessions.filter(function (s) { var t = new Date(), m = t.getHours() * 60 + t.getMinutes(); return hm(s.start) <= m && m <= hm(s.end); }).length;
@@ -260,6 +308,7 @@
           root.querySelector('[data-advice]').innerHTML = advisorHTML(list);
           var n = list.filter(function (a) { return a.level !== 'ok'; }).length;
           root.querySelector('[data-adv-count]').textContent = n ? HS.t('ov.advisor.n', { n: n }) : '';
+          lastAdv = n; railAlerts(root, lastDash, n);
         }).catch(function () { var el = root.querySelector('[data-advice]'); if (el) el.innerHTML = ''; });
       }
       root.addEventListener('click', function (e) {
