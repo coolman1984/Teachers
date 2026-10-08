@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var HS = window.HS;
-  var DEFAULTS = { lang: 'ar', theme: 'auto', font: 'plex', size: 'm', density: 'comfortable', motion: 'auto', collapsed: false, tours: {}, welcomed: false,
+  var DEFAULTS = { lang: 'ar', theme: 'daylight', font: 'system', size: 'm', density: 'comfortable', motion: 'auto', collapsed: false, tours: {}, welcomed: false,
     receiptPaper: '80', autoReceipt: 'off' };   // printing belongs to the PC its printer is plugged into
   var KEY = 'hs.prefs';
   var P = HS.prefs = { data: {} };

@@ -534,3 +534,11 @@ test('the subscription screens have words for every state in both languages and 
     assert.ok(HS.licenseTab.render().includes('data-lic'));
   }
 });
+
+test('owner 2026-10-08: daylight theme and the system font by default, no slideshow on the first sign-in', () => {
+  const fs = require('fs'), path = require('path'), js = f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8');
+  assert.match(js('prefs.js'), /DEFAULTS = \{ lang: 'ar', theme: 'daylight', font: 'system'/);
+  assert.match(js('boot.js'), /p\.theme \|\| 'daylight'/);
+  assert.match(js('boot.js'), /p\.font \|\| 'system'/);
+  assert.doesNotMatch(js('shell.js'), /welcomed\) setTimeout\(function \(\) \{ HS\.slides\.open/);
+});
