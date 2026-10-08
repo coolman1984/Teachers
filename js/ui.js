@@ -215,6 +215,7 @@
     [/^Only an administrator changes what the Watch looks for\.$/, 'watchRules'],
     [/^Use the dedicated centre operation for attendance and money records\.$/, 'useOp'],
     [/^Choose how the program opens on this PC itself\.$/, 'windowHere'],
+    [/^Set up the link to the seller on the centre PC itself\.$/, 'supportHere'],
     [/^Remote work is switched on at the centre itself, not from outside\.$/, 'remoteHere'],
     [/^Only an administrator can choose the backup folder\.$/, 'bkAdmin'],
     [/^For safety, choose the backup folder on this PC itself\.$/, 'bkHere'],
