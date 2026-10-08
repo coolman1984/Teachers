@@ -25,6 +25,7 @@ Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Recor
 - [x] FS15 Owner 2026-10-08: no slideshow on the first sign-in (still in Help), daylight theme and the system font by default (`test_frontend` defaults test, `test_e2e_browser.test_no_slides_first_time_but_available_from_help`)
   - [x] Help texts in polished Egyptian Arabic (761 texts: guides, situations, questions, support, tour) and "Solve a problem" with "Take me there" + "Guide me" on 42 of 48 problems (`test_frontend` guide-map and heavy-words test)
   - [ ] A non-developer reads the Arabic help once before the release (Apps-Factory HELP-04)
+- [x] FS16 Owner 2026-10-08: dashboard quick-access rail at the side (the left in Arabic): Register (new student, new group, teachers, import), Today's work (front desk, roll call, take payment, expense, cash shift), Follow-up and reports (calls, debts, marks, reports, backups - extra pages only when switched on), and "Needs attention now" counts linked to their pages (`tests/test_dashboard_rail.py`)
 - [ ] FS10 field check: the seller's real Cloudflare service, `HESSA_SERVICE_URL` secret, an owner's Android phone on 4G
 - [ ] FS11 field check: Meta Business verification, the three templates approved, `WA_TOKEN`/`WA_PHONE_ID` on the service, a real parent phone
   - [ ] Make the GitHub repository private before selling widely (the source runs without the check)
