@@ -12,7 +12,7 @@ const texts = (keys) => Object.fromEntries(LANGS.map((l) => [l, keys.map((k) => 
 const cat = {
   product: 'hessa', languages: LANGS, setup_guides: ['first', 'centre'],
   roles: ['full-access', 'administrator', 'secretary', 'teacher', 'assistant', 'accountant', 'viewer'],
-  guides: G.list.map((g) => ({ id: g.id, steps: g.steps.length, pages: [...new Set(g.steps.map((s) => page(s.page)).filter(Boolean))],
+  guides: G.list.map((g) => ({ id: g.id, perm: g.perm || null, steps: g.steps.length, pages: [...new Set(g.steps.map((s) => page(s.page)).filter(Boolean))],
     texts: texts(['gd.' + g.id + '.t', 'gd.' + g.id + '.d', ...g.steps.map((_, i) => 'gd.' + g.id + '.' + (i + 1)), 'gd.' + g.id + '.ok']) })),
   paths: G.paths.map((p) => ({ id: p.id, admin: !!p.admin, roles: p.roles, lessons: p.lessons, texts: texts(['path.' + p.id + '.t', 'path.' + p.id + '.d']) })),
   situations: G.situations.map((x) => ({ id: x[0], guide: G.sitGuide[x[0]] || null, texts: texts(['sit.' + x[0] + '.q', 'sit.' + x[0] + '.a']) })),

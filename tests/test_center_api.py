@@ -827,3 +827,9 @@ class CenterMoneyEdgeTest(CenterFixture):
         self.pay(50)
         facts = self.c.get('/api/c/guide-facts')
         self.assertTrue(facts['myShiftOpened'] and facts['myPayment'])
+        self.assertTrue(facts['myStudentAdded'] and facts['myEnrolment'])            # the administrator added them
+        # a new receptionist in a busy centre still has their own lessons ahead (review: facts per person, not per centre)
+        desk = self.scoped_client(['students.view', 'students.manage', 'groups.view', 'door.use'])
+        mine = desk.get('/api/c/guide-facts')
+        self.assertTrue(mine['studentsAdded'])
+        self.assertFalse(mine['myStudentAdded'] or mine['myEnrolment'] or mine['myShiftOpened'] or mine['myPayment'])

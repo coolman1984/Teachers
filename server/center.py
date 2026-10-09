@@ -1734,7 +1734,7 @@ def profitability(store, ym, scopes=None):
 # stored), so the progress stays true after an import, a restore or on another PC. js/views/guides.js names the same ids.
 GUIDE_FACTS = ('passwordChanged', 'centreNamed', 'roomsAdded', 'teachersAdded', 'groupsAdded', 'studentsAdded', 'enrolled',
                'staffAdded', 'myShiftOpened', 'myCheckin', 'myPayment', 'myExpense', 'myShiftClosed', 'examMade', 'marksEntered',
-               'myFollowup', 'backupFolder', 'settlementApproved')
+               'myFollowup', 'backupFolder', 'settlementApproved', 'myStudentAdded', 'myEnrolment')
 
 
 def guide_facts(store, user, user_id, must_change=False, users=1, backup_folders=0):
@@ -1753,7 +1753,9 @@ def guide_facts(store, user, user_id, must_change=False, users=1, backup_folders
         'myCheckin': any_row('attendance', 'by_user=?', (user,)), 'myPayment': any_row('payments', 'by_user=?', (user,)),
         'myExpense': any_row('expenses', 'by_user=?', (user,)), 'myFollowup': any_row('followups', 'by_user=?', (user,)),
         'examMade': any_row('exams'), 'marksEntered': any_row('marks'), 'backupFolder': backup_folders > 0,
-        'settlementApproved': any_row('settlements')}
+        'settlementApproved': any_row('settlements'),
+        # a person's own lessons count only their own work: a new receptionist in a busy centre still learns to add a student
+        'myStudentAdded': any_row('students', 'created_by=?', (user,)), 'myEnrolment': any_row('enrollments', 'created_by=?', (user,))}
 
 
 # ---------------------------------------------------------------- the overview numbers

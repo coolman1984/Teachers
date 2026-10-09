@@ -90,7 +90,7 @@
       S('click', null, DR + ' [data-save]'), S('warn') ] },
     { id: 'cards', cat: 'students', icon: 'printer', perm: 'print', steps: [
       S('go', 'students'), S('choose', 'students', '[data-f="group"]'), S('click', 'students', '[data-cards]'), S('check'), S('tip') ] },
-    { id: 'debts', cat: 'students', icon: 'bell', perm: 'students.view', steps: [
+    { id: 'debts', cat: 'students', icon: 'bell', perm: ['money.view', 'money.collect'], steps: [
       S('go', 'students'), S('click', 'students', '[data-only="debt"]'), S('check', 'students', '[data-sum]'), S('click', 'students', 'tr[data-id]'), S('click', null, DR + ' [data-wa]'), S('check'), S('tip') ] },
 
     /* ---------- groups ---------- */
@@ -157,24 +157,27 @@
      whether it already happened in the real records; a lesson without a fact is done when its guide was finished. */
   function L(guide, fact) { return { guide: guide, fact: fact || null }; }
   var PATHS = [
-    { id: 'admin', admin: true, icon: 'shield', roles: ['administrator', 'full-access'], lessons: [
+    { id: 'admin', admin: true, icon: 'shield', roles: ['administrator'], lessons: [
       L('first', 'passwordChanged'), L('centre', 'centreNamed'), L('lists', 'teachersAdded'), L('group', 'groupsAdded'), L('people', 'staffAdded'),
       L('profiles'), L('student', 'studentsAdded'), L('enrol', 'enrolled'), L('shift', 'myShiftOpened'), L('backup', 'backupFolder'), L('devices'), L('watch'),
       L('report')] },
+    { id: 'manager', icon: 'home', roles: ['full-access'], lessons: [
+      L('first', 'passwordChanged'), L('centre', 'centreNamed'), L('lists', 'teachersAdded'), L('group', 'groupsAdded'), L('student', 'studentsAdded'),
+      L('enrol', 'enrolled'), L('shift', 'myShiftOpened'), L('price'), L('settle', 'settlementApproved'), L('backup', 'backupFolder'), L('report')] },
     { id: 'desk', icon: 'board', roles: ['secretary'], lessons: [
-      L('first', 'passwordChanged'), L('shift', 'myShiftOpened'), L('checkin', 'myCheckin'), L('pay', 'myPayment'), L('student', 'studentsAdded'),
-      L('enrol', 'enrolled'), L('family'), L('expense', 'myExpense'), L('close', 'myShiftClosed')] },
+      L('first', 'passwordChanged'), L('shift', 'myShiftOpened'), L('checkin', 'myCheckin'), L('pay', 'myPayment'), L('student', 'myStudentAdded'),
+      L('enrol', 'myEnrolment'), L('family'), L('expense', 'myExpense'), L('close', 'myShiftClosed')] },
     { id: 'teacher', icon: 'cap', roles: ['teacher'], lessons: [
-      L('first', 'passwordChanged'), L('roll', 'myCheckin'), L('student', 'studentsAdded'), L('enrol', 'enrolled'), L('exam', 'examMade'),
-      L('followup', 'myFollowup'), L('cards'), L('debts'), L('report')] },
+      L('first', 'passwordChanged'), L('roll', 'myCheckin'), L('student', 'myStudentAdded'), L('enrol', 'myEnrolment'), L('exam', 'examMade'),
+      L('followup', 'myFollowup'), L('cards'), L('report')] },
     { id: 'assistant', icon: 'users', roles: ['assistant'], lessons: [
-      L('first', 'passwordChanged'), L('checkin', 'myCheckin'), L('roll', 'myCheckin'), L('student', 'studentsAdded'), L('cards')] },
+      L('first', 'passwordChanged'), L('checkin', 'myCheckin'), L('roll', 'myCheckin'), L('followup', 'myFollowup'), L('cards')] },
     { id: 'accountant', icon: 'sheet', roles: ['accountant'], lessons: [
       L('first', 'passwordChanged'), L('expense', 'myExpense'), L('void'), L('close', 'myShiftClosed'), L('settle', 'settlementApproved'), L('report'), L('debts')] },
-    { id: 'viewer', icon: 'eye', roles: ['viewer'], lessons: [L('first', 'passwordChanged'), L('student', 'studentsAdded'), L('report'), L('debts')] }
+    { id: 'viewer', icon: 'eye', roles: ['viewer'], lessons: [L('first', 'passwordChanged'), L('window'), L('report'), L('cards')] }
   ];
   // ready-made profiles keep their English name on the person (auth.BUILTIN_PROFILES)
-  var ROLE_PATH = { 'Administrator': 'admin', 'Centre manager': 'admin', 'Front desk': 'desk', 'Teacher': 'teacher', 'Assistant': 'assistant',
+  var ROLE_PATH = { 'Administrator': 'admin', 'Centre manager': 'manager', 'Front desk': 'desk', 'Teacher': 'teacher', 'Assistant': 'assistant',
     'Accountant': 'accountant', 'Viewer': 'viewer' };
   var facts = null, factsAt = 0;
   function loadFacts(force) {
@@ -183,7 +186,7 @@
   }
   function defaultPath() {
     var me = HS.me || {}, id = ROLE_PATH[me.role];
-    if (!id) id = HS.can('users.manage') ? 'admin' : HS.can('money.collect') ? 'desk' : HS.can('marks.enter') ? 'teacher' : HS.can('door.use') ? 'assistant'
+    if (!id) id = HS.can('users.manage') ? 'admin' : HS.can('settings.edit') ? 'manager' : HS.can('money.collect') ? 'desk' : HS.can('marks.enter') ? 'teacher' : HS.can('door.use') ? 'assistant'
       : HS.can('expenses.add') ? 'accountant' : 'viewer';
     return id;
   }

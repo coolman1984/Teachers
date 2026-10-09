@@ -18,6 +18,12 @@ no «يُرجى/نظرًا»). `tests/test_guide_gate.py` runs the factory gate 
 **Mistakes:** the facts block was first inserted between `@cached_read` and `def dashboard` (a syntax error caught at once by the
 tests); the catalogue script first printed to stdout, mixed with the TAP lines `test_startup.js` prints on require - it writes a
 file now. The accountant's path had only 3 of 7 lessons checked by the program; a `settlementApproved` fact was added.
+**Review (Codex on PR #28) found two real gaps, both fixed with tests:** the add-student and enrolment lessons used centre-wide
+facts, so a new receptionist in a busy centre was told they had already done them - they now use the person's own rows
+(`myStudentAdded`, `myEnrolment`, by `created_by`; `test_guide_facts_follow_the_real_records` checks a new person). And the
+"Who owes money" lesson sat on the teacher's and viewer's paths although they cannot see balances. A new gate test
+(`test_every_lesson_is_one_the_role_can_do`) checks every lesson of every path against the profile's rights. It also found
+that the Centre manager (no administrator rights) was on the administrator's path; it now has its own path.
 **Lessons:** a register rule ("simple formal Arabic") only holds if a test reads every text; a word list with a few false
 positives removed («يعني», «وعليه») is enough to keep 800 texts in one voice.
 

@@ -44,6 +44,18 @@ class GuideGate(unittest.TestCase):
         covered = {r for p in self.cat['paths'] for r in p['roles']}
         self.assertEqual(covered, set(self.cat['roles']))
 
+    def test_every_lesson_is_one_the_role_can_do(self):
+        """A lesson the role has no right for is hidden on screen; a path must not shrink to nothing for its own people."""
+        perms = {p[0]: set(auth.ALL if p[0] == auth.LOCKED_PROFILE else p[2]) for p in auth.BUILTIN_PROFILES}
+        guides = {g['id']: g for g in self.cat['guides']}
+        for path in self.cat['paths']:
+            for role in path['roles']:
+                for lesson in path['lessons']:
+                    need = guides[lesson['guide']]['perm']
+                    need = [need] if isinstance(need, str) else need or []
+                    with self.subTest(path=path['id'], role=role, lesson=lesson['guide']):
+                        self.assertTrue(not need or perms[role] & set(need), f'{role} cannot do the lesson {lesson["guide"]}')
+
     def test_the_whole_arabic_help_is_simple_formal_arabic(self):
         self.assertGreater(len(self.cat['other_ar']), 700)
         bad = {k: afguide.register(v) for k, v in self.cat['other_ar'].items() if afguide.register(v)}
