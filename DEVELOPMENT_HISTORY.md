@@ -24,6 +24,8 @@ facts, so a new receptionist in a busy centre was told they had already done the
 "Who owes money" lesson sat on the teacher's and viewer's paths although they cannot see balances. A new gate test
 (`test_every_lesson_is_one_the_role_can_do`) checks every lesson of every path against the profile's rights. It also found
 that the Centre manager (no administrator rights) was on the administrator's path; it now has its own path.
+The factory gate 0.1.2 makes a problem without a guide an error: "the subscription is ending" now opens the new guide
+"Renew the subscription" (Settings → Subscription: copy the request code, send, paste the activation code).
 **Lessons:** a register rule ("simple formal Arabic") only holds if a test reads every text; a word list with a few false
 positives removed («يعني», «وعليه») is enough to keep 800 texts in one voice.
 

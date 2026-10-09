@@ -124,7 +124,10 @@
     { id: 'restore', cat: 'admin', icon: 'refresh', perm: 'trash.restore', steps: [
       S('go', 'settings?tab=data'), S('check', 'settings?tab=data', '[data-restore]'), S('click', 'settings?tab=data', '[data-restore]'), S('tip'), S('warn', 'settings?tab=data', '[data-brestore]') ] },
     { id: 'window', cat: 'admin', icon: 'monitor', steps: [
-      S('click', null, '[data-act="full"]'), S('go', 'settings'), S('choose', 'settings', '[data-window]'), S('choose', 'settings', '[data-pref="lang"]'), S('choose', 'settings', '[data-pref="size"]') ] }
+      S('click', null, '[data-act="full"]'), S('go', 'settings'), S('choose', 'settings', '[data-window]'), S('choose', 'settings', '[data-pref="lang"]'), S('choose', 'settings', '[data-pref="size"]') ] },
+    { id: 'licence', cat: 'admin', icon: 'key', perm: 'users.manage', steps: [
+      S('go', 'settings?tab=license'), S('check', 'settings?tab=license', '.lic-state'), S('click', 'settings?tab=license', '[data-copy-req]'), S('tip'),
+      S('type', 'settings?tab=license', '[data-lic-form] textarea'), S('click', 'settings?tab=license', '[data-lic-form] .btn.primary'), S('check') ] }
   ];
 
   // situations: what really happens in an Egyptian centre, and exactly what to do (sit.<id>.q / .a); page = where to act
@@ -145,7 +148,7 @@
   ];
 
   // owner 2026-10-08: every problem also offers "Guide me" through the guide that fixes it (situation id -> guide id)
-  var SIT_GUIDE = { internet: 'devices', pcOff: 'devices', newPc: 'devices', parentAsks: 'debts', forgotCard: 'checkin', sameName: 'checkin', wrongGroup: 'checkin', lateArrival: 'roll', makeup: 'checkin', trial: 'enrol',
+  var SIT_GUIDE = { subscription: 'licence', internet: 'devices', pcOff: 'devices', newPc: 'devices', parentAsks: 'debts', forgotCard: 'checkin', sameName: 'checkin', wrongGroup: 'checkin', lateArrival: 'roll', makeup: 'checkin', trial: 'enrol',
     powerCut: 'dayoff', teacherAbsent: 'dayoff', halfPay: 'pay', claimsPaid: 'void', wallet: 'pay', noChange: 'pay', torn: 'close',
     drawerShort: 'close', forgotClose: 'close', wrongAmount: 'void', refund: 'void', advance: 'pay', teacherCash: 'expense', priceRise: 'price',
     siblings: 'family', orphan: 'discount', lateMonth: 'enrol', phoneChanged: 'student', duplicate: 'restore', leaves: 'move', comesBack: 'enrol',
