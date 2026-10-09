@@ -33,6 +33,7 @@ class GuideGate(unittest.TestCase):
                 cls.cat = json.load(f)
         cls.cat['facts'] = list(center.GUIDE_FACTS)
         cls.cat['pages'] = [p for p in access_catalogue(words('ar'))['pages'] if p != 'help']
+        cls.cat['role_perms'] = {p[0]: '*' if p[0] == auth.LOCKED_PROFILE else list(p[2]) for p in auth.BUILTIN_PROFILES}
 
     def test_catalogue_passes_the_factory_gate(self):
         self.assertGreater(len(self.cat['guides']), 30)
