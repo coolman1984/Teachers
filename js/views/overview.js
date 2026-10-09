@@ -182,29 +182,9 @@
   function series(rows, field, d) { return U.series(rows, field, d, 28); }
   function chart(points, kind, label) { return U.chart(points, kind, label, [HS.t('ov.chart.from'), HS.t('ov.chart.today')]); }
 
-  /* ---------- getting started (the guide for an empty centre) ---------- */
-  var STEPS = [
-    { id: 'centre', page: 'settings?tab=centre', perm: 'settings.edit', done: function (D) { var s = D.state.settings || {}; return !!(s.systemName || s['smp-centre']); } },
-    { id: 'rooms', page: 'settings?tab=lists', perm: 'rooms.manage', done: function (D) { return D.list('rooms').length > 0; } },
-    { id: 'teachers', page: 'settings?tab=lists', perm: 'teachers.manage', done: function (D) { return D.list('teachers').length > 0; } },
-    { id: 'groups', page: 'groups', perm: 'groups.manage', done: function (D) { return D.list('groups').length > 0; } },
-    { id: 'students', page: 'students/import', perm: 'students.manage', done: function (D) { return D.list('students').length > 0; } },
-    { id: 'door', page: 'door', perm: 'door.use', done: function (D) { return D.list('attendance').length > 0; } },
-    { id: 'phone', page: 'help', perm: null, done: function () { return !!HS.prefs.data.phoneSeen; } }
-  ];
-  function guideHTML() {
-    var steps = STEPS.filter(function (s) { return HS.can(s.perm); });
-    var done = steps.filter(function (s) { return s.done(HS.data); }).length;
-    if (!steps.length || done === steps.length) return '';
-    return '<section class="card lift guide" data-tour="guide"><header><span class="tile-ic">' + HS.icon('flag') + '</span><h3>' + HS.esc(HS.t('ov.guide.title')) + '</h3>' +
-      '<span class="badge signal num">' + done + ' / ' + steps.length + '</span></header>' +
-      '<div class="meter big" aria-hidden="true"><i style="width:' + Math.round(done * 100 / steps.length) + '%"></i></div>' +
-      '<ol class="checklist">' + steps.map(function (s) {
-        var ok = s.done(HS.data);
-        return '<li class="' + (ok ? 'ok' : '') + '"><span class="tick">' + HS.icon(ok ? 'check' : 'dot', 'sm') + '</span><div class="grow"><a href="#/' + s.page + '"' + (s.id === 'phone' ? ' data-phone' : '') + '>' + HS.esc(HS.t('ov.step.' + s.id)) + '</a>' +
-          '<small class="muted">' + HS.esc(HS.t('ov.step.' + s.id + '.b')) + '</small></div></li>';
-      }).join('') + '</ol></section>';
-  }
+  /* ---------- getting started: the learning path card (js/views/guides.js) replaced the old checklist on 2026-10-09 ----------
+     One source of steps for everybody: the person's path per role, with the next lesson and "Guide me". */
+  function guideHTML() { return ''; }
 
   /* ---------- open on a phone: the centre address as a QR ---------- */
   function qr(text) {
@@ -250,6 +230,7 @@
           '<div class="grid cols-2"><section class="card"><header><h3>' + HS.esc(HS.t('ov.trend')) + '</h3></header><div data-chart="att"></div></section>' +
             (money ? '<section class="card"><header><h3>' + HS.esc(HS.t('ov.trend.money')) + '</h3></header><div data-chart="money"></div></section>' : '') + '</div>' +
         '</div><div class="stack">' +
+          '<section class="card lift path-card" data-pathcard></section>' +
           (HS.me && HS.me.admin && !(HS.me.scopes && HS.me.scopes.length) ? '<div data-watch></div>' : '') +
           '<div class="desk-only">' + railHTML() + '</div>' + guideHTML() + '<div data-status></div>' +
           '<section class="card"><header><h3>' + HS.esc(HS.t('ov.tips.title')) + '</h3></header><div class="stack" style="gap:.8rem">' +
@@ -263,6 +244,7 @@
     mount: function (root) {
       var lastDash = null, lastAdv;
       HS.mountSampleControls(root);
+      if (HS.guides) HS.guides.fillNext(root);   // the next lesson of my learning path (js/views/guides.js)
       // the owner's watch in one line: what needs their eyes from the last 7 days (js/views/watch.js)
       var wbox = root.querySelector('[data-watch]');
       if (wbox && HS.watch && HS.me && HS.me.admin) {

@@ -1729,6 +1729,33 @@ def profitability(store, ym, scopes=None):
     return out
 
 
+# ---------------------------------------------------------------- the learning path (المنهج): what already happened
+# Each lesson of a person's path is done when its fact is true. Facts are counted from the real records every time (never
+# stored), so the progress stays true after an import, a restore or on another PC. js/views/guides.js names the same ids.
+GUIDE_FACTS = ('passwordChanged', 'centreNamed', 'roomsAdded', 'teachersAdded', 'groupsAdded', 'studentsAdded', 'enrolled',
+               'staffAdded', 'myShiftOpened', 'myCheckin', 'myPayment', 'myExpense', 'myShiftClosed', 'examMade', 'marksEntered',
+               'myFollowup', 'backupFolder', 'settlementApproved')
+
+
+def guide_facts(store, user, user_id, must_change=False, users=1, backup_folders=0):
+    """{fact id: True/False} for the person asking. `user` is the display name the records carry in their "by" column."""
+    def any_row(table, where='', args=()):
+        with store.lock:
+            return store.conn.execute(f'SELECT 1 FROM {table} WHERE deleted=0' + (' AND ' + where if where else '') + ' LIMIT 1',
+                                      args).fetchone() is not None
+    cfg = settings(store)
+    return {
+        'passwordChanged': not must_change, 'centreNamed': bool(str(cfg.get('systemName') or '').strip()),
+        'roomsAdded': any_row('rooms'), 'teachersAdded': any_row('teachers'), 'groupsAdded': any_row('class_groups'),
+        'studentsAdded': any_row('students'), 'enrolled': any_row('enrollments'), 'staffAdded': users > 1,
+        'myShiftOpened': any_row('shifts', 'user_id=?', (user_id,)),
+        'myShiftClosed': any_row('shifts', "user_id=? AND status='closed'", (user_id,)),
+        'myCheckin': any_row('attendance', 'by_user=?', (user,)), 'myPayment': any_row('payments', 'by_user=?', (user,)),
+        'myExpense': any_row('expenses', 'by_user=?', (user,)), 'myFollowup': any_row('followups', 'by_user=?', (user,)),
+        'examMade': any_row('exams'), 'marksEntered': any_row('marks'), 'backupFolder': backup_folders > 0,
+        'settlementApproved': any_row('settlements')}
+
+
 # ---------------------------------------------------------------- the overview numbers
 @cached_read
 def dashboard(store, scopes=None, d=None):

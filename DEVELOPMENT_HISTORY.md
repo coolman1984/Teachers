@@ -1,6 +1,26 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The learning path (المنهج) and simple formal Arabic in the whole help (2026-10-09)
+
+**Why:** the owner wants a new person to learn alone, in order, per job: the administrator first sets the centre up and
+creates things, then each person after him has their own path; pressing the guide shows *which step you are at*. All help in
+Arabic "between formal and simple Egyptian": short, a little formal, very easy words.
+**What:** `js/views/guides.js` `PATHS` - six paths (administrator, front desk, teacher, assistant, accountant, viewer) of ordered
+lessons; each lesson is a guide and, where possible, a *fact* the server computes from the real rows
+(`center.GUIDE_FACTS`/`guide_facts`, `GET /api/c/guide-facts`: e.g. "my shift opened", "a student enrolled", "a settlement
+approved") - never a stored tick. A lesson without a fact is done when its guide was finished. Help opens on "My path" with a
+progress bar, "you are here" and a picker for another path; the overview's old 5-step checklist became a card with the next
+lesson and "Guide me". Four new guides (exams, follow-up calls, monthly settlement, devices) so every path and every menu page is
+covered. All 761 help texts were rewritten in simple formal Arabic (المركز, البطاقة, الهاتف, المدفوعات, المعلم; no «ده/مش/عشان»,
+no «يُرجى/نظرًا»). `tests/test_guide_gate.py` runs the factory gate (`server/afguide.py`, vendored from
+`Apps-Factory/packages/af-guide`) on the whole catalogue built from the real dictionaries (`tests/guide_catalogue.js`).
+**Mistakes:** the facts block was first inserted between `@cached_read` and `def dashboard` (a syntax error caught at once by the
+tests); the catalogue script first printed to stdout, mixed with the TAP lines `test_startup.js` prints on require - it writes a
+file now. The accountant's path had only 3 of 7 lessons checked by the program; a `settlementApproved` fact was added.
+**Lessons:** a register rule ("simple formal Arabic") only holds if a test reads every text; a word list with a few false
+positives removed («يعني», «وعليه») is enough to keep 800 texts in one voice.
+
 ## Factory access standard: the gate and "Who can do what" (2026-10-09)
 
 **Why:** the owner made BAMS's people-and-permissions model a factory standard (`Apps-Factory/docs/ACCESS_AND_ADMINISTRATION_STANDARD.md`,

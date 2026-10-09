@@ -23,7 +23,7 @@
   var GUIDES = [
     /* ---------- first day ---------- */
     { id: 'first', cat: 'start', icon: 'flag', steps: [
-      S('tip'), S('click', null, '[data-act="password"]'), S('type', null, '#pw-old'), S('type', null, '#pw-new'), S('click', null, '[data-pw-save]'), S('check') ] },
+      S('tip', 'overview'), S('click', null, '[data-act="password"]'), S('type', null, '#pw-old'), S('type', null, '#pw-new'), S('click', null, '[data-pw-save]'), S('check') ] },
     { id: 'sample', cat: 'start', icon: 'spark', perm: ['data.import', 'users.manage'], steps: [
       S('go', 'settings?tab=data'), S('click', 'settings?tab=data', '[data-sample="load"]'), S('click', null, OV + ' [data-ok]'), S('check', 'students', '[data-f="q"]'),
       S('tip', 'door', '#door-q'), S('warn'), S('click', 'settings?tab=data', '[data-sample="delete"]'), S('check') ] },
@@ -99,6 +99,19 @@
     { id: 'ramadan', cat: 'groups', icon: 'clock', perm: 'groups.manage', steps: [
       S('go', 'groups?tab=list'), S('click', 'groups?tab=list', 'tr[data-id]'), S('click', null, '[data-edit]'), S('choose', null, '#gf-tempFrom'), S('click', null, '[data-addtslot]'), S('click', null, DR + ' [data-save]'), S('check') ] },
 
+    /* ---------- exams, follow-up and teachers' money (owner 2026-10-09: every page has a guide) ---------- */
+    { id: 'exam', cat: 'students', icon: 'star', perm: 'exams.manage', steps: [
+      S('go', 'exams'), S('click', 'exams', '[data-new]'), S('type', null, '#xf-t'), S('choose', null, '#xf-k'), S('type', null, '#xf-m'),
+      S('click', null, '[data-save]'), S('type', null, '[data-mark]'), S('click', null, '[data-save]'), S('check') ] },
+    { id: 'followup', cat: 'students', icon: 'bell', perm: 'followup.log', steps: [
+      S('go', 'followup?tab=calls'), S('choose', 'followup?tab=calls', '[data-level]'), S('click', 'followup?tab=calls', '[data-call]'),
+      S('choose', null, OV + ' [data-out]'), S('click', null, OV + ' [data-ok]'), S('go', 'followup?tab=debts'), S('click', 'followup?tab=debts', '[data-remind-all]'), S('check') ] },
+    { id: 'settle', cat: 'money', icon: 'chart', perm: 'settlements.manage', steps: [
+      S('go', 'settlements'), S('choose', 'settlements', '[data-month="-1"]'), S('check', 'settlements', '[data-cards]'), S('click', 'settlements', '[data-approve]'),
+      S('click', 'settlements', '[data-payout]'), S('check'), S('warn') ] },
+    { id: 'devices', cat: 'admin', icon: 'sync', perm: 'users.manage', steps: [
+      S('go', 'devices'), S('click', 'devices', '[data-add]'), S('check', null, OV + ' [data-add-body]'), S('tip'), S('check', 'devices') ] },
+
     /* ---------- reports, safety, administration ---------- */
     { id: 'watch', cat: 'admin', icon: 'shield', perm: 'users.manage', steps: [
       S('go', 'watch'), S('check', 'watch', '.wa-kpis'), S('click', 'watch', '[data-level="critical"]'), S('check', 'watch', '.wa-more'), S('click', 'watch', '.wa-acts .btn'),
@@ -132,13 +145,100 @@
   ];
 
   // owner 2026-10-08: every problem also offers "Guide me" through the guide that fixes it (situation id -> guide id)
-  var SIT_GUIDE = { forgotCard: 'checkin', sameName: 'checkin', wrongGroup: 'checkin', lateArrival: 'roll', makeup: 'checkin', trial: 'enrol',
+  var SIT_GUIDE = { internet: 'devices', pcOff: 'devices', newPc: 'devices', parentAsks: 'debts', forgotCard: 'checkin', sameName: 'checkin', wrongGroup: 'checkin', lateArrival: 'roll', makeup: 'checkin', trial: 'enrol',
     powerCut: 'dayoff', teacherAbsent: 'dayoff', halfPay: 'pay', claimsPaid: 'void', wallet: 'pay', noChange: 'pay', torn: 'close',
     drawerShort: 'close', forgotClose: 'close', wrongAmount: 'void', refund: 'void', advance: 'pay', teacherCash: 'expense', priceRise: 'price',
     siblings: 'family', orphan: 'discount', lateMonth: 'enrol', phoneChanged: 'student', duplicate: 'restore', leaves: 'move', comesBack: 'enrol',
     noPhone: 'student', excelMess: 'import', ramadan: 'ramadan', exams: 'dayoff', roomClash: 'group', groupFull: 'group', moveGroup: 'move',
     theft: 'watch', cashNoReceipt: 'watch', staffAccount: 'people', deletedWrong: 'restore', staffLeaves: 'people', forgotPassword: 'people',
     pcBroke: 'backup', virus: 'backup', trialPassword: 'first' };
+  /* ---------- the learning path (المنهج): ordered lessons per role, and where the person stands ----------
+     Owner 2026-10-09: a new person learns alone, in order. A lesson is a guide; its fact (server/center.py GUIDE_FACTS) says
+     whether it already happened in the real records; a lesson without a fact is done when its guide was finished. */
+  function L(guide, fact) { return { guide: guide, fact: fact || null }; }
+  var PATHS = [
+    { id: 'admin', admin: true, icon: 'shield', roles: ['administrator', 'full-access'], lessons: [
+      L('first', 'passwordChanged'), L('centre', 'centreNamed'), L('lists', 'teachersAdded'), L('group', 'groupsAdded'), L('people', 'staffAdded'),
+      L('profiles'), L('student', 'studentsAdded'), L('enrol', 'enrolled'), L('shift', 'myShiftOpened'), L('backup', 'backupFolder'), L('devices'), L('watch'),
+      L('report')] },
+    { id: 'desk', icon: 'board', roles: ['secretary'], lessons: [
+      L('first', 'passwordChanged'), L('shift', 'myShiftOpened'), L('checkin', 'myCheckin'), L('pay', 'myPayment'), L('student', 'studentsAdded'),
+      L('enrol', 'enrolled'), L('family'), L('expense', 'myExpense'), L('close', 'myShiftClosed')] },
+    { id: 'teacher', icon: 'cap', roles: ['teacher'], lessons: [
+      L('first', 'passwordChanged'), L('roll', 'myCheckin'), L('student', 'studentsAdded'), L('enrol', 'enrolled'), L('exam', 'examMade'),
+      L('followup', 'myFollowup'), L('cards'), L('debts'), L('report')] },
+    { id: 'assistant', icon: 'users', roles: ['assistant'], lessons: [
+      L('first', 'passwordChanged'), L('checkin', 'myCheckin'), L('roll', 'myCheckin'), L('student', 'studentsAdded'), L('cards')] },
+    { id: 'accountant', icon: 'sheet', roles: ['accountant'], lessons: [
+      L('first', 'passwordChanged'), L('expense', 'myExpense'), L('void'), L('close', 'myShiftClosed'), L('settle', 'settlementApproved'), L('report'), L('debts')] },
+    { id: 'viewer', icon: 'eye', roles: ['viewer'], lessons: [L('first', 'passwordChanged'), L('student', 'studentsAdded'), L('report'), L('debts')] }
+  ];
+  // ready-made profiles keep their English name on the person (auth.BUILTIN_PROFILES)
+  var ROLE_PATH = { 'Administrator': 'admin', 'Centre manager': 'admin', 'Front desk': 'desk', 'Teacher': 'teacher', 'Assistant': 'assistant',
+    'Accountant': 'accountant', 'Viewer': 'viewer' };
+  var facts = null, factsAt = 0;
+  function loadFacts(force) {
+    if (!force && facts && Date.now() - factsAt < 15000) return Promise.resolve(facts);
+    return HS.get('/api/c/guide-facts').then(function (f) { facts = f || {}; factsAt = Date.now(); return facts; }, function () { return facts || {}; });
+  }
+  function defaultPath() {
+    var me = HS.me || {}, id = ROLE_PATH[me.role];
+    if (!id) id = HS.can('users.manage') ? 'admin' : HS.can('money.collect') ? 'desk' : HS.can('marks.enter') ? 'teacher' : HS.can('door.use') ? 'assistant'
+      : HS.can('expenses.add') ? 'accountant' : 'viewer';
+    return id;
+  }
+  function pathOf(id) { return PATHS.filter(function (p) { return p.id === id; })[0] || PATHS.filter(function (p) { return p.id === defaultPath(); })[0]; }
+  function myPath() { return pathOf((HS.prefs.data || {}).path || defaultPath()); }
+  function guideOf(id) { return GUIDES.filter(function (g) { return g.id === id; })[0]; }
+  // the lessons this person may do (a guide they have no right for is left out), each with done / here
+  function lessons(p, f) {
+    var doneGuides = (HS.prefs.data && HS.prefs.data.guidesDone) || {}, out = [], here = -1;
+    p.lessons.forEach(function (x) {
+      var g = guideOf(x.guide); if (!g || !allowed(g)) return;
+      var done = x.fact ? !!(f || {})[x.fact] : !!doneGuides[x.guide];
+      if (!done && here < 0) here = out.length;
+      out.push({ g: g, fact: x.fact, done: done });
+    });
+    if (here >= 0) out[here].here = true;
+    return out;
+  }
+  function pathHTML(p, f) {
+    var ls = lessons(p, f), n = ls.filter(function (x) { return x.done; }).length, cur = ls.filter(function (x) { return x.here; })[0];
+    return '<section class="card path" data-path="' + p.id + '"><header><span class="tile-ic">' + HS.icon(p.icon) + '</span><div class="grow"><small class="faint">' + HS.esc(HS.t('path.title')) + '</small>' +
+        '<h2>' + HS.esc(HS.t('path.' + p.id + '.t')) + '</h2><p class="muted">' + HS.esc(HS.t('path.' + p.id + '.d')) + '</p></div>' +
+        '<span class="badge ' + (cur ? 'signal' : 'ok') + ' num">' + HS.esc(HS.t('path.progress', { n: n, m: ls.length })) + '</span></header>' +
+      '<div class="meter big" aria-hidden="true"><i style="width:' + (ls.length ? Math.round(n * 100 / ls.length) : 100) + '%"></i></div>' +
+      (cur ? '' : '<div class="tip ok">' + HS.icon('flag') + '<span>' + HS.esc(HS.t('path.complete')) + '</span></div>') +
+      '<ol class="path-list">' + ls.map(function (x, k) {
+        return '<li class="' + (x.done ? 'ok' : x.here ? 'here' : '') + '"' + (x.here ? ' aria-current="step"' : '') + '><span class="tick">' + (x.done ? HS.icon('check', 'sm') : '<b class="num">' + (k + 1) + '</b>') + '</span>' +
+          '<div class="grow"><b>' + HS.esc(HS.t('gd.' + x.g.id + '.t')) + '</b>' + (x.here ? ' <span class="badge signal">' + HS.esc(HS.t('path.here')) + '</span>' : '') +
+          '<small class="muted">' + HS.esc(HS.t('gd.' + x.g.id + '.d')) + '</small></div>' +
+          '<button class="btn sm' + (x.here ? ' primary' : '') + '" data-guide="' + x.g.id + '">' + HS.icon('compass', 'sm') + HS.esc(HS.t(x.done ? 'path.again' : 'path.start')) + '</button></li>';
+      }).join('') + '</ol>' +
+      '<footer class="row wrap"><label class="field-inline"><span class="faint">' + HS.esc(HS.t('path.choose')) + '</span><select class="input" data-pathpick>' +
+        PATHS.map(function (q) { return '<option value="' + q.id + '"' + (q.id === p.id ? ' selected' : '') + '>' + HS.esc(HS.t('path.' + q.id + '.t')) + '</option>'; }).join('') +
+      '</select></label></footer></section>';
+  }
+  // the first page: one card with the next lesson, until the path is complete (it can be hidden)
+  function nextCardHTML(p, f) {
+    var ls = lessons(p, f), cur = ls.filter(function (x) { return x.here; })[0];
+    if (!cur || (HS.prefs.data && HS.prefs.data.pathHidden)) return '';
+    var n = ls.filter(function (x) { return x.done; }).length, k = ls.indexOf(cur) + 1;
+    return '<div class="row wrap path-next"><span class="tile-ic">' + HS.icon('compass') + '</span><div class="grow"><b>' + HS.esc(HS.t('path.continue')) + '</b>' +
+      '<small class="muted">' + HS.esc(HS.t('path.next', { n: k, m: ls.length, lesson: HS.t('gd.' + cur.g.id + '.t') })) + '</small>' +
+      '<div class="meter" aria-hidden="true"><i style="width:' + Math.round(n * 100 / ls.length) + '%"></i></div></div>' +
+      '<button class="btn primary sm" data-guide="' + cur.g.id + '">' + HS.icon('compass', 'sm') + HS.esc(HS.t('path.start')) + '</button>' +
+      '<a class="btn sm" href="#/help?view=path">' + HS.esc(HS.t('path.all')) + '</a><button class="btn ghost sm" data-pathhide>' + HS.esc(HS.t('path.hide')) + '</button></div>';
+  }
+  document.addEventListener('change', function (e) {
+    var pick = e.target.closest && e.target.closest('[data-pathpick]'); if (!pick) return;
+    HS.prefs.data.path = pick.value; HS.prefs.save(); if (HS.rerender) HS.rerender();
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest || !e.target.closest('[data-pathhide]')) return;
+    HS.prefs.data.pathHidden = true; HS.prefs.save(); var c = e.target.closest('[data-pathcard]'); if (c) c.innerHTML = '';
+  });
+
   function allowed(g) { return !g.perm || HS.can(g.perm); }
   function guideFor(sid) { var id = SIT_GUIDE[sid]; return GUIDES.filter(function (g) { return g.id === id && allowed(g); })[0]; }
   function label(key) { return HS.has(key) ? HS.t(key) : key; }
@@ -224,7 +324,7 @@
       var g = C.g; if (!g) return;
       unhot(); C.g = null;
       var h = document.getElementById('coach'); if (h) { h.className = ''; h.innerHTML = ''; }
-      if (finished && g) { var done = HS.prefs.data.guidesDone || {}; done[g.id] = 1; HS.prefs.data.guidesDone = done; HS.prefs.save(); HS.toast(HS.t('guide.finished'), 'ok'); }
+      if (finished && g) { factsAt = 0; var done = HS.prefs.data.guidesDone || {}; done[g.id] = 1; HS.prefs.data.guidesDone = done; HS.prefs.save(); HS.toast(HS.t('guide.finished'), 'ok'); }
     },
     active: function () { return !!C.g; }
   };
@@ -263,7 +363,20 @@
       (guideFor(x[0]) ? '<button class="btn sm primary" data-guide="' + guideFor(x[0]).id + '">' + HS.icon('compass', 'sm') + HS.esc(HS.t('guide.start')) + '</button>' : '') + '</div></div></details>';
   }
   HS.guides = {
-    list: GUIDES, situations: SITUATIONS, sitGuide: SIT_GUIDE, cats: CATS, kinds: KINDS, rich: rich,
+    list: GUIDES, situations: SITUATIONS, sitGuide: SIT_GUIDE, cats: CATS, kinds: KINDS, rich: rich, paths: PATHS, roles: ROLE_PATH,
+    lessons: lessons, myPath: myPath, loadFacts: loadFacts,
+    // the Help page's first view: my path, filled once the facts arrive
+    pathShell: function () { return '<div data-pathfull><div class="skeleton" style="height:16rem"></div></div>'; },
+    fillPath: function (root) {
+      var box = root.querySelector('[data-pathfull]'); if (!box) return;
+      loadFacts(true).then(function (f) { if (box.isConnected !== false) box.innerHTML = pathHTML(myPath(), f); });
+    },
+    // the overview card: next lesson of my path
+    fillNext: function (root) {
+      var box = root.querySelector('[data-pathcard]'); if (!box) return;
+      loadFacts().then(function (f) { if (box.isConnected !== false) box.innerHTML = nextCardHTML(myPath(), f); });
+    },
+    pathHTML: pathHTML, nextCardHTML: nextCardHTML,
     // guides that act on this page first, then the rest; each category in its own block
     html: function (forPage) {
       var list = GUIDES.filter(allowed), mine = forPage ? list.filter(function (g) { return g.steps.some(function (s) { return pageOf(s.page) === forPage; }); }) : [];
