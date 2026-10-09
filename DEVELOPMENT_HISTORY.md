@@ -13,6 +13,8 @@ profile usable, and a personal link never carries an administrator right. New: S
 **Result:** Hessa passed the gate with no finding (it already carried the BAMS fixes, e.g. a new person starting as Viewer).
 **Tests:** `test_access_gate` (4), browser `test_who_can_do_what_and_a_new_person_starts_as_viewer`.
 **Lesson:** a copied engine stays correct only if the rules are copied as a test too.
+**Also found:** `test_sample` failed every Friday (it failed on CI and here on Friday 2026-10-09): the sample centre's slots use
+days 0–5 (Saturday to Thursday), so on Friday nobody is checked in. The test now expects 0 on Friday and more than 0 on other days.
 
 ## The dashboard's quick-access rail (2026-10-08)
 

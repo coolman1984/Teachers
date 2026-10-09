@@ -121,7 +121,9 @@ class SampleApiTest(unittest.TestCase):
             self.assertEqual(len({s['code'] for s in state['students']}),421)
             start=time.perf_counter();dash=client.get('/api/c/dashboard');dashboard_seconds=time.perf_counter()-start
             self.assertEqual(dash['groups'],24);self.assertGreater(dash['monthMoney'],0);self.assertGreater(dash['monthExpenses'],0)
-            self.assertGreater(dash['checkedIn'],0)
+            # the sample centre is closed on Friday (its slots use days 0-5, Saturday to Thursday): no session, nobody checked in
+            if date.today().weekday()==4: self.assertEqual(dash['checkedIn'],0)
+            else: self.assertGreater(dash['checkedIn'],0)
             risk=client.get('/api/c/risk')
             self.assertGreaterEqual(len(risk),10);self.assertLessEqual(len(risk),40)
             signals={g['signal'] for g in client.get('/api/c/reports?ym='+date.today().strftime('%Y-%m'))['profitability']}
