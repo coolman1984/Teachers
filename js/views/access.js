@@ -15,7 +15,11 @@
   var BUILTIN = { 'full-access': 'Centre manager', administrator: 'Administrator', secretary: 'Front desk', teacher: 'Teacher', assistant: 'Assistant', accountant: 'Accountant', viewer: 'Viewer' };
   function roleLabel(name) {
     if (!name || name === 'Custom') return HS.t('acc.custom');
-    for (var id in BUILTIN) if (BUILTIN[id] === name && HS.has('prof.' + id)) return HS.t('prof.' + id);
+    // by the profile's stable id: a renamed ready-made profile frees its English name, and another profile given that name
+    // must not borrow the translation of rights it does not have
+    var p = cache && cache.users.profiles.filter(function (x) { return x.name === name; })[0];
+    if (p) return BUILTIN[p.id] === name && HS.has('prof.' + p.id) ? HS.t('prof.' + p.id) : name;
+    for (var id in BUILTIN) if (BUILTIN[id] === name && HS.has('prof.' + id)) return HS.t('prof.' + id);   // a deleted ready-made profile
     return name;
   }
   HS.roleLabel = roleLabel;
@@ -129,10 +133,14 @@
         }).join('');
       }).join('') + '</tbody></table></div>';
   }
+  // printed across, small and wrapping, so every profile column stays on the paper even with many custom profiles
+  var MATRIX_PAGE = '@page { size: A4 landscape; margin: 8mm; } #print-sheet .tbl.matrix { width: 100%; table-layout: fixed; font-size: 7.5pt; } ' +
+    '#print-sheet .tbl.matrix th, #print-sheet .tbl.matrix td { white-space: normal; overflow-wrap: anywhere; padding: 1.5pt 3pt; } ' +
+    '#print-sheet .tbl.matrix th:first-child, #print-sheet .tbl.matrix td:first-child { width: 26%; } #print-sheet .table-wrap { overflow: visible; }';
   function openMatrix() {
     var el = HS.dialog({ title: HS.t('acc.matrix'), wide: true, body: '<p class="muted">' + HS.esc(HS.t('acc.matrix.h')) + '</p>' + matrixHTML(),
       footer: '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('acc.matrix.print')) + '</button><button class="btn primary" data-close>' + HS.esc(HS.t('common.close')) + '</button>' });
-    el.querySelector('[data-print]').addEventListener('click', function () { HS.printHTML('<h1>' + HS.esc(HS.t('acc.matrix')) + '</h1>' + matrixHTML()); });
+    el.querySelector('[data-print]').addEventListener('click', function () { HS.printHTML('<h1>' + HS.esc(HS.t('acc.matrix')) + '</h1>' + matrixHTML(), MATRIX_PAGE); });
   }
 
   /* ---------- profiles ---------- */

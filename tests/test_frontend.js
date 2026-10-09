@@ -484,6 +484,8 @@ test('a new person: the profile list shows the profile whose ticks are shown; re
     assert.ok(!opened.body.includes('data-perm="money.view" checked'));
     assert.equal(HS.roleLabel('Front desk'), HS.t('prof.secretary'));
     assert.equal(HS.roleLabel('My own profile'), 'My own profile');
+    profiles[1].name = 'Centre manager'; profiles[0].name = 'Old managers';   // a renamed ready-made name reused by another profile
+    assert.equal(HS.roleLabel('Centre manager'), 'Centre manager');          // keeps its own name, never the manager's translation
     assert.equal(HS.roleLabel(''), HS.t('acc.custom'));
   }
 });
