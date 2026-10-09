@@ -13,6 +13,12 @@ profile usable, and a personal link never carries an administrator right. New: S
 **Result:** Hessa passed the gate with no finding (it already carried the BAMS fixes, e.g. a new person starting as Viewer).
 **Tests:** `test_access_gate` (4), browser `test_who_can_do_what_and_a_new_person_starts_as_viewer`.
 **Lesson:** a copied engine stays correct only if the rules are copied as a test too.
+**Also fixed (CI red on `main` since #23):** with the system font, the GitHub runner (Linux) draws DejaVu Sans, much wider than
+the fonts here. At XL size on a 360 px phone the backup and "Check my data now" buttons left their card headers and the gateway's
+"Copy the office secret" button grew wider than the screen. Card headers now wrap, the gateway step's column and its inputs and
+buttons may shrink and wrap. Reproduced here by forcing DejaVu Sans (393/378/369 px, the runner's numbers); new
+`test_acceptance` test `test_a2_settings_fit_a_phone_with_a_wide_linux_font` fails without the CSS and passes with it.
+**Lesson:** a layout test that depends on the machine's fonts must also run with the widest font a customer may have.
 **Also found:** `test_sample` failed every Friday (it failed on CI and here on Friday 2026-10-09): the sample centre's slots use
 days 0–5 (Saturday to Thursday), so on Friday nobody is checked in. The test now expects 0 on Friday and more than 0 on other days.
 

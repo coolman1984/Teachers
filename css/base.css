@@ -149,8 +149,8 @@ button { cursor: pointer; }
 .card { background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-2); box-shadow: var(--shadow-1); padding: var(--pad); }
 .card.lift { transition: transform var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease); }
 .card.lift:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); }
-.card > header { display: flex; align-items: center; gap: .6rem; margin-bottom: .9rem; }
-.card > header h3 { flex: 1; }
+.card > header { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: .9rem; }
+.card > header h3 { flex: 1 1 12rem; min-width: 0; }   /* a wide font (DejaVu on Linux) moves the button under the title, never off a phone */
 .grid { display: grid; gap: var(--gap); }
 .grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr)); }
 .grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr)); }
@@ -503,7 +503,9 @@ html[dir="rtl"] #slides .track section { direction: rtl; }
 /* Settings → Parent links: the four setup steps, done ones ticked */
 .gw-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .9rem; }
 .gw-step { display: flex; gap: .8rem; align-items: flex-start; }
-.gw-step > .grow { min-width: 0; display: grid; gap: .35rem; }
+.gw-step > .grow { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.gw-step .row > .input { min-width: 0; flex: 1 1 10rem; }
+.gw-step .btn { white-space: normal; max-width: 100%; text-align: center; }   /* long labels at XL font wrap inside the button */   /* the address box shrinks on a phone instead of pushing the step wider */
 .gw-step p { margin: 0; }
 .gw-n { flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
 .gw-step.done .gw-n { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
