@@ -10,6 +10,12 @@ Recovering: [operations](OPERATIONS.md).
 Start Hessa on the centre PC and open http://localhost:8095 in Google Chrome.
 Use the administrator account created for your local installation.
 
+## People and permissions
+Settings → People & access. Every person signs in with their own name. Choose a **profile** (Front desk, Teacher, Assistant,
+Accountant, Viewer…) and the boxes are ticked for you; change single ticks if needed. The orange group (administrator rights)
+is never ticked by "Select all" and is never possible with a personal link. **Profiles → Who can do what** shows every
+permission against every profile in one table and prints it - check it once after changing a profile.
+
 ## Try the fictional centre
 
 Overview → **Load sample centre** loads the demonstration records. Settings → Data →

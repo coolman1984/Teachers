@@ -41,6 +41,9 @@ Read `CLAUDE.md` (rules), then `docs/EXECUTION_PLAN.md`, `TASKS.md`, and `DEVELO
   `HS.audit.securityDetail` (add a pattern when you add a sentence - `SecurityWordsTest` fails otherwise).
 - Phone layout: grids use `minmax(min(Xrem, 100%), 1fr)`; check with `test_acceptance` (360 px, XL font, both languages, dark).
 - Receipts: `HS.printReceipt` measures the page; paper per PC in prefs.
+- Permissions: a new permission, page or ready-made profile needs its words in both dictionaries (`perm.*`, `permgroup.*`,
+  `prof.*`); `tests/test_access_gate.py` runs the factory gate (`server/afaccess.py`, update it from Apps-Factory with
+  `python scripts/vendor_access.py ../Teachers`). Standard: `Apps-Factory/docs/ACCESS_AND_ADMINISTRATION_STANDARD.md`.
 
 ## Checks before a push
 ```

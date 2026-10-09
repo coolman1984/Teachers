@@ -1061,3 +1061,7 @@ body > .lic-bar ~ .auth, body:has(> .lic-bar) .auth { padding-bottom: 5.5rem; }
 .rail-btn .q-ic { width: 1.9rem; height: 1.9rem; border-radius: .6rem; display: grid; place-items: center; background: var(--signal-soft); color: var(--ink); flex: none; }
 .rail-btn .kbd { opacity: .7; }
 
+
+/* who can do what (factory access standard): every permission against every profile */
+.tbl.matrix td.c, .tbl.matrix th.c { text-align: center; }
+.tbl.matrix .group-row th { background: var(--surface-2); font-weight: 700; }

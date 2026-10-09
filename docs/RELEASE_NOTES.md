@@ -1,6 +1,12 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](../LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+# التغييرات الجاية (لسه ما اتنشرتش)
+
+## جديد
+- **جدول "مين يقدر يعمل إيه":** من الإعدادات ← الأشخاص والصلاحيات ← ملفات الصلاحيات. كل صلاحية قدام كل ملف في جدول واحد، وتقدر تطبعه.
+- البرنامج بيتأكد في كل اختبار إن قواعد الصلاحيات سليمة (نفس قواعد مصنع البرامج): صلاحيات المدير منفصلة، وملف المدير معاه كل حاجة، وكل صفحة ليها صلاحية.
+
 # حِصّة 1.4.1
 
 ## تصليحات صغيرة بعد المراجعة

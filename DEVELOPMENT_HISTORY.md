@@ -1,6 +1,19 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Factory access standard: the gate and "Who can do what" (2026-10-09)
+
+**Why:** the owner made BAMS's people-and-permissions model a factory standard (`Apps-Factory/docs/ACCESS_AND_ADMINISTRATION_STANDARD.md`,
+controls IAM-08…IAM-12) so Hessa, Trip Orders and Al-Store follow one set of rules instead of drifting copies.
+**What:** `server/afaccess.py` (vendored from `Apps-Factory/packages/af-access`) and `tests/test_access_gate.py` check the
+catalogue on every run: one administrator group, the locked Administrator profile with every right, every menu page
+(`js/shell.js`) opened by a known permission, every permission/group/profile named in English and Formal Arabic, every
+profile usable, and a personal link never carries an administrator right. New: Settings → People & access → Profiles →
+**Who can do what**, a table of every permission against every profile, printable (`HS.printHTML`).
+**Result:** Hessa passed the gate with no finding (it already carried the BAMS fixes, e.g. a new person starting as Viewer).
+**Tests:** `test_access_gate` (4), browser `test_who_can_do_what_and_a_new_person_starts_as_viewer`.
+**Lesson:** a copied engine stays correct only if the rules are copied as a test too.
+
 ## The dashboard's quick-access rail (2026-10-08)
 
 **Why:** the owner wants every form one click from the dashboard, on the side (the left in Arabic), with information and alerts,
