@@ -26,9 +26,10 @@
   function again() { clearInterval(poll); HS.emit('auth-rerender'); }
 
   /* ---------- 1. a brand-new PC: first PC or join ---------- */
-  function chooseScreen() {
+  function chooseScreen(trial) {
     var root = screen('<div><h2>' + HS.esc(HS.t('join.title')) + '</h2><p class="muted" style="margin-top:.4rem">' + HS.esc(HS.t('join.sub')) + '</p></div>' +
-      '<div class="choice-list">' + choice('create', 'user', HS.t('join.create'), HS.t('join.create.b'), true) + choice('join', 'plug', HS.t('join.join'), HS.t('join.join.b')) + '</div>');
+      '<div class="choice-list">' + (trial ? choice('trial', 'play', HS.t('trial.choice'), HS.t('trial.choice.b', trial), true) : '') +
+      choice('create', 'user', HS.t('join.create'), HS.t('join.create.b'), !trial) + choice('join', 'plug', HS.t('join.join'), HS.t('join.join.b')) + '</div>');
     root.querySelector('.choice-list').addEventListener('click', function (e) {
       var b = e.target.closest('[data-c]'); if (!b) return;
       F.mode = b.dataset.c; again();
@@ -127,8 +128,8 @@
     if (!status.local) { remoteScreen(); return true; }
     if (node.role === 'member' || node.join) { receivingScreen(); return true; }
     if (F.mode === 'join') { joinScreen(node.name || ''); return true; }
-    if (F.mode === 'choose') { chooseScreen(); return true; }
-    return false;                                    // 'create': the administrator form of auth.js
+    if (F.mode === 'choose') { chooseScreen(status.trial); return true; }
+    return false;                                    // 'create': the administrator form of auth.js; 'trial': its sign-in form
   };
   F.takeNotice = function () { var n = F.notice; F.notice = ''; return n; };
 })();

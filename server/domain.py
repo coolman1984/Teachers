@@ -41,6 +41,8 @@ SETTLE_MODELS = ('percent', 'rent_session', 'rent_student', 'rent_month', 'mixed
 # student code ranges per PC (by the order the PCs joined), so PCs working offline never hand out the same code
 CODE_RANGES = [(10000, 49999), (50000, 69999), (70000, 79999), (80000, 89999), (90000, 99999)]
 
+EXTRA_PAGES = ('exams', 'followup', 'settlements', 'devices')   # pages the basic menu leaves out until the centre turns them on
+
 DEFAULTS = {
     'lateMinutes': 15,             # arriving later than this after the start = late
     'doorEarlyMinutes': 90,        # the door recognises a session this long before it starts
@@ -52,6 +54,10 @@ DEFAULTS = {
     'riskCall': 35,                # early warning: "call today" from this score
     'riskHigh': 60,
     'currency': 'EGP',
+    'watchFrom': 8,                # the owner's watch (server/watch.py): working hours, changes outside them are flagged
+    'watchTo': 23,
+    'watchBig': 1000,              # reversals and expenses from this amount are flagged higher
+    'watchOwedUnits': 2,           # attending while owing this many sessions/months and no payment for 30 days
 }
 
 

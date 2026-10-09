@@ -6,7 +6,7 @@
   'use strict';
   var HS = window.HS, U = HS.ui, A = HS.audit;
   var PAGE = 100;
-  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad',
+  var TONE = { 'remote-refused': 'bad', 'login-failed': 'bad', 'login-blocked': 'bad', 'account-locked': 'bad', 'password-change-failed': 'bad', 'login-link-failed': 'bad', 'access-denied': 'bad', 'license-refused': 'bad', 'license-activated': 'ok',
     'user-unlocked': 'warn', 'forced-logout': 'warn', 'password-reset': 'warn', 'admin-reset': 'warn', 'user-disabled': 'warn', 'user-deleted': 'warn',
     'profile-deleted': 'warn', 'link-created': 'warn', 'node-enrolled': 'warn', 'node-revoked': 'warn', 'pairing-code': 'warn', 'pairing-request': 'warn',
     'pairing-rejected': 'warn', 'pc-adding-open': 'warn', 'authority-exported': 'warn', 'authority-imported': 'warn', 'backup-set': 'warn', 'backup-removed': 'warn',
@@ -15,21 +15,25 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused', 'owner-phone', 'support'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
-  var filters = { changes: blank(), security: blank() };
+  var filters = { changes: blank(), clicks: blank(), security: blank() };
+  // what people clicked and opened (js/app.js HS.track): administrators only - typed values are never recorded
+  var CLICK_TYPES = ['click', 'page', 'save', 'save-failed', 'denied', 'print', 'export', 'js-error', 'server-error', 'login'];
+  var CLICK_TONE = { 'save-failed': 'bad', denied: 'bad', 'js-error': 'bad', 'server-error': 'bad', save: 'ok', page: 'info' };
   function blank() { return { q: '', user: '', typ: '', node: '', from: '', to: '' }; }
   function tabs() {
     var list = [];
     if (HS.can('logs.view')) list.push('changes');
+    if (HS.can('logs.activity') && HS.me && HS.me.admin) list.push('clicks');
     if (HS.can('logs.security') && HS.me && HS.me.admin) list.push('security');
     return list;
   }
   function url(kind, f, limit, offset) {
     var p = ['limit=' + limit, 'offset=' + offset];
     [['q', f.q], ['user', f.user], ['type', f.typ], ['node', f.node], ['from', f.from], ['to', f.to]].forEach(function (x) { if (x[1]) p.push(x[0] + '=' + encodeURIComponent(x[1])); });
-    return (kind === 'security' ? '/api/security?' : '/api/audit?') + p.join('&');
+    return (kind === 'security' ? '/api/security?' : kind === 'clicks' ? '/api/activity?' : '/api/audit?') + p.join('&');
   }
   function isoToday() { var d = new Date(); return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); }
   function short(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
@@ -41,6 +45,14 @@
      written. A list of changes ("User name: a -> b; Role: …") is translated part by part. */
   var DETAIL = [
     [/^First administrator account created on this PC \(it is now the administrator PC\)$/, 'setup'],
+    [/^Trial administrator created with the trial password - change it before real use$/, 'trial'],
+    [/^Password recovered on the centre PC with the seller's reset code$/, 'recovered'],
+    [/^Activation code refused: (\w+)$/, 'licRefused'],
+    [/^Activated until (\S+)$/, 'licOk'],
+    [/^Password reset code refused$/, 'resetRefused'],
+    [/^Trial password refused away from the centre PC$/, 'trialRemote'],
+    [/^Owner phone added: (.+)$/, 'ownerPhoneAdded'],
+    [/^Owner phone removed$/, 'ownerPhoneRemoved'],
     [/^Unknown user name$/, 'unknownUser'],
     [/^Account is locked until (.+)$/, 'lockedUntil'],
     [/^Wrong password \(attempt (\d+) of (\d+)\)$/, 'wrongPassword'],
@@ -87,6 +99,14 @@
     [/^Signed in from outside the centre$/, 'remoteLogin'],
     [/^Sign-in from outside the centre refused: no permission$/, 'remoteRefused'],
     [/^Work from outside the centre switched on$/, 'remoteOn'],
+    [/^AI key saved$/, 'aiKeySaved'],
+    [/^AI key removed$/, 'aiKeyRemoved'],
+    [/^Link to the seller saved$/, 'supLinkSaved'],
+    [/^Link to the seller removed$/, 'supLinkRemoved'],
+    [/^Help request sent to the seller$/, 'supTicket'],
+    [/^Seller support window opened for (\d+) minutes$/, 'supWindowOpen'],
+    [/^Seller support window ended$/, 'supWindowEnd'],
+    [/^Seller repair run: ([a-z_]+)$/, 'supRepair'],
     [/^Work from outside the centre switched off$/, 'remoteOff']
   ];
   var PART = [
@@ -122,6 +142,13 @@
 
   /* ---------- one entry ---------- */
   function changeRow(r) { return A.entryHTML(r, { hist: true }); }
+  function clickRow(r) {
+    var k = 'act.c.' + r.type, tone = CLICK_TONE[r.type] || '';
+    return '<li class="log-row' + (tone === 'bad' ? ' is-bad' : '') + '"><div class="log-head"><span class="badge ' + tone + '">' + HS.esc(HS.has(k) ? HS.t(k) : r.type) + '</span>' +
+      '<b class="log-name" dir="auto">' + HS.esc(short(r.target || r.action, 80)) + '</b><span class="grow"></span><time class="faint num">' + HS.esc(String(r.ts || '').replace('T', ' ')) + '</time></div>' +
+      '<div class="log-sub faint">' + HS.esc(r.user || '') + ' · <bdi dir="ltr">' + HS.esc(short(r.page || '', 60)) + '</bdi>' + (r.ip ? ' · <bdi dir="ltr">' + HS.esc(r.ip) + '</bdi>' : '') + ' · ' + HS.esc(r.node_name || '') + '</div>' +
+      (r.detail ? '<div class="log-sum faint" dir="auto">' + HS.esc(short(r.detail, 300)) + '</div>' : '') + '</li>';
+  }
   function securityRow(r) {
     var k = 'sec.' + r.event, tone = TONE[r.event] || '';
     return '<li class="log-row' + (tone === 'bad' ? ' is-bad' : '') + '"><div class="log-head"><span class="badge ' + tone + '">' + HS.esc(HS.has(k) ? HS.t(k) : r.event) + '</span>' +
@@ -140,6 +167,8 @@
       '<select class="input" data-f="user" aria-label="' + HS.esc(HS.t('f.user')) + '" style="width:auto">' + opt('', HS.t('act.user'), f.user) + '</select>' +
       (tab === 'changes' ? '<select class="input" data-f="typ" aria-label="' + HS.esc(HS.t('act.op')) + '" style="width:auto">' + opt('', HS.t('act.op'), f.typ) +
         ['insert', 'update', 'delete'].map(function (o) { return opt(o, A.opLabel(o), f.typ); }).join('') + '</select>'
+        : tab === 'clicks' ? '<select class="input" data-f="typ" aria-label="' + HS.esc(HS.t('act.ev')) + '" style="width:auto">' + opt('', HS.t('act.ev'), f.typ) +
+        CLICK_TYPES.map(function (e) { return opt(e, HS.t('act.c.' + e), f.typ); }).join('') + '</select>'
         : '<select class="input" data-f="typ" aria-label="' + HS.esc(HS.t('act.ev')) + '" style="width:auto">' + opt('', HS.t('act.ev'), f.typ) +
         EVENTS.map(function (e) { return opt(e, HS.t('sec.' + e), f.typ); }).join('') + '</select>') +
       '<select class="input" data-f="node" aria-label="' + HS.esc(HS.t('f.pc')) + '" style="width:auto" hidden>' + opt('', HS.t('act.pc'), f.node) + '</select>' +
@@ -166,7 +195,8 @@
     }
     body.innerHTML = '<div class="row wrap" style="margin-bottom:.8rem"><span class="badge">' + HS.esc(HS.t('act.count', { shown: HS.fmt.num(rows.length), total: HS.fmt.num(state.total) })) + '</span>' +
       (fails ? '<span class="badge bad">' + HS.esc(HS.t('act.fail.n', { n: HS.fmt.num(fails) })) + '</span>' : '') + '</div>' +
-      '<ol class="log-list">' + rows.map(tab === 'security' ? securityRow : changeRow).join('') + '</ol>' +
+      (tab === 'clicks' ? '<div class="tip">' + HS.icon('eye') + '<span>' + HS.esc(HS.t('act.clicks.b')) + '</span></div>' : '') +
+      '<ol class="log-list">' + rows.map(tab === 'security' ? securityRow : tab === 'clicks' ? clickRow : changeRow).join('') + '</ol>' +
       (rows.length < state.total ? '<div style="margin-top:1rem;text-align:center"><button type="button" class="btn" data-more>' + HS.esc(HS.t('act.more')) + '</button></div>' : '') +
       '<p class="faint" style="margin-top:1.2rem">' + HS.icon('lock', 'sm') + ' ' + HS.esc(HS.t('act.kept')) + '</p>';
   }
@@ -184,7 +214,11 @@
     var kind = tab, f = filters[tab];
     return U.run(HS.get(url(kind, f, 1000, 0))).then(function (r) {
       var rows = r.rows || [], lines;
-      if (kind === 'security') {
+      if (kind === 'clicks') {
+        lines = [[HS.t('f.time'), HS.t('f.user'), HS.t('act.ev'), HS.t('act.target'), HS.t('f.what'), HS.t('act.ip'), HS.t('f.pc'), HS.t('act.detail')]].concat(rows.map(function (x) {
+          return [x.ts, x.user, HS.has('act.c.' + x.type) ? HS.t('act.c.' + x.type) : x.type, x.target, x.page, x.ip, x.node_name, x.detail];
+        }));
+      } else if (kind === 'security') {
         lines = [[HS.t('f.time'), HS.t('f.user'), HS.t('act.event'), HS.t('act.target'), HS.t('act.ip'), HS.t('f.pc'), HS.t('act.detail')]].concat(rows.map(function (x) {
           return [x.ts, x.user, HS.has('sec.' + x.event) ? HS.t('sec.' + x.event) : x.event, x.target, x.ip, x.node_name, A.securityDetail(x.detail)];
         }));
@@ -193,7 +227,7 @@
           return [x.ts, x.user, x.node_name, x.label, A.opLabel(x.op), A.entity(x.entity), A.name(x), A.lines(x).join(' | ')];
         }));
       }
-      U.download('hessa-' + (kind === 'security' ? 'security' : 'changes') + '-' + isoToday() + '.csv', U.csv(lines), 'text/csv;charset=utf-8');
+      U.download('hessa-' + kind + '-' + isoToday() + '.csv', U.csv(lines), 'text/csv;charset=utf-8');
       HS.toast(HS.t('act.exported', { n: HS.fmt.num(rows.length) }));
     }, function () { /* the toast says why */ });
   }

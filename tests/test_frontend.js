@@ -79,7 +79,7 @@ test('the home-screen manifest is linked and its icons exist', () => {
 test('centre navigation uses server permissions and supported routes', () => {
   const HS = startup('en');
   assert.deepEqual(Array.from(HS.pages, p => p.id),
-    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'activity', 'devices', 'settings', 'help']);
+    ['overview', 'door', 'students', 'groups', 'money', 'exams', 'followup', 'settlements', 'reports', 'watch', 'activity', 'devices', 'settings', 'help']);
   HS.me = { perms: ['students.manage'] };
   const routes = [];
   HS.go = route => routes.push(route);
@@ -224,6 +224,28 @@ test('multi-select fields escape choices, keep selection and validate empty requ
   assert.deepEqual(Array.from(HS.ui.read(root,[field]).values.subjects), ['b']);
   el.options[1].selected=false;
   assert.equal(HS.ui.read(root,[field]).missing.length, 1);
+});
+
+test('forms keep fields apart: list drawers and settings put fields in a spaced container, switches are whole rows', () => {
+  // the subject drawer and the rules tab put every field straight into a plain <form>: each label touched the box above it
+  for (const lang of ['en','ar']) {
+    const HS = startup(lang); HS.lang = lang;
+    HS.me = {perms:['rooms.manage','settings.edit']}; HS.data.state = {settings:{}, subjects:[]};
+    const sw = HS.ui.field({key:'active', label:'f.active', type:'bool', help:'set.doorSounds.h'}, true);
+    assert.ok(sw.includes('class="toggle-row" for="f-active"'));                      // the whole row toggles
+    assert.ok(sw.includes('aria-describedby="f-active-h"') && sw.includes('id="f-active-h"'));
+    assert.ok(sw.indexOf('class="lbl"') < sw.indexOf('class="switch"'));             // words first, switch at the end
+    let opened; HS.panel.open = o => { opened = o; };
+    HS.lists.edit('subjects');
+    assert.ok(opened.body.startsWith('<form class="fields" data-list-form>'));
+    const rules = HS.views.settings.render({route:{q:{tab:'rules'}}});
+    assert.equal((rules.match(/class="form-sec"/g) || []).length, 3);
+    for (const id of ['door','school','risk']) assert.ok(rules.includes(HS.esc(HS.t('set.sec.' + id))));
+    assert.ok(rules.includes('class="fields cols"') && rules.includes('class="form-foot"'));
+    assert.ok(rules.includes(HS.esc(HS.t('set.lateMinutes.h'))));
+    assert.ok(!rules.includes('set.sec.') && !rules.includes('.h<'));                 // no raw dictionary keys
+    assert.ok(HS.views.settings.render({route:{q:{tab:'messages'}}}).includes('class="fields cols pairs"'));
+  }
 });
 
 test('reference list editors hide contacts, preserve mixed settlement terms and escape names', () => {
@@ -441,4 +463,98 @@ test('the overview status card shows only what the server sent, with a tone for 
     HS.views.overview.mount(root); await new Promise(r => setImmediate(r));
     assert.equal(els['[data-status]'].innerHTML, '', 'a person with no system permissions gets no card');
   }
+});
+
+test('a new person: the profile list shows the profile whose ticks are shown; ready-made names are translated', async () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang; HS.data.state = { settings: {}, teachers: [] };
+    HS.me = { perms: ['users.manage'] };
+    const profiles = [{ id: 'full-access', name: 'Centre manager', perms: ['overview.view', 'money.view'] }, { id: 'viewer', name: 'Viewer', perms: ['overview.view'] }];
+    HS.get = async url => url === '/api/users' ? { users: [], profiles, permissions: [['Pages', [['overview.view', 'Overview'], ['money.view', 'Money']]]], authority: true } : { users: [] };
+    HS.accessTab.reset(); HS.rerender = () => {};
+    HS.accessTab.mount({ innerHTML: '', addEventListener() {} });
+    await new Promise(resolve => setImmediate(resolve));
+    let click, opened; HS.panel.open = opts => { opened = opts; };
+    HS.accessTab.mount({ addEventListener: (_, fn) => { click = fn; } });
+    click({ target: { closest: s => s === '[data-adduser]' ? {} : null } });
+    const selected = opened.body.match(/<option value="([^"]*)" selected>([^<]*)</);
+    assert.equal(selected[1], 'Viewer');                       // was the first profile (Centre manager) over the Viewer ticks
+    assert.equal(selected[2], HS.t('prof.viewer'));
+    assert.ok(opened.body.includes('data-perm="overview.view" checked'));
+    assert.ok(!opened.body.includes('data-perm="money.view" checked'));
+    assert.equal(HS.roleLabel('Front desk'), HS.t('prof.secretary'));
+    assert.equal(HS.roleLabel('My own profile'), 'My own profile');
+    assert.equal(HS.roleLabel(''), HS.t('acc.custom'));
+  }
+});
+
+test('every step-by-step guide and situation is complete in both languages and names real buttons', () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang; HS.prefs.data = {}; HS.data.state = { settings: {} };
+    const G = HS.guides;
+    assert.ok(G.list.length >= 30 && G.situations.length >= 40);
+    const ids = new Set();
+    const texts = [];
+    for (const g of G.list) {
+      assert.ok(!ids.has(g.id), 'duplicate guide ' + g.id); ids.add(g.id);
+      assert.ok(G.cats.includes(g.cat), g.id);
+      for (const k of ['t', 'd', 'ok']) { assert.ok(HS.has('gd.' + g.id + '.' + k), lang + ' gd.' + g.id + '.' + k); texts.push(HS.t('gd.' + g.id + '.' + k)); }
+      assert.ok(!HS.has('gd.' + g.id + '.' + (g.steps.length + 1)), 'text for a step that does not exist: ' + g.id);
+      g.steps.forEach((s, i) => {
+        assert.ok(G.kinds[s.k], g.id + ' kind ' + s.k);
+        assert.ok(HS.has('gd.' + g.id + '.' + (i + 1)), lang + ' gd.' + g.id + '.' + (i + 1)); texts.push(HS.t('gd.' + g.id + '.' + (i + 1)));
+      });
+    }
+    for (const x of G.situations) { for (const k of ['q', 'a']) { assert.ok(HS.has('sit.' + x[0] + '.' + k), lang + ' sit.' + x[0]); texts.push(HS.t('sit.' + x[0] + '.' + k)); } }
+    for (const t of texts) for (const m of t.matchAll(/\[\[([^\]]+)\]\]/g)) assert.ok(HS.has(m[1]), lang + ': [[' + m[1] + ']] is not a dictionary key');
+    // the library: escaped, permission-aware, nothing missing
+    HS.me = { perms: ['door.use', 'money.collect'] };
+    const html = G.html('door');
+    assert.ok(html.includes('data-guide="checkin"') && html.includes('data-guide="pay"'));
+    assert.ok(!html.includes('data-guide="people"'));                     // administrator guides only for administrators
+    assert.ok(!/undefined|\[\[|gd\.[a-z]+\.\d/.test(html), 'missing text in the guide library');
+    assert.ok(G.rich('<b>[[door.checkin]]</b>').startsWith('&lt;b&gt;<b class="ui-name">«' + HS.esc(HS.t('door.checkin'))));
+    const sit = G.situationsHTML();
+    assert.ok(!/undefined|\[\[|sit\.[a-zA-Z]+\.[qa]/.test(sit));
+  }
+});
+
+test('the subscription screens have words for every state in both languages and show the request code', () => {
+  for (const lang of ['ar', 'en']) {
+    const HS = startup(lang); HS.lang = lang;
+    for (const s of ['ok', 'warn', 'grace', 'locked', 'trial', 'trialEnded', 'clock', 'off']) {
+      assert.ok(HS.has('lic.s.' + s) && HS.has('lic.state.' + s), lang + ' ' + s);
+    }
+    for (const k of ['locked', 'trialEnded', 'clock']) assert.ok(HS.has('err.license.' + k));
+    for (const k of ['typo', 'forged', 'kind', 'otherPc', 'older', 'expired', 'clock']) assert.ok(HS.has('err.code.' + k), k);
+    for (const k of ['forged', 'otherPc', 'used', 'expired']) assert.ok(HS.has('err.reset.' + k), k);
+    HS.me = { perms: ['users.manage'], admin: false };
+    assert.ok(!HS.licenseTab.render().includes('data-lic>'));      // staff never see the request code or the activation box
+    HS.me.admin = true;
+    assert.ok(HS.licenseTab.render().includes('data-lic'));
+  }
+});
+
+test('owner 2026-10-08: daylight theme and the system font by default, no slideshow on the first sign-in', () => {
+  const fs = require('fs'), path = require('path'), js = f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8');
+  assert.match(js('prefs.js'), /DEFAULTS = \{ lang: 'ar', theme: 'daylight', font: 'system'/);
+  assert.match(js('boot.js'), /p\.theme \|\| 'daylight'/);
+  assert.match(js('boot.js'), /p\.font \|\| 'system'/);
+  assert.doesNotMatch(js('shell.js'), /welcomed\) setTimeout\(function \(\) \{ HS\.slides\.open/);
+});
+
+test('owner 2026-10-08: every problem\'s "Guide me" points to a real guide, and help reads in polished Egyptian Arabic', () => {
+  const HS = startup('ar');
+  const guides = new Set(HS.guides.list.map(g => g.id)), sits = new Set(HS.guides.situations.map(x => x[0]));
+  for (const [sid, gid] of Object.entries(HS.guides.sitGuide)) {
+    assert.ok(sits.has(sid), 'unknown situation ' + sid);
+    assert.ok(guides.has(gid), 'unknown guide ' + gid);
+  }
+  assert.ok(Object.keys(HS.guides.sitGuide).length >= 40);
+  const fs = require('fs'), path = require('path');
+  const ar = fs.readFileSync(path.join(__dirname, '..', 'js', 'i18n', 'ar.js'), 'utf8');
+  const help = ar.split('\n').filter(l => /^\s{4}'(gd|sit|hq|help|guide|sup|tour|slide)\./.test(l));
+  assert.ok(help.length > 700);
+  const heavy = /(يُرجى|نظرًا ل|يتعذّر|تعذّر|يجب عليك|الرجاء)/;
+  assert.deepEqual(help.filter(l => heavy.test(l)), []);
 });

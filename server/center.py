@@ -102,7 +102,38 @@ def atomic_operation(fn):
     return run
 
 
+# ---------------------------------------------------------------- the question bank (review G03)
+LETTERS = 'ABCDE'
+
+
+def _clean_question(q):
+    """A multiple-choice question: the text, 2 to 5 choices and the letter of the right one (and an optional explanation)."""
+    if not isinstance(q, dict):
+        raise Problem('err.question', 'Write the question, at least two choices and choose the right answer.')
+    text = str(q.get('text') or '').strip()
+    choices = [str(c or '').strip() for c in (q.get('choices') or [])] if isinstance(q.get('choices'), list) else []
+    while choices and not choices[-1]:
+        choices.pop()
+    answer = str(q.get('answer') or '').strip().upper()
+    if not text or len(text) > 2000 or not 2 <= len(choices) <= 5 or not all(choices) or any(len(c) > 400 for c in choices) \
+            or answer not in LETTERS[:len(choices)] or not answer:
+        raise Problem('err.question', 'Write the question, at least two choices and choose the right answer.')
+    return {'text': text, 'choices': choices, 'answer': answer, 'explanation': str(q.get('explanation') or '').strip()[:2000]}
+
+
 # ---------------------------------------------------------------- cleaning generic saves (lists edited in the pages)
+def _number(v, key='err.amount', msg='Write a valid amount.', low=0.0, high=None):
+    """A typed number for money, percentages and marks: finite and inside its range. float('nan') slipped through every
+    "< 0" check (NaN compares False), a negative fee made the centre owe its students, and text gave a server error."""
+    try:
+        n = float(v)
+    except (TypeError, ValueError, OverflowError):
+        raise Problem(key, msg)
+    if not math.isfinite(n) or n < low or high is not None and n > high:
+        raise Problem(key, msg)
+    return n
+
+
 def normalize_ops(store, ops, pc_index=0):
     """Clean names and mobiles on the server, give new students a code, check grades, timetables and the limits of
     school support groups. Refuses duplicates of things that must be unique (a student code, a teacher)."""
@@ -110,6 +141,14 @@ def normalize_ops(store, ops, pc_index=0):
         return ops
     reserved_codes = set()
     for op in ops:
+        if isinstance(op, dict) and op.get('op') == 'del' and op.get('e') == 'groups':
+            # a group with students in it, or money still owed either way, cannot be removed: its debts would vanish
+            gid = op.get('id')
+            ens = [e for e in store.rows('enrollments', 'group_id=?', (gid,)) if _active(e, date.today().isoformat())]
+            owed = [b for b in balances(store, store.rows('enrollments', 'group_id=?', (gid,))).values() if abs(b.get('balance') or 0) >= 0.01]
+            if ens or owed:
+                raise Problem('err.groupInUse', 'This group still has {n} student(s) or money owed. End their enrolments and settle the money first.',
+                              n=len(ens) or len(owed))
         if not isinstance(op, dict) or op.get('op') != 'put' or not isinstance(op.get('row'), dict):
             continue
         e, row = op.get('e'), op['row']
@@ -122,10 +161,15 @@ def normalize_ops(store, ops, pc_index=0):
                 number = float(row.get('value'))
             except (TypeError, ValueError):
                 raise Problem('err.setting', 'Check the setting value.')
-            upper = 100 if op['id'] in ('schoolTreasuryPct', 'schoolTeacherPct', 'riskCall', 'riskHigh') else 100000
+            upper = 100 if op['id'] in ('schoolTreasuryPct', 'schoolTeacherPct', 'riskCall', 'riskHigh') else 24 if op['id'] in ('watchFrom', 'watchTo') else 100000
             if not math.isfinite(number) or number < 0 or number > upper or op['id'] == 'schoolMaxStudents' and (number < 1 or number != int(number)):
                 raise Problem('err.setting', 'Check the setting value.')
             row['value'] = number
+        if e == 'settings' and op.get('id') == 'extras':
+            value = row.get('value')
+            if not isinstance(value, list) or any(v not in D.EXTRA_PAGES for v in value):
+                raise Problem('err.setting', 'Check the setting value.')
+            row['value'] = [p for p in D.EXTRA_PAGES if p in value]
         if e == 'teachers':
             for key in ('rentMonth', 'rentSession', 'rentStudent', 'centerPct'):
                 if row.get(key) not in (None, ''):
@@ -135,6 +179,29 @@ def normalize_ops(store, ops, pc_index=0):
                         raise Problem('err.amount', 'Write a valid amount.')
                     if not math.isfinite(value) or value < 0 or key == 'centerPct' and value > 100:
                         raise Problem('err.amount', 'Write a valid amount.')
+        if e == 'questions':
+            row.update(_clean_question(row))
+            row['source'] = row.get('source') if row.get('source') in ('manual', 'ai') else 'manual'
+        if e == 'exams' and row.get('paper'):
+            # the questions printed on this exam are a copy taken from the bank: a later change in the bank never changes an
+            # exam by itself (the teacher presses "Take the bank's version"); the answer key always follows the paper
+            if not isinstance(row['paper'], list) or len(row['paper']) > 75:
+                raise Problem('err.paper', 'An exam paper holds up to 75 questions.')
+            row['paper'] = [{**_clean_question(q), 'qid': str(q.get('qid') or '')[:40]} for q in row['paper']]
+            row['questions'] = len(row['paper'])
+            row['choices'] = max(len(q['choices']) for q in row['paper'])
+            row['answerKey'] = [q['answer'] for q in row['paper']]
+        if e == 'teachers' and 'slug' in row:
+            # the address of the teacher's public page (<gateway>/p/<slug>): empty = no public page
+            slug = str(row.get('slug') or '').strip().lower()
+            if slug and not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])', slug):
+                raise Problem('err.slug', 'Use 3 to 40 English letters, numbers or dashes for the page address.')
+            if slug:
+                with store.lock:
+                    taken = store.conn.execute('SELECT id FROM teachers WHERE deleted=0 AND slug=? AND id<>?', (slug, op.get('id'))).fetchone()
+                if taken:
+                    raise Problem('err.slugTaken', 'Another teacher already uses this page address.')
+            row['slug'] = slug
         if e in ('students', 'teachers'):
             row['nameKey'] = D.key_text(row.get('name'))
             for f in ('mobile', 'parentMobile', 'parentMobile2'):
@@ -156,7 +223,9 @@ def normalize_ops(store, ops, pc_index=0):
             if other:
                 raise Problem('err.codeTaken', 'Another student already has this code.', name=other[0])
             if row.get('discountPct') not in (None, ''):
-                row['discountPct'] = max(0.0, min(100.0, float(row['discountPct'])))
+                row['discountPct'] = _number(row['discountPct'], 'err.discount', 'The discount is a percentage from 0 to 100.', 0, 100)
+            if (row.get('discountPct') or row.get('exempt')) and len(D.norm_text(row.get('discountReason'))) < 3:
+                raise Problem('err.discountReason', 'Write why this student pays less (e.g. "second brother", "teacher\'s son").')
         if e == 'teachers':
             with store.lock:
                 other = store.conn.execute('SELECT id FROM teachers WHERE name_key=? AND deleted=0 AND id<>?', (row['nameKey'], op.get('id'))).fetchone()
@@ -168,6 +237,12 @@ def normalize_ops(store, ops, pc_index=0):
             elif not D.as_date(row['billFrom']) or row['billFrom'] < (row.get('from') or ''):
                 raise Problem('err.billFrom', 'The first billed month cannot be before the student joins.')
         if e == 'groups':
+            if row.get('fee') not in (None, ''):
+                row['fee'] = _number(row['fee'])
+            if row.get('capacity') not in (None, ''):
+                row['capacity'] = int(_number(row['capacity'], 'err.capacity', 'Write the number of seats.', 0, 10000))
+            if row.get('packageSessions') not in (None, ''):
+                row['packageSessions'] = int(_number(row['packageSessions'], 'err.capacity', 'Write the number of sessions.', 1, 500))
             _price_history(store, op, row)
             row['slots'] = D.clean_slots(row.get('slots'))
             if 'tempSlots' in row:
@@ -389,13 +464,26 @@ def find_students(store, q, scopes=None, limit=12):
     return out[:limit]
 
 
-def _family_lines(store, st, d, groups, scopes):
-    """The brothers and sisters of the student (same family key) with what each owes per group, so one parent can pay for
-    all of them at once. Only name, code and money - never contact details."""
-    if not st.get('familyKey'):
+def family_of(store, st, scopes, active_only=False):
+    """Brothers and sisters. Nothing on the screens ever set a family key, so the family payment at the door only worked
+    for the sample centre: students without a key are one family when they have the same parent mobile. Found when it is
+    read, never stored as a key - a key holding the number would show it in the change log to people without contacts.view."""
+    key = st.get('familyKey') or ''
+    pm, ok = D.norm_mobile_eg(st.get('parentMobile') or '')
+    if key:
+        where, args = 'family_key=?', (key,)
+    elif ok and pm:
+        where, args = "parent_mobile=? AND (family_key IS NULL OR family_key='')", (pm,)
+    else:
         return []
+    return store.rows('students', where + ' AND id<>?' + (' AND (active=1 OR active IS NULL)' if active_only else ''), args + (st['id'],), scopes)
+
+
+def _family_lines(store, st, d, groups, scopes):
+    """The brothers and sisters of the student (same family) with what each owes per group, so one parent can pay for
+    all of them at once. Only name, code and money - never contact details."""
     out = []
-    for sib in store.rows('students', 'family_key=? AND id<>? AND (active=1 OR active IS NULL)', (st['familyKey'], st['id']), scopes):
+    for sib in family_of(store, st, scopes, active_only=True):
         ens = [e for e in active_enrollments(store, sib['id'], d) if scopes is None or e.get('teacherId') in scopes]
         bals = balances(store, ens, d, groups, {sib['id']: sib})
         lines = [{'enrollmentId': e['id'], 'groupId': e['groupId'], 'balance': bals[e['id']]['balance'], 'due': bals[e['id']]['due'],
@@ -732,7 +820,7 @@ def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
     if not st or not g:
         raise Problem('err.notFound', 'Student or group not found.')
     ctx.need_teacher(g.get('teacherId'))
-    day = start or date.today().isoformat()
+    day = _day(start)
     if any(e['groupId'] == group_id for e in active_enrollments(ctx.store, student_id, date.fromisoformat(day))):
         raise Problem('err.alreadyEnrolled', 'The student is already in this group.')
     _check_capacity(ctx, g, day)
@@ -743,10 +831,27 @@ def enroll(ctx, student_id, group_id, start=None, fee=None, bill_from=None):
         row['billFrom'] = D.as_date(bill_from).isoformat()
     if fee not in (None, ''):
         ctx.need('students.discount')
-        row['fee'] = float(fee)
+        row['fee'] = _number(fee)
     eid = new_id('en')
     ctx.commit(f'Enrol {st["name"]} in {g["name"]}', [{'e': 'enrollments', 'id': eid, 'op': 'put', 'row': row}])
     return {'id': eid}
+
+
+def _day(value, default=None):
+    """A day as the database keeps it (YYYY-MM-DD). A missing value gives default (today); anything else that is not a real
+    day is refused - a date stored in another shape ('20260901', 'tomorrow') breaks every comparison made on it."""
+    if value in (None, ''):
+        return (default or date.today()).isoformat()
+    text = str(value).strip()
+    d = D.as_date(text) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text) else None
+    if not d:
+        raise Problem('err.date', 'Choose the day.')
+    return d.isoformat()
+
+
+def _still_active(e):
+    if (e.get('status') or 'active') != 'active' or e.get('to'):
+        raise Problem('err.notActive', 'This enrolment has already ended. Open the student again to see the current groups.')
 
 
 def _next_month(day):
@@ -776,7 +881,12 @@ def transfer(ctx, enrollment_id, to_group_id, day=None, reason=''):
     ctx.need_teacher(g.get('teacherId'))
     if e['groupId'] == to_group_id:
         raise Problem('err.sameGroup', 'Choose another group.')
-    day = day or date.today().isoformat()
+    _still_active(e)                                     # a stale screen or a second PC must not move a student twice
+    day = _day(day)
+    if day < (e.get('from') or ''):                  # the same day is fine: the wrong group was chosen this morning
+        raise Problem('err.beforeStart', 'The day cannot be before the student joined this group.')
+    if any(x['groupId'] == to_group_id for x in active_enrollments(ctx.store, e['studentId'], date.fromisoformat(day))):
+        raise Problem('err.alreadyEnrolled', 'The student is already in this group.')
     _check_capacity(ctx, g, day)
     prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     st = ctx.store.row('students', e['studentId']) or {}
@@ -801,7 +911,10 @@ def end_enrollment(ctx, enrollment_id, day=None, reason=''):
     if not e:
         raise Problem('err.notFound', 'Enrolment not found.')
     ctx.need_teacher(e.get('teacherId'))
-    day = day or date.today().isoformat()
+    _still_active(e)                                     # leaving twice would charge the months between again
+    day = _day(day)
+    if day < (e.get('from') or ''):
+        raise Problem('err.beforeStart', 'The day cannot be before the student joined this group.')
     st = ctx.store.row('students', e['studentId']) or {}
     ctx.commit(f'{st.get("name")} left the group', [{'e': 'enrollments', 'id': e['id'], 'op': 'put', 'ver': e['ver'],
                                                     'row': {**_strip(e), 'to': day, 'status': 'left', 'note': D.norm_text(reason)[:200]}}])
@@ -809,6 +922,7 @@ def end_enrollment(ctx, enrollment_id, day=None, reason=''):
 
 
 # ---------------------------------------------------------------- cash shifts
+
 def my_shift(store, user_id, node_id):
     rows = store.rows('shifts', "user_id=? AND node=? AND status='open'", (user_id, node_id))
     return rows[-1] if rows else None
@@ -859,10 +973,7 @@ def close_shift(ctx, shift_id, counted, reason=''):
         ctx.need('shifts.close', 'shifts.manage')
     if sh.get('status') != 'open':
         raise Problem('err.shiftClosed', 'This cash shift is already closed.')
-    try:
-        counted = round(float(counted), 2)
-    except (TypeError, ValueError):
-        raise Problem('err.amount', 'Write the amount counted in the drawer.')
+    counted = round(_number(counted, 'err.amount', 'Write the amount counted in the drawer.'), 2)
     summ = shift_summary(ctx.store, shift_id)
     diff = round(counted - summ['expected'], 2)
     reason = D.norm_text(reason)[:300]
@@ -1114,6 +1225,10 @@ def void_payment(ctx, payment_id, reason):
         ctx.need_teacher(p['teacherId'])
     if ctx.store.rows('payments', 'void_of=?', (payment_id,)):
         raise Problem('err.voided', 'This receipt is already reversed.')
+    if p.get('kind') == 'wallet_topup' and wallet(ctx.store, p.get('studentId')) + 0.001 < float(p.get('amount') or 0):
+        # the credit was already spent on fees: giving the cash back would leave those fees paid by nobody
+        raise Problem('err.walletSpent', 'This credit was already used to pay fees. Reverse those receipts first (available now: {have}).',
+                      have=round(wallet(ctx.store, p.get('studentId')), 2))
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
     if (p.get('method') or 'cash') == 'cash' and not shift:
         raise Problem('err.noShift', 'Open your cash shift first (the money leaves your drawer).')
@@ -1155,7 +1270,10 @@ def add_expense(ctx, d):
     if d.get('teacherId'):
         ctx.need_teacher(d['teacherId'])
     note = D.norm_text(d.get('note'))[:200]
-    row = {'date': str(d.get('date') or date.today().isoformat())[:10], 'at': datetime.now().strftime('%H:%M'), 'amount': amount, 'category': cat,
+    day = D.as_date(d.get('date')) if d.get('date') else date.today()
+    if not day:                                   # a typed date that is not a date never reached the month reports
+        raise Problem('err.date', 'Choose a valid date.')
+    row = {'date': day.isoformat(), 'at': datetime.now().strftime('%H:%M'), 'amount': amount, 'category': cat,
            'teacherId': d.get('teacherId') or '', 'groupId': d.get('groupId') or '', 'method': method, 'shiftId': shift['id'] if shift else '',
            'note': note, 'by': ctx.user}
     with ctx.store.lock:
@@ -1175,6 +1293,8 @@ def void_expense(ctx, expense_id, reason):
     if not x or x.get('voidOf') or ctx.store.rows('expenses', 'void_of=?', (expense_id,)):
         raise Problem('err.voided', 'This cannot be reversed.')
     shift = my_shift(ctx.store, ctx.user_id, ctx.node_id)
+    if (x.get('method') or 'cash') == 'cash' and not shift:   # the cash comes back into a drawer: like a receipt reversal
+        raise Problem('err.noShift', 'Open your cash shift first (the money comes back into your drawer).')
     row = {**_strip(x), 'amount': -float(x.get('amount') or 0), 'voidOf': x['id'], 'note': reason[:200], 'by': ctx.user,
            'date': date.today().isoformat(), 'at': datetime.now().strftime('%H:%M'), 'shiftId': shift['id'] if shift and x.get('method') == 'cash' else ''}
     with ctx.store.lock:
@@ -1318,7 +1438,7 @@ def student_file(store, student_id, scopes=None):
     for m in marks:
         m['rank'], m['of'] = exam_rank(store, m['examId'], student_id)
     fus = store.rows('followups', 'student_id=?', (student_id,), scopes)
-    family = store.rows('students', 'family_key=? AND id<>?', (st['familyKey'], student_id), scopes) if st.get('familyKey') else []
+    family = family_of(store, st, scopes)
     held = {}
     with store.lock:
         for e in ens:
@@ -1397,10 +1517,7 @@ def save_marks(ctx, exam_id, items):
             answers = [str(a or '')[:2].upper() for a in answers[:200]]
             it = {**it, 'score': grade_answers(ex['answerKey'], answers, mx)[0]}
         if not absent and it.get('score') not in (None, ''):
-            try:
-                score = round(float(it['score']), 2)
-            except (TypeError, ValueError):
-                raise Problem('err.score', 'A mark is not a number.')
+            score = round(_number(it['score'], 'err.score', 'A mark is not a number.', float('-inf')), 2)
             if score < 0 or (mx and score > mx):
                 raise Problem('err.scoreRange', 'A mark is higher than the full mark.', max=mx)
         if score is None and not absent:
@@ -1625,8 +1742,10 @@ def dashboard(store, scopes=None, d=None):
     with store.lock:
         c = store.conn
         checked = c.execute("SELECT COUNT(DISTINCT student_id) FROM attendance WHERE deleted=0 AND status IN ('present','late') AND date=?" + tf, (day, *ta)).fetchone()[0]
+        # money that came in today: a fee paid from the student's credit (wallet) or credit moved between groups (transfer)
+        # was already counted when it came in
         today_money = {r[0] or 'cash': float(r[1] or 0) for r in c.execute(
-            "SELECT method, SUM(amount) FROM payments WHERE deleted=0 AND date=?" + tf + " GROUP BY method", (day, *ta))}
+            "SELECT method, SUM(amount) FROM payments WHERE deleted=0 AND date=? AND COALESCE(method,'cash') NOT IN ('wallet','transfer')" + tf + " GROUP BY method", (day, *ta))}
         month_money = float(c.execute("SELECT SUM(amount) FROM payments WHERE deleted=0 AND kind<>'wallet_topup' AND date>=? AND date<=?" + tf, (first, day, *ta)).fetchone()[0] or 0)
         month_exp = float(c.execute("SELECT SUM(amount) FROM expenses WHERE deleted=0 AND date>=? AND date<=?" + tf, (first, day, *ta)).fetchone()[0] or 0)
         open_shifts = c.execute("SELECT COUNT(*) FROM shifts WHERE deleted=0 AND status='open'").fetchone()[0]
@@ -1656,14 +1775,13 @@ WA_DEFAULTS = {
                 'en': 'Hello, parent of {student}. {student} was absent today ({date}) from {group}. We hope all is well. {center} {link}'},
     'payment': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نذكّركم بلطف بالرسوم المستحقة: {amount} جنيه. شكرًا لتعاونكم. {center} {link}',
                 'en': 'Hello, parent of {student}. A kind reminder of the fees due: {amount} EGP. Thank you. {center} {link}'},
-    'report': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. يمكنكم متابعة الحضور والدرجات والرصيد ({balance} جنيه) من الرابط: {link} — {center}',
-               'en': 'Hello, parent of {student}. Follow attendance, marks and the balance ({balance} EGP) here: {link} — {center}'},
+    # the neat few-line report (server/parent_report.py): attendance, latest mark, money, next class and the link
+    'report': {'ar': '{summary}', 'en': '{summary}'},
     'exam': {'ar': 'السلام عليكم، ولي أمر الطالب {student}. نتيجة الامتحان متاحة على الرابط: {link} — {center}',
              'en': 'Hello, parent of {student}. The exam result is available here: {link} — {center}'},
     'welcome': {'ar': 'أهلًا بالطالب {student} في {center}. مجموعته: {group}. يسعدنا تواصلكم في أي وقت. {link}',
                 'en': 'Welcome {student} to {center}. Group: {group}. You can reach us any time. {link}'},
-    'monthly': {'ar': 'ولي أمر الطالب {student}، الرصيد: {balance} جنيه. {center} {link}',
-                'en': 'Dear parent of {student}, balance: {balance} EGP. {center} {link}'},
+    'monthly': {'ar': '{summary}', 'en': '{summary}'},
 }
 
 

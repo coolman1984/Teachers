@@ -19,7 +19,7 @@
         field('gradeCodes', 'multi', { options: choices(['P1','P2','P3','P4','P5','P6','M1','M2','M3','S1','S2','S3'], 'grade.') }),
         field('settleModel', 'select', { blank: false, options: choices(['centerPct','rentSession','rentStudent','rentMonth','mixed'], 'settle.model.') }),
         field('centerPct', 'number'), field('rentSession', 'number'), field('rentStudent', 'number'), field('rentMonth', 'number'),
-        color, field('bio', 'textarea'), active] },
+        color, field('bio', 'textarea'), field('slug', 'text', { ltr: true, help: 'f.slug.h' }), active] },
       materials: { perm: 'materials.manage', fields: [name, field('teacherId', 'ref', { entity: 'teachers' }),
         field('gradeCode', 'select', { options: choices(['P1','P2','P3','P4','P5','P6','M1','M2','M3','S1','S2','S3'], 'grade.') }),
         field('price', 'number'), field('cost', 'number'), field('stock', 'number'), active] }
@@ -36,7 +36,7 @@
   L.edit = function (entity, id) {
     var cfg = L.config(entity); if (!cfg || !HS.can(cfg.perm)) return;
     var cur = D.get(entity, id), values = cur || { active: true, settleModel: 'centerPct' };
-    HS.panel.open({ title: HS.t('list.' + entity), body: '<form data-list-form>' + U.fields(cfg.fields, values) +
+    HS.panel.open({ title: HS.t('list.' + entity), body: '<form class="fields" data-list-form>' + U.fields(cfg.fields, values) +
       (entity === 'teachers' ? '<p data-terms-preview class="notice" role="status"></p>' : '') + '</form>',
       footer: '<button class="btn primary" data-save>' + HS.esc(HS.t('common.save')) + '</button>' +
         (cur ? '<button class="btn danger" data-delete>' + HS.esc(HS.t('common.delete')) + '</button>' : '') +

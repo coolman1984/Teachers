@@ -37,10 +37,10 @@ jobs:
         run: node --test tests/test_frontend.js
       - name: Gateway tests (Worker + D1 stand-in)
         working-directory: gateway
-        run: node --test --no-warnings test/gateway.test.js
+        run: node --test --no-warnings test/gateway.test.js test/service.test.js
       - name: Office tests (engine, centre, Excel, samples and two PCs)
         working-directory: tests
-        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration
+        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_center_watch test_license test_owner_online test_wa_auto test_money_review test_qbank test_ai test_support test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration test_sync_files
 
   browser:
     # the screens in a real browser (Chromium of the runner): the core journeys, both languages, the parent page and phones
@@ -62,11 +62,29 @@ jobs:
           HS_CHROMIUM: /usr/bin/google-chrome
         run: |
           python -c "import os, sys; sys.exit(0 if os.path.exists(os.environ['HS_CHROMIUM']) else 'Chrome is missing on the runner')"
-          python -m unittest test_e2e_browser test_e2e_center test_center_join test_center_devices test_center_safety test_center_review test_center_links test_gateway_parent test_acceptance test_omr
+          python -m unittest test_e2e_browser test_e2e_center test_center_join test_center_devices test_center_safety test_center_review test_center_links test_gateway_parent test_acceptance test_omr test_qbank test_ai test_owner_online test_wa_auto test_support test_dashboard_rail
+
+  new-version:
+    # a merge to main that raises server/version.py past the last release builds and publishes it (no tag push needed)
+    runs-on: ubuntu-latest
+    outputs:
+      new: ${{ steps.check.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(python3 -c "import sys; sys.path.insert(0, 'server'); from version import VERSION; print(VERSION)")
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] && ! gh release view "v$v" > /dev/null 2>&1; then
+            echo "new=true" >> "$GITHUB_OUTPUT"; echo "Version $v has no release yet - the installer will be built and published."
+          else
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          fi
 
   windows-installer:
-    needs: [test, browser]
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: [test, browser, new-version]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -83,6 +101,9 @@ jobs:
           python -m pip install "nuitka>=2.4,<3" ordered-set zstandard
           choco upgrade innosetup -y --no-progress
       - name: Build Hessa.exe and the installer
+        env:
+          HESSA_VENDOR_WHATSAPP: ${{ secrets.HESSA_VENDOR_WHATSAPP }}   # the seller's number for the renewal button
+          HESSA_SERVICE_URL: ${{ secrets.HESSA_SERVICE_URL }}           # the seller's "Hessa online" gateway address
         run: python tools/build_windows.py
       - name: Check that the built program starts and serves its pages
         shell: pwsh
@@ -111,8 +132,8 @@ jobs:
           name: Hessa-Setup
           path: dist/Hessa-Setup-*.exe
           retention-days: 30
-      - name: Publish an explicitly tagged release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      - name: Publish a tagged release or a new version merged into main
+        if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,4 +145,4 @@ jobs:
           fi
           gh release create "v$v" dist/Hessa-Setup-*.exe --target "$GITHUB_SHA" \
             --title "Hessa $v" --notes-file docs/RELEASE_NOTES.md
-          gh release upload "v$v" gateway/dist/hessa-gateway.js gateway/dist/schema.sql gateway/dist/migrate-v1.sql docs/GATEWAY_SETUP.md --clobber
+          gh release upload "v$v" gateway/dist/hessa-gateway.js gateway/dist/schema.sql gateway/dist/migrate-v1.sql gateway/dist/migrate-v2.sql docs/GATEWAY_SETUP.md --clobber

@@ -10,16 +10,29 @@
     var active = (HS.data.state || {}).settings && HS.data.state.settings['smp-centre'];
     return '<section class="card"><h2>' + HS.esc(HS.t('sample.title')) + '</h2><p>' + HS.esc(HS.t(active ? 'sample.active' : 'sample.help')) + '</p>' +
       (HS.can('data.import') && HS.can('users.manage') ? '<button class="btn ' + (active ? 'danger' : 'primary') + '" data-sample="' + (active ? 'delete' : 'load') + '">' +
-        HS.esc(HS.t(active ? 'sample.delete' : 'sample.load')) + '</button>' : '') +
+        HS.esc(HS.t(active ? 'sample.delete' : 'sample.load')) + '</button>' +
+        (active ? ' <button class="btn" data-sample-pw>' + HS.icon('key', 'sm') + HS.esc(HS.t('sample.showPw')) + '</button>' : '') : '') +
       (HS.can('students.manage') && HS.can('contacts.view') ? ' <a class="btn" href="#/students/import">' + HS.esc(HS.t('sample.importReal')) + '</a>' : '') + '</section>';
   };
+  function showPassword(pw) {
+    HS.dialog({ title: HS.t('sample.pwTitle'), body: '<p>' + HS.esc(HS.t('sample.pwBody')) + '</p><p class="muted">desk1 · desk2 · t.ahmed · asst.mona · owner</p>' +
+      '<input class="input" readonly dir="ltr" value="' + HS.esc(pw || '') + '">', footer: '<button class="btn primary" data-close>' + HS.esc(HS.t('common.done')) + '</button>' });
+  }
   HS.mountSampleControls = function (root) {
     root.addEventListener('click', function (e) {
+      var pwb = e.target.closest('[data-sample-pw]');
+      if (pwb && !(pwb.dataset && pwb.dataset.sample)) {
+        HS.get('/api/c/sample/password').then(function (r) { if (r.password) showPassword(r.password); else HS.toast(HS.t('sample.pwGone'), 'bad'); },
+          function (er) { HS.toast(U.errorText(er), 'bad'); });
+        return;
+      }
       var button = e.target.closest('[data-sample]'); if (!button) return;
       var removing = button.dataset.sample === 'delete';
-      U.confirm({ title: HS.t(removing ? 'sample.delete' : 'sample.load'), body: HS.t(removing ? 'sample.deleteConfirm' : 'sample.loadConfirm'), danger: removing })
+      U.confirm({ title: HS.t(removing ? 'sample.delete' : 'sample.load'), body: HS.t(removing ? 'sample.deleteConfirm' : 'sample.loadConfirm'), danger: removing,
+        ok: HS.t(removing ? 'sample.delete' : 'sample.load') })   // the button says what it does (it said "Done")
         .then(function (ok) { if (!ok) return;
-          return U.run(HS.post('/api/c/sample' + (removing ? '/delete' : ''), {}), 'common.saved', button).then(function () {
+          return U.run(HS.post('/api/c/sample' + (removing ? '/delete' : ''), {}), 'common.saved', button).then(function (r) {
+            if (r && r.password) showPassword(r.password);
             if (HS.dataTab) HS.dataTab.reset(); return HS.data.load();
           }).then(function () { HS.rerender(); });
         }).catch(function () {});
@@ -37,6 +50,52 @@
       '<div class="label">' + HS.esc(HS.t('ov.' + key)) + '<span class="tile-ic">' + HS.icon(icon) + '</span></div>' +
       '<div class="value" data-k="' + key + '"><span class="skeleton" style="display:inline-block;width:3rem;height:2rem"></span></div>' +
       '<div class="hint">' + (opts.live ? '<span class="pulse-dot"></span> ' : '') + '<span data-h="' + key + '">' + HS.esc(HS.t('ov.hint.' + key)) + '</span></div></a>';
+  }
+
+  // owner 2026-10-08: a quick-access rail at the side of the dashboard (the left in Arabic): every form one click away,
+  // grouped, then today's alerts. A shortcut shows only when the person may act and the page is in the menu (extra pages).
+  var RAIL = [
+    { id: 'reg', items: [
+      { id: 'student', icon: 'users', perm: 'students.manage', go: 'students?new=1', key: 'N' },
+      { id: 'group', icon: 'layers', perm: 'groups.manage', go: 'groups?new=1' },
+      { id: 'teacher', icon: 'user', perm: 'teachers.manage', go: 'groups?tab=teachers' },
+      { id: 'import', icon: 'upload', perm: 'students.manage', go: 'students/import' } ] },
+    { id: 'today', items: [
+      { id: 'door', icon: 'board', perm: 'door.use', go: 'door', key: 'D' },
+      { id: 'roll', icon: 'check', perm: 'attendance.mark', go: 'groups?tab=today' },
+      { id: 'pay', icon: 'sheet', perm: 'money.collect', go: 'money?pay=1' },
+      { id: 'expense', icon: 'doc', perm: 'expenses.add', go: 'money?expense=1' },
+      { id: 'shift', icon: 'lock', perm: ['shifts.close', 'shifts.manage'], go: 'money?tab=shift' } ] },
+    { id: 'follow', items: [
+      { id: 'calls', icon: 'bell', perm: 'followup.view', go: 'followup', page: 'followup' },
+      { id: 'debts', icon: 'alert', perm: 'followup.view', go: 'followup?tab=debts', page: 'followup' },
+      { id: 'marks', icon: 'star', perm: 'marks.enter', go: 'exams', page: 'exams' },
+      { id: 'reports', icon: 'chart', perm: 'reports.view', go: 'reports' },
+      { id: 'backup', icon: 'shield', perm: 'backups.manage', go: 'settings?tab=data' } ] }
+  ];
+  function railItem(a, i) {
+    return '<a class="rail-btn" href="#/' + a.go + '" data-rail="' + a.id + '" style="--i:' + i + '"><span class="q-ic">' + HS.icon(a.icon, 'sm') + '</span><span class="grow">' + HS.esc(HS.t('ov.act.' + a.id)) + '</span>' +
+      (a.key ? '<i class="kbd">' + a.key + '</i>' : '') + '</a>';
+  }
+  function shown(a) { return HS.can(a.perm) && (!a.page || HS.EXTRAS.indexOf(a.page) < 0 || HS.extraOn(a.page)); }
+  function railHTML() {
+    var groups = RAIL.map(function (g) { var xs = g.items.filter(shown); return xs.length ? '<div class="rail-group"><h4>' + HS.esc(HS.t('ov.rail.' + g.id)) + '</h4>' + xs.map(railItem).join('') + '</div>' : ''; }).join('');
+    if (!groups) return '';
+    return '<section class="card rail" data-tour="actions" aria-label="' + HS.esc(HS.t('ov.rail.title')) + '"><header><span class="tile-ic">' + HS.icon('spark') + '</span><h3>' + HS.esc(HS.t('ov.rail.title')) + '</h3></header>' +
+      '<div class="rail-alerts" data-rail-alerts hidden><h4>' + HS.esc(HS.t('ov.rail.alerts')) + '</h4><ul class="st-list" data-rail-list></ul></div>' + groups + '</section>';
+  }
+  function railAlerts(root, d, advN) {
+    var box = root.querySelector('[data-rail-alerts]'), list = root.querySelector('[data-rail-list]');
+    if (!box || !list) return;
+    var rows = [];
+    function row(icon, key, n, tone, page) { if (n > 0) rows.push('<li><a class="st-row ' + tone + '" href="#/' + page + '">' + HS.icon(icon, 'sm') + '<span class="grow">' + HS.esc(HS.t(key)) + '</span><span class="badge ' + tone + ' num">' + HS.fmt.num(n) + '</span></a></li>'); }
+    if (advN !== undefined) row('spark', 'ov.rail.a.advice', advN, 'warn', 'overview');
+    if (d) {
+      if (HS.can('followup.view')) row('bell', 'ov.rail.a.risk', d.risk || 0, 'warn', 'followup');
+      if (d.debtors !== undefined) row('alert', 'ov.rail.a.debtors', d.debtors || 0, 'bad', 'followup?tab=debts');
+    }
+    list.innerHTML = rows.join('');
+    box.hidden = !rows.length;
   }
 
   // the big buttons: every daily job one click from the first screen
@@ -191,7 +250,8 @@
           '<div class="grid cols-2"><section class="card"><header><h3>' + HS.esc(HS.t('ov.trend')) + '</h3></header><div data-chart="att"></div></section>' +
             (money ? '<section class="card"><header><h3>' + HS.esc(HS.t('ov.trend.money')) + '</h3></header><div data-chart="money"></div></section>' : '') + '</div>' +
         '</div><div class="stack">' +
-          '<div class="desk-only">' + actions() + '</div>' + guideHTML() + '<div data-status></div>' +
+          (HS.me && HS.me.admin && !(HS.me.scopes && HS.me.scopes.length) ? '<div data-watch></div>' : '') +
+          '<div class="desk-only">' + railHTML() + '</div>' + guideHTML() + '<div data-status></div>' +
           '<section class="card"><header><h3>' + HS.esc(HS.t('ov.tips.title')) + '</h3></header><div class="stack" style="gap:.8rem">' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('search') + '<span>' + HS.esc(HS.t('ov.tip.search')) + ' <i class="kbd">Ctrl K</i></span></div>' +
             '<div class="row" style="align-items:flex-start">' + HS.icon('keyboard') + '<span>' + HS.esc(HS.t('ov.tip.keys')) + ' <i class="kbd">?</i></span></div>' +
@@ -201,7 +261,23 @@
         '</div></div>';
     },
     mount: function (root) {
+      var lastDash = null, lastAdv;
       HS.mountSampleControls(root);
+      // the owner's watch in one line: what needs their eyes from the last 7 days (js/views/watch.js)
+      var wbox = root.querySelector('[data-watch]');
+      if (wbox && HS.watch && HS.me && HS.me.admin) {
+        var t = new Date(), f = new Date(t); f.setDate(t.getDate() - 6);
+        var day = function (d) { return d.getFullYear() + '-' + HS.fmt.pad(d.getMonth() + 1) + '-' + HS.fmt.pad(d.getDate()); };
+        HS.watch.load(day(f), day(t)).then(function (w) {
+          if (root.isConnected === false) return;
+          var c = w.summary.critical || 0, h = w.summary.high || 0, clean = !c && !h;
+          wbox.innerHTML = '<a class="card ov-watch lift' + (clean ? ' clean' : '') + '" href="#/watch" style="display:grid;gap:.4rem;text-decoration:none;color:inherit">' +
+            '<header class="row"><span class="tile-ic">' + HS.icon('shield') + '</span><h3 class="grow">' + HS.esc(HS.t('wa.card.t')) + '</h3>' +
+            (clean ? '<span class="badge ok">' + HS.icon('check', 'sm') + '</span>' : '<span class="badge lv critical">' + HS.fmt.num(c + h) + '</span>') + '</header>' +
+            '<p class="muted" style="margin:0">' + HS.esc(clean ? HS.t('wa.card.clean') : HS.t('wa.card.b', { c: c, h: h })) + '</p>' +
+            '<span class="faint">' + HS.esc(HS.t('wa.card.go')) + ' ›</span></a>';
+        }, function () { wbox.innerHTML = ''; });
+      }
       var first = !counted;   // numbers count up once per visit, not on every live refresh
       counted = true;
       function setText(k, html) { var el = root.querySelector('[data-k="' + k + '"]'); if (el) el.innerHTML = html; }
@@ -211,6 +287,7 @@
         HS.get('/api/c/dashboard').then(function (d) {
           if (root.isConnected === false) return;
           count('checked', d.checkedIn); count('sessions', d.sessions.length); count('students', d.students); count('risk', d.risk);
+          lastDash = d; railAlerts(root, d, lastAdv);
           if (d.todayTotal !== undefined) { setText('money', U.money(d.todayTotal)); setText('owed', U.money(d.owed));
             var h = root.querySelector('[data-h="owed"]'); if (h) h.textContent = HS.t('ov.hint.owedN', { n: HS.fmt.num(d.debtors || 0) }); }
           var running = d.sessions.filter(function (s) { var t = new Date(), m = t.getHours() * 60 + t.getMinutes(); return hm(s.start) <= m && m <= hm(s.end); }).length;
@@ -231,6 +308,7 @@
           root.querySelector('[data-advice]').innerHTML = advisorHTML(list);
           var n = list.filter(function (a) { return a.level !== 'ok'; }).length;
           root.querySelector('[data-adv-count]').textContent = n ? HS.t('ov.advisor.n', { n: n }) : '';
+          lastAdv = n; railAlerts(root, lastDash, n);
         }).catch(function () { var el = root.querySelector('[data-advice]'); if (el) el.innerHTML = ''; });
       }
       root.addEventListener('click', function (e) {

@@ -37,6 +37,23 @@ class SampleGeneratorTest(unittest.TestCase):
         rooms={o['id']:dict(o['row'],id=o['id']) for o in ops if o['e']=='rooms'}
         self.assertEqual(D.clashes(groups,rooms),[])
 
+    def test_every_sample_student_has_their_own_name_and_siblings_share_a_parent(self):
+        """The names repeated every 60 students (seven pupils with one name) and siblings had different fathers and parent
+        numbers - confusing exactly where the sample is meant to teach the family payment and the search."""
+        students=[o['row'] for o in sample.build(date(2026,10,4)) if o['e']=='students']
+        self.assertEqual(len({s['name'] for s in students}),420)
+        self.assertTrue(all(s['name'].split()[0]!=s['name'].split()[1] for s in students))
+        families={}
+        for s in students:
+            if s.get('familyKey'): families.setdefault(s['familyKey'],[]).append(s)
+        for kids in families.values():
+            self.assertEqual(len(kids),2)
+            self.assertEqual(len({k['parentMobile'] for k in kids}),1)
+            self.assertEqual(len({k['parentName'] for k in kids}),1)
+            self.assertEqual(len({k['name'].split(' ',1)[1] for k in kids}),1)
+        others=[s['parentMobile'] for s in students if not s.get('familyKey')]
+        self.assertEqual(len(others),len(set(others)))
+
     def test_sample_codes_avoid_real_codes(self):
         ops=sample.build(date(2026,10,4),used_codes=['10000','10001','10005'])
         codes={o['row']['code'] for o in ops if o['e']=='students'}
@@ -64,9 +81,10 @@ class SampleGeneratorTest(unittest.TestCase):
                     [e for e in by['expenses'].values() if e['shiftId']==rid])
                 self.assertEqual(sh['expectedCash'],expected)
                 self.assertAlmostEqual(sh['countedCash']-expected,sh['diff'])
-        self.assertEqual(sum(bool(sh.get('diff')) for sh in by['shifts'].values()),3)
+        self.assertEqual(sum((sh.get('diff') or 0)>0 for sh in by['shifts'].values()),3)
+        self.assertEqual(sorted(sh['diff'] for sh in by['shifts'].values() if (sh.get('diff') or 0)<0),[-60,-40])   # desk2, for the watch
         self.assertEqual(sum(sh['status']=='open' for sh in by['shifts'].values()),2)
-        self.assertEqual(sum(bool(p.get('voidOf')) for p in by['payments'].values()),4)
+        self.assertEqual(sum(bool(p.get('voidOf')) for p in by['payments'].values()),5)
 
     def test_week_boundaries_and_sample_id_namespace(self):
         from datetime import timedelta
@@ -115,7 +133,9 @@ class SampleApiTest(unittest.TestCase):
             print('Sample performance:',json.dumps({'card_ms':round(card_seconds*1000),'dashboard_ms':round(dashboard_seconds*1000),
                 'state_ms':round(state_seconds*1000),'state_bytes':state_bytes,'risk_rows':len(risk),'signals':sorted(signals)}))
             self.assertLess(card_seconds,0.150);self.assertLess(dashboard_seconds,0.400);self.assertLess(state_seconds,1.5);self.assertLess(state_bytes,6*1024*1024)
-            teacher=server.client();teacher.login('t.ahmed',sample.PASSWORD)
+            pw=loaded['password'];self.assertNotIn('Hessa-2026',pw);self.assertEqual(client.get('/api/c/sample/password')['password'],pw)
+            teacher=server.client();teacher.login('t.ahmed',pw)
+            with self.assertRaises(ApiError): teacher.get('/api/c/sample/password')   # only an administrator sees it
             # Must-change accounts can read their scoped state while writes await password change.
             scoped=teacher.get('/api/state')
             self.assertTrue(scoped['groups'])
@@ -133,10 +153,10 @@ class SampleApiTest(unittest.TestCase):
                 if isinstance(value,list):self.assertFalse(any(r.get('id','').startswith('smp-') for r in value))
             self.assertTrue(client.get('/api/trash'))
             self.assertTrue(client.post('/api/devices/verify',{'all':True})['ok'])
-            with self.assertRaises(ApiError): server.client().login('desk1',sample.PASSWORD)
-            self.assertEqual(client.post('/api/c/sample',{})['students'],420)
+            with self.assertRaises(ApiError): server.client().login('desk1',pw)
+            again=client.post('/api/c/sample',{});self.assertEqual(again['students'],420);self.assertNotEqual(again['password'],pw)
             self.assertEqual(len(client.get('/api/state')['students']),421)
-            self.assertTrue(server.client().login('desk1',sample.PASSWORD))
+            self.assertTrue(server.client().login('desk1',again['password']))
             client.post('/api/c/sample/delete',{})
             self.assertTrue(client.post('/api/devices/verify',{'all':True})['ok'])
         finally:

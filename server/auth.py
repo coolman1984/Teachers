@@ -148,6 +148,12 @@ COMMON = {'password', 'password1', 'password123', '12345678', '123456789', '1234
           'company1', 'company123', 'changeme', 'p@ssw0rd', 'passw0rd', '87654321', '12341234', 'aa123456'}
 
 
+# Trial sign-in for the owner's first look (config "dev_login", on in the shipped config.json): on a brand-new PC,
+# signing in as admin / 123 creates the administrator with that password. The strength rules are skipped only here; the
+# screens keep asking to change it (dev_default) until the password is changed. Switch "dev_login" off before a real sale.
+DEV_USER, DEV_PASSWORD, DEV_NAME = 'admin', '123', 'Administrator'
+
+
 class AuthError(Exception):
     """Wrong login, locked account, weak password... (HTTP 400/401)."""
 
@@ -410,14 +416,15 @@ class Auth:
             raise AuthError('The password must contain letters and at least one number or symbol.')
 
     # ------------------------------------------------------------ first setup
-    def setup(self, username, full_name, password, ip):
+    def setup(self, username, full_name, password, ip, trial=False):
         """First administrator of a new system: this PC becomes the administrator PC."""
         username, full_name = (username or '').strip(), (full_name or '').strip()
         if not USERNAME_RE.match(username):
             raise AuthError('User name: 3-32 letters, numbers, dot, dash or underscore (no spaces).')
         if not full_name:
             raise AuthError('Enter the full name.')
-        self.check_password(password, username, full_name)
+        if not trial:
+            self.check_password(password, username, full_name)
         if self.has_users():
             raise AuthError('The administrator account already exists. Please log in.')
         if self.node.role == 'member':
@@ -442,6 +449,38 @@ class Auth:
                 raise AuthError('The administrator account already exists. Please log in.')
         self._write(f'{full_name} ({username})', ip, 'First administrator account', ops, check=check)
         self.log(f'{full_name} ({username})', ip, 'setup', username, 'First administrator account created on this PC (it is now the administrator PC)')
+        if trial:
+            self._dev_flag(uid)
+
+    # ------------------------------------------------------------ trial sign-in (admin / 123)
+    def _dev_path(self):
+        return os.path.join(os.path.dirname(self.path), 'trial-login.json')
+
+    def _dev_flag(self, uid):
+        """uid: this account still has the trial password; None: it was changed. Kept on this PC only (never synced)."""
+        path = self._dev_path()
+        if uid:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump({'id': uid, 'since': now()}, f)
+        elif os.path.exists(path):
+            os.remove(path)
+
+    def dev_default(self, uid=None):
+        """Does the trial administrator (or this account) still use the trial password 123?"""
+        try:
+            with open(self._dev_path(), encoding='utf-8') as f:
+                held = json.load(f).get('id')
+        except (OSError, ValueError):
+            return False
+        return bool(held) and (uid is None or held == uid)
+
+    def trial_setup(self, username, password, ip):
+        """admin / 123 on a brand-new PC: create the trial administrator. Anything else changes nothing (False)."""
+        if (username or '').strip() != DEV_USER or password != DEV_PASSWORD or self.has_users() or self.node.role != 'unconfigured':
+            return False
+        self.setup(DEV_USER, DEV_NAME, DEV_PASSWORD, ip, trial=True)
+        self.log(DEV_NAME, ip, 'trial-login', DEV_USER, 'Trial administrator created with the trial password - change it before real use')
+        return True
 
     # ------------------------------------------------------------ login / sessions
     def login(self, username, password, ip, agent=''):
@@ -475,6 +514,12 @@ class Auth:
         token = secrets.token_urlsafe(32)
         ts = now()
         with self.lock:
+            # what the person should know right after signing in: when they were last here, and whether somebody has been
+            # trying their password since (shown once on the first screen - "not you? tell the administrator")
+            since = u.get('last_login') or ''
+            failed_since = self.conn.execute("SELECT COUNT(*) FROM security_log WHERE event IN ('login-failed','login-blocked') AND target=? AND ts>?",
+                                             (username, since)).fetchone()[0]
+            welcome = {'last': since, 'lastIp': u.get('last_ip') or '', 'failed': failed_since}
             self.conn.execute('UPDATE users SET failed=0, locked_until=NULL, last_login=?, last_ip=? WHERE id=?', (ts, ip, u['id']))
             self.conn.execute('INSERT INTO sessions (token_hash, user_id, created, last_seen, ip, agent) VALUES (?,?,?,?,?,?)',
                               (_token_hash(token), u['id'], ts, ts, ip, (agent or '')[:300]))
@@ -485,7 +530,7 @@ class Auth:
                                                                           's': {'pw_hash': u['pw_hash'], 'pw_pub': account_pub(password, u['id'])}}])
             except Exception as e:  # noqa: BLE001 - logging in must not fail because of this
                 print('password key not published:', e)
-        return token, self.get(u['id'])
+        return token, {**self.get(u['id']), 'welcome': welcome}
 
     def session(self, token, ip, touch=True):
         """The logged-in user for this cookie token, or None (expired/unknown)."""
@@ -653,6 +698,8 @@ class Auth:
                             'before the multi-PC version). After that you can change it on any PC.')
         self._write(u, ip, 'Changed own password', [op], kind=kind)
         n = self._kill(u['id'], keep_token=token)
+        if self.dev_default(uid):
+            self._dev_flag(None)
         self.log(u['display'], ip, 'password-changed', u['username'], f'Changed own password; {n} other session(s) logged out')
 
     # ------------------------------------------------------------ user management
@@ -922,8 +969,31 @@ class Auth:
                                                               'updated_at': ts, 'updated_by': actor['display']},
              'c': {'pw_hash': ['', ''], 'must_change': [bool(u['must_change']), True]}},
             {'e': 'userCommands', 'id': uuid.uuid4().hex, 'op': 'insert', 'noaudit': True, 's': {'cmd': 'unlock', 'user': uid}}])
+        if self.dev_default(uid):
+            self._dev_flag(None)
         self.log(actor['display'], ip, 'password-reset', u['display'], 'Temporary password set by the administrator; must be changed at next '
                  'login; logged out on every PC')
+
+    def recover(self, username, password, ip):
+        """A forgotten password set again on the centre PC with the seller's one-time reset code (server/license.py checks the
+        code; this only runs after it). The person chooses the new password; every session of that account ends."""
+        with self.lock:
+            r = self.conn.execute('SELECT * FROM users WHERE username=? AND deleted=0', ((username or '').strip(),)).fetchone()
+        u = self._user(r)
+        if not u:
+            raise AuthError('There is no account with this user name.')
+        self.check_password(password, u['username'], u['full_name'])
+        ts = now()
+        self._write('Password recovery', ip, 'Recover password of ' + u['username'], [
+            {'e': 'users', 'id': u['id'], 'op': 'update', 'c': {'pw_hash': ['', '']},
+             's': {'pw_hash': hash_password(password), 'pw_pub': account_pub(password, u['id']), 'must_change': False, 'active': True,
+                   'pw_changed_at': ts, 'updated_at': ts, 'updated_by': 'Password recovery'}},
+            {'e': 'userCommands', 'id': uuid.uuid4().hex, 'op': 'insert', 'noaudit': True, 's': {'cmd': 'unlock', 'user': u['id']}},
+            {'e': 'userCommands', 'id': uuid.uuid4().hex, 'op': 'insert', 'noaudit': True, 's': {'cmd': 'logout', 'user': u['id']}}])
+        if self.dev_default(u['id']):
+            self._dev_flag(None)
+        self.log('Password recovery', ip, 'admin-reset', u['username'], 'Password recovered on the centre PC with the seller\'s reset code')
+        return u['username']
 
     def _command(self, actor, ip, uid, cmd, label):
         """Unlock / log out: on the administrator PC for every PC, elsewhere for this PC only."""

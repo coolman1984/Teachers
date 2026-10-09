@@ -135,6 +135,47 @@ class SecurityWordsTest(unittest.TestCase):
         self.assertEqual([k for k in keys if "'sec.d." + k + "'" not in en or "'sec.d." + k + "'" not in ar], [])
 
 
+class ServerWordsTest(unittest.TestCase):
+    """Full review (2026-10-07): sign-in, password and permission errors reached Arabic users in English. Every fixed sentence
+    the server raises to a person (auth.py, app.py) has a pattern in js/ui.js and a text in both dictionaries."""
+    TECHNICAL = {'Invalid request length', 'Choose same or new', 'Unknown record type', 'Unknown action', 'Choose maximized, fullscreen or browser.'}
+
+    def test_every_error_sentence_is_translated(self):
+        js = (ROOT / 'js' / 'ui.js').read_text(encoding='utf-8')
+        table = js.split('var SERVER = [', 1)[1].split('];', 1)[0]
+        patterns = [(re.compile(p.replace('\\/', '/')), k) for p, k in re.findall(r"\[/(\^.*?\$)/, '([A-Za-z]+)'\]", table)]
+        self.assertGreater(len(patterns), 60)
+        import ast
+        sentences = []
+        for f in ('auth.py', 'app.py'):
+            tree = ast.parse((ROOT / 'server' / f).read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) and getattr(node.exc.func, 'id', '') in ('AuthError', 'Forbidden', 'BadRequest')
+                        and node.exc.args):
+                    continue
+                arg = node.exc.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    options = [arg.value]
+                elif isinstance(arg, ast.JoinedStr):            # f'...': each value tried as a number and as a word
+                    options = [''.join(v.value if isinstance(v, ast.Constant) else fill for v in arg.values) for fill in ('5', 'add')]
+                else:
+                    continue                                    # built from parts: the samples below cover them
+                if options[0] in self.TECHNICAL:
+                    continue
+                sentences.append(options)
+        sentences += [[x] for x in ('Only a user with the permission "Import data" for all teachers can replace all data.',
+                                    'You do not have permission for this. Ask the administrator for: "Take attendance".',
+                                    'This change could not be saved: the backup folder is full',
+                                    'The user name "sara" is already used.', 'The user name "sara" is already used by a deleted user.',
+                                    'Wrong user name or password.', 'Please log in.')]
+        self.assertGreater(len(sentences), 70)
+        missing = [x[0] for x in sentences if not any(p.match(o) for o in x for p, _ in patterns)]
+        self.assertEqual(missing, [])
+        en = (ROOT / 'js' / 'i18n' / 'en.js').read_text(encoding='utf-8')
+        ar = (ROOT / 'js' / 'i18n' / 'ar.js').read_text(encoding='utf-8')
+        self.assertEqual([k for _, k in patterns if "'srv." + k + "'" not in en or "'srv." + k + "'" not in ar], [])
+
+
 @SKIP
 class DoorReviewTest(BrowserBase):
     @classmethod
@@ -386,6 +427,9 @@ class DoorReviewTest(BrowserBase):
         self.assertEqual(pg.query_selector('.dialog [data-canvas]'), None)
         pg.click('.drawer [data-publish]')
         self.assertTrue(wait_until(lambda: next(x for x in self.c.get('/api/state')['exams'] if x['id'] == 'rv-hx').get('published') is True))
+        # the panel confirms "shown to parents" only after the save AND the reload of the data; on a slow CI runner the server had saved
+        # while the page had not caught up yet, so the click below was still refused - wait for what the user sees, as a user would
+        pg.wait_for_selector('.drawer [data-publish][aria-pressed="true"]')
         pg.click('.drawer [data-honours]')
         pg.wait_for_selector('.dialog [data-canvas]')
         painted = pg.evaluate("(() => { const c = document.querySelector('.dialog [data-canvas]'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;"

@@ -37,6 +37,8 @@ class BrowserBase(unittest.TestCase):
         self.errors = []
         pg.on('console', lambda m: self.errors.append(m.text) if m.type == 'error' else None)
         pg.on('pageerror', lambda e: self.errors.append(str(e)))
+        # a server error names its request: a bare "500" in the console cannot be traced
+        pg.on('response', lambda r: self.errors.append(f'HTTP {r.status} {r.request.method} {r.url}') if r.status >= 500 else None)
         pg.goto(self.S.base)
         pg.wait_for_selector('#auth-form')
         pg.fill('#username', ADMIN[0])
@@ -111,7 +113,8 @@ class ShellTest(BrowserBase):
         pg.wait_for_function("document.getElementById('app-shell').dataset.menu === '0'")
         self.assertEqual(pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), True, 'no sideways scrolling')
 
-    def test_welcome_slides_first_time(self):
+    def test_no_slides_first_time_but_available_from_help(self):
+        # owner 2026-10-08: the first sign-in goes straight to work; the slides open only from Help
         ctx = self.browser.new_context(viewport={'width': 1200, 'height': 800})
         pg = ctx.new_page()
         pg.goto(self.S.base)
@@ -119,8 +122,14 @@ class ShellTest(BrowserBase):
         pg.fill('#username', ADMIN[0])
         pg.fill('#password', ADMIN[1])
         pg.click('button[type=submit]')
+        pg.wait_for_selector('#app-shell')
+        pg.wait_for_timeout(1200)
+        self.assertEqual(pg.locator('#slides.on').count(), 0)
+        self.assertEqual(pg.evaluate('document.documentElement.dataset.theme'), 'daylight')
+        self.assertEqual(pg.evaluate('document.documentElement.dataset.font'), 'system')
+        pg.goto(self.S.base + '/#/help?view=faq')
+        pg.click('[data-a="slides"]')
         pg.wait_for_selector('#slides.on')
-        pg.click('[data-snext]')
         pg.click('[data-sclose]')
         self.assertEqual(pg.locator('#slides.on').count(), 0)
 

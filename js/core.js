@@ -83,6 +83,14 @@
     merge: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6M9 6h3a3 3 0 0 1 3 3v0M9 18h3a3 3 0 0 0 3-3v0"/>',
     refresh: '<path d="M20 6v5h-5M4 18v-5h5"/><path d="M18.5 10A7 7 0 0 0 6 7.5M5.5 14A7 7 0 0 0 18 16.5"/>',
     star: '<path d="m12 3.5 2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.8l6-.8L12 3.5Z"/>',
+    key: '<circle cx="7.5" cy="15.5" r="4"/><path d="m10.5 12.5 9-9M16 7l3 3M14 9l2 2"/>',
+    pen: '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m14 6 4 4"/>',
+    pointer: '<path d="m5 3 14 7-6 2-2 6L5 3Z"/><path d="m13 13 6 6"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>',
+    expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
+    route: '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/>',
+    life: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m5.6 5.6 3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6"/>',
     external: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>'
   };
   HS.icon = function (name, cls) {
@@ -115,6 +123,9 @@
       var ct = r.headers.get('Content-Type') || '';
       var p = opts.blob ? r.blob() : (ct.indexOf('json') >= 0 ? r.json() : r.text());
       return p.then(function (data) {
+        if (method !== 'GET' && !/^\/api\/(log|auth)\b/.test(url) && r.status !== 403) {   // the server logs refusals itself
+          HS.track(r.ok ? 'save' : 'save-failed', url, (body && body.label) || '', r.ok ? '' : String((data && data.error) || r.status).slice(0, 300));
+        }
         if (!r.ok) {
           var msg = (data && data.error) || (typeof data === 'string' && data) || ('HTTP ' + r.status);
           if (r.status === 401 && url.indexOf('/api/auth/') !== 0) HS.emit('logged-out');
@@ -125,6 +136,53 @@
     });
   };
   HS.get = function (url) { return HS.api('GET', url); };
+
+  /* ---------- what people do: every click, page and save goes to the administrator's log (Activity -> Clicks) ----------
+     Only what was clicked (the button's words) and where - never what was typed: no passwords, no amounts, no phones.
+     Sent every few seconds; the server adds the person's name itself, so a page cannot pretend to be somebody else. */
+  var LOGQ = [];
+  function localIso() { var t = new Date(); return t.getFullYear() + '-' + HS.fmt.pad(t.getMonth() + 1) + '-' + HS.fmt.pad(t.getDate()) + 'T' + [t.getHours(), t.getMinutes(), t.getSeconds()].map(HS.fmt.pad).join(':'); }
+  HS.track = function (type, action, target, detail) {
+    if (!HS.me || !window.fetch) return;
+    LOGQ.push({ ts: localIso(), type: type, action: String(action || '').slice(0, 120), target: String(target || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      page: String(location.hash || '#/').slice(0, 120), detail: String(detail || '').slice(0, 500) });
+    if (LOGQ.length >= 40) HS.track.flush();
+  };
+  HS.track.flush = function (beacon) {
+    if (!LOGQ.length) return;
+    var events = LOGQ.splice(0, LOGQ.length), body = JSON.stringify({ events: events });
+    if (beacon && navigator.sendBeacon) { navigator.sendBeacon('/api/log', new Blob([body], { type: 'application/json' })); return; }
+    fetch('/api/log', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) { return r.ok ? r.json() : { ok: r.status === 401 || r.status === 403 }; })   // signed out: nothing more to send
+      .then(function (d) { if (!d || d.ok === false) throw d; })
+      .catch(function () { if (LOGQ.length < 2000) LOGQ.unshift.apply(LOGQ, events); });   // the centre PC is away: keep them for later
+  };
+  HS.track.pending = function () { return LOGQ.length; };
+  HS.track.clear = function () { LOGQ.length = 0; };
+  if (typeof navigator !== 'undefined' && typeof document !== 'undefined' && document.addEventListener) {   // a real browser (not the tests)
+    setInterval(function () { HS.track.flush(); }, 4000);
+    if (typeof addEventListener === 'function') {
+      addEventListener('pagehide', function () { HS.track.flush(true); });
+      addEventListener('error', function (e) { HS.track('js-error', e.message, (e.filename || '') + ':' + (e.lineno || ''), e.error && e.error.stack); });
+    }
+    var SEL = 'button, a[href], [data-act], tr[data-id], [role=tab], summary, label.perm, label.chip, .choice-btn, .switch';
+    document.addEventListener('click', function (e) {
+      var el = e.target && e.target.closest && e.target.closest(SEL);
+      if (!el) return;
+      var ds = el.dataset || {}, act = Object.keys(ds).filter(function (k) { return k !== 'i' && k !== 'k'; })[0];
+      var text = el.getAttribute('aria-label') || el.title || el.textContent || '';
+      var box = el.querySelector && el.querySelector('input[type=checkbox], input[type=radio]');
+      setTimeout(function () {   // a tick box: record whether it ended ticked or not (the permission editor, consent, switches)
+        HS.track('click', act ? act + (ds[act] ? '=' + ds[act] : '') : el.getAttribute('href') || el.tagName.toLowerCase(), text, box ? (box.checked ? 'on' : 'off') : '');
+      }, 0);
+    }, true);
+    document.addEventListener('change', function (e) {
+      var el = e.target;
+      if (!el || el.tagName !== 'SELECT') return;
+      var o = el.options[el.selectedIndex], lab = el.labels && el.labels[0] ? el.labels[0].textContent : el.getAttribute('aria-label') || el.name || '';
+      HS.track('click', 'choose ' + (el.name || el.id || ''), lab, o ? o.textContent : '');
+    }, true);
+  }
   HS.post = function (url, body) { return HS.api('POST', url, body === undefined ? {} : body); };
 
   /* ---------- toasts ---------- */

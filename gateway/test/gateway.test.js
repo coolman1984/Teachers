@@ -133,14 +133,16 @@ test('older office programs: the inbox is always empty and ack is accepted', asy
   assert.equal((await office(env, 'POST', '/office/ack', { events: [], photos: [] })).status, 200);
 });
 
-test('an existing v1 mailbox upgrades without losing cards or revocation history', async () => {
+test('an existing v1 mailbox upgrades (v1, then v2, then the schema again) without losing cards or revocation history', async () => {
   const { readFileSync } = await import('node:fs');
   const env = newEnv(), th = await sha256Hex(TOKEN);
-  env.DB.db.exec('DROP INDEX cards_student; ALTER TABLE cards RENAME COLUMN student_id TO trip_id');
+  env.DB.db.exec('DROP INDEX cards_student; DROP INDEX cards_centre; ALTER TABLE cards DROP COLUMN centre; ALTER TABLE pages DROP COLUMN centre; ALTER TABLE cards RENAME COLUMN student_id TO trip_id');
   await env.DB.prepare("INSERT INTO cards VALUES (?, ?, ?, 0, NULL, ?)").bind(th, 'st1', '{"name":"Synthetic preserved child"}', 1).run();
   const revoked = 'ab'.repeat(32);
   await env.DB.prepare('INSERT INTO revoked_links VALUES (?, ?)').bind(revoked, 1).run();
   env.DB.db.exec(readFileSync(new URL('../migrate-v1.sql', import.meta.url), 'utf8'));
+  env.DB.db.exec(readFileSync(new URL('../migrate-v2.sql', import.meta.url), 'utf8'));
+  env.DB.db.exec(readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
   const result = await (await call(env, 'GET', '/api/card/' + TOKEN)).json();
   assert.equal(result.card.name, 'Synthetic preserved child');
   assert.ok(await env.DB.prepare('SELECT * FROM revoked_links WHERE token_hash = ?').bind(revoked).first());
@@ -200,4 +202,19 @@ test('the single-file bundle serves the parent page without any asset binding', 
   assert.equal((await get('/app/app.js')).status, 200);
   assert.match((await get('/app/style.css')).headers.get('content-type'), /css/);
   assert.equal((await get('/sw.js')).headers.get('service-worker-allowed'), '/');
+});
+
+test('a teacher page: published by the office, read by anyone, never a student, taken down on request', async () => {
+  const env = newEnv();
+  const page = { name: 'Synthetic Teacher', bio: 'Physics', groups: [{ name: 'Physics S1', seats: 3, slots: [{ day: 0, start: '17:00', end: '18:30' }] }], booking: '201000000000' };
+  assert.equal((await office(env, 'PUT', '/office/pages', { pages: [{ slug: 'Bad Slug!', body: page }] })).status, 400);
+  assert.equal((await office(env, 'PUT', '/office/pages', { pages: [{ slug: 'mr-synthetic', body: page }] })).status, 200);
+  const r = await call(env, 'GET', '/api/page/mr-synthetic');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).page.groups[0].seats, 3);
+  assert.equal((await call(env, 'GET', '/p/mr-synthetic')).status, 200);       // the page shell
+  assert.equal((await call(env, 'POST', '/api/page/mr-synthetic', { body: '{}' })).status, 405);
+  assert.equal((await call(env, 'GET', '/api/page/nobody-here')).status, 404);
+  assert.equal((await office(env, 'PUT', '/office/pages', { remove: ['mr-synthetic'] })).status, 200);
+  assert.equal((await call(env, 'GET', '/api/page/mr-synthetic')).status, 404);
 });

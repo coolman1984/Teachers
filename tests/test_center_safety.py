@@ -262,9 +262,9 @@ class SystemHealthTest(unittest.TestCase):
             if n.startswith('to_') and n.endswith('.db'):
                 stamp = datetime.strptime(n[3:18], '%Y%m%d_%H%M%S') - timedelta(days=days)
                 new = 'to_' + stamp.strftime('%Y%m%d_%H%M%S') + n[18:]
-                os.rename(os.path.join(self.db, n), os.path.join(self.db, new))
+                os.replace(os.path.join(self.db, n), os.path.join(self.db, new))   # os.replace: same as Linux rename on Windows
                 moved.append((new, n))
-        self.addCleanup(lambda: [os.path.exists(os.path.join(self.db, a)) and os.rename(os.path.join(self.db, a), os.path.join(self.db, b)) for a, b in moved])
+        self.addCleanup(lambda: [os.path.exists(os.path.join(self.db, a)) and os.replace(os.path.join(self.db, a), os.path.join(self.db, b)) for a, b in moved])
 
     def test_a_status_and_advice_follow_the_real_state_of_the_backups(self):
         st = self.admin.get('/api/c/status')
@@ -416,3 +416,134 @@ class RecordHistoryBrowserTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TrialLoginTest(unittest.TestCase):
+    """Owner's request (2026-10-06): admin / 123 opens a brand-new PC for a first look. It must never weaken a PC that
+    already has accounts, never work from another device, and the screens keep asking for a real password until it changes."""
+
+    def test_a_trial_sign_in_creates_the_administrator_once(self):
+        s = Server('trial', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        c = s.client()
+        st = c.get('/api/auth/status')
+        self.assertEqual(st['trial'], {'username': 'admin', 'password': '123'})
+        self.assertFalse(st['hasUsers'])
+        with self.assertRaises(ApiError):                      # a wrong password creates nothing
+            c.login('admin', '1234')
+        self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+        me = c.login('admin', '123')
+        self.assertTrue(me['admin'])
+        self.assertTrue(me['trialPassword'])
+        self.assertTrue(c.get('/api/auth/status')['trial'])    # still shown while the password is 123
+        # a second browser signs in with the same trial password (no second account)
+        c2 = s.client()
+        self.assertEqual(c2.login('admin', '123')['id'], me['id'])
+        # changing the password ends the trial: no hint, no banner, 123 refused
+        c.post('/api/auth/password', {'old': '123', 'new': 'Centre-Owner-2026'})
+        self.assertFalse(c.get('/api/me')['trialPassword'])
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            s.client().login('admin', '123')
+        s.client().login('admin', 'Centre-Owner-2026')
+
+    def test_b_never_on_a_pc_with_accounts_or_when_switched_off(self):
+        s = Server('trial-off', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        make_authority(s)
+        c = s.client()
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            c.login('admin', '123')
+        off = Server('trial-no').start()                       # the harness default: switched off
+        self.addCleanup(off.cleanup)
+        c = off.client()
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            c.login('admin', '123')
+        self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+
+    def test_d_the_trial_password_never_opens_the_program_from_another_device(self):
+        """Full review (2026-10-07): "123" is public knowledge, so after the trial administrator exists another PC or phone on
+        the centre's network must not sign in with it - only the centre PC itself can, until the password is changed."""
+        lan = _lan_address()                                  # no packet is sent: this only picks the network address of this PC
+        if not lan:
+            self.skipTest('no network address on this PC')
+        s = Server('trial-lan', extra_cfg={'dev_login': True, 'host': '0.0.0.0'}).start()
+        self.addCleanup(s.cleanup)
+        s.client().login('admin', '123')                         # the centre PC itself: the trial administrator is made
+        from harness import Client
+        other = Client(f'http://{lan}:{s.port}')
+        with self.assertRaises(ApiError) as caught:
+            other.login('admin', '123')
+        self.assertIn('centre PC itself', str(caught.exception))
+        with self.assertRaises(ApiError):
+            other.get('/api/me')                                 # and no session was left behind
+        c = s.client()
+        c.login('admin', '123')
+        c.post('/api/auth/password', {'old': '123', 'new': 'Centre-Owner-2026'})
+        other.login('admin', 'Centre-Owner-2026')                # a real password works from any PC of the centre
+        events = [r['detail'] for r in c.get('/api/security?limit=50')['rows']]
+        self.assertIn('Trial password refused away from the centre PC', events)
+
+    def test_e_the_trial_password_is_refused_away_on_every_pc(self):
+        """Security review: the trial flag lives only on the administrator PC; a PC that received the account by sync
+        still must not open with "123" from another device."""
+        lan = _lan_address()
+        if not lan:
+            self.skipTest('no network address on this PC')
+        s = Server('trial-member', extra_cfg={'dev_login': True, 'host': '0.0.0.0'}).start()
+        self.addCleanup(s.cleanup)
+        s.client().login('admin', '123')
+        os.remove(os.path.join(s.data_dir, 'trial-login.json'))     # what a member PC looks like: the account, no local flag
+        from harness import Client
+        with self.assertRaises(ApiError):
+            Client(f'http://{lan}:{s.port}').login('admin', '123')
+
+
+def _lan_address():
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.connect(('192.0.2.1', 9))
+            lan = probe.getsockname()[0]
+        except OSError:
+            return None
+    return None if lan.startswith('127.') else lan
+
+
+class HostNameTest(unittest.TestCase):
+    """Security review: a web site whose name is made to point at 127.0.0.1 (DNS rebinding) is refused, so a page in the
+    centre PC's browser can never act as "the PC itself"; addresses, localhost and the PC's network name keep working."""
+
+    def test_only_this_pc_s_own_names_open_the_program(self):
+        s = Server('hostname').start()
+        self.addCleanup(s.cleanup)
+        make_authority(s)
+        c = s.client()
+        for host in ('evil.example', f'evil.example:{s.port}', 'attacker.co.uk'):
+            with self.assertRaises(ApiError) as caught:
+                c.call('GET', '/api/auth/status', headers={'Host': host})
+            self.assertEqual(caught.exception.code, 421, host)
+            with self.assertRaises(ApiError):
+                c.call('POST', '/api/auth/login', {'username': 'boss', 'password': 'Strong-pass1'}, headers={'Host': host, 'Origin': f'http://{host}'})
+        for host in (f'127.0.0.1:{s.port}', f'localhost:{s.port}', f'reception-pc:{s.port}', f'192.168.1.20:{s.port}', f'reception.local:{s.port}'):
+            self.assertIn('hasUsers', c.call('GET', '/api/auth/status', headers={'Host': host}), host)
+
+    def test_c_not_through_a_tunnel(self):
+        s = Server('trial-proxy', extra_cfg={'dev_login': True}).start()
+        self.addCleanup(s.cleanup)
+        c, tunnel = s.client(), {'X-Forwarded-For': '203.0.113.9'}
+        with self.assertRaises(ApiError):                      # remote work is off: refused before anything else
+            c.call('GET', '/api/auth/status', headers=tunnel)
+        s.stop()
+        with open(s.cfg_path) as f:
+            cfg = json.load(f)
+        cfg['remote_access'] = True
+        with open(s.cfg_path, 'w') as f:
+            json.dump(cfg, f)
+        s.start()
+        self.assertIsNone(c.call('GET', '/api/auth/status', headers=tunnel)['trial'])
+        with self.assertRaises(ApiError):
+            c.call('POST', '/api/auth/login', {'username': 'admin', 'password': '123'}, headers=tunnel)
+        self.assertFalse(s.client().get('/api/auth/status')['hasUsers'])

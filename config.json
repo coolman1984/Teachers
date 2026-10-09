@@ -8,6 +8,8 @@
   "keep_auto_backups": 200,
   "max_upload_mb": 50,
   "open_browser": true,
+  "dev_login": true,
+  "app_window": "maximized",
   "session_idle_minutes": 30,
   "session_max_hours": 12,
   "max_failed_logins": 5,

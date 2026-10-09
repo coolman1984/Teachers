@@ -11,6 +11,7 @@ const assets = {};
   for (const n of readdirSync(dir)) {
     const p = join(dir, n);
     if (statSync(p).isDirectory()) walk(p);
+    else if (p.endsWith('.png')) assets['/' + relative(pub, p).split('\\').join('/')] = { b64: readFileSync(p).toString('base64') };
     else assets['/' + relative(pub, p).split('\\').join('/')] = readFileSync(p, 'utf8');
   }
 })(pub);
@@ -21,4 +22,5 @@ mkdirSync(join(here, 'dist'), { recursive: true });
 writeFileSync(join(here, 'dist', 'hessa-gateway.js'), src);
 copyFileSync(join(here, 'schema.sql'), join(here, 'dist', 'schema.sql'));
 copyFileSync(join(here, 'migrate-v1.sql'), join(here, 'dist', 'migrate-v1.sql'));
+copyFileSync(join(here, 'migrate-v2.sql'), join(here, 'dist', 'migrate-v2.sql'));
 console.log('built dist/hessa-gateway.js', (src.length / 1024).toFixed(0) + ' KB,', Object.keys(assets).length, 'files');

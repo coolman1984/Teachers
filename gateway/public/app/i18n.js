@@ -24,7 +24,9 @@
       grade_P1: 'الصف الأول الابتدائي', grade_P2: 'الصف الثاني الابتدائي', grade_P3: 'الصف الثالث الابتدائي', grade_P4: 'الصف الرابع الابتدائي',
       grade_P5: 'الصف الخامس الابتدائي', grade_P6: 'الصف السادس الابتدائي', grade_M1: 'الصف الأول الإعدادي', grade_M2: 'الصف الثاني الإعدادي',
       grade_M3: 'الصف الثالث الإعدادي', grade_S1: 'الصف الأول الثانوي', grade_S2: 'الصف الثاني الثانوي', grade_S3: 'الصف الثالث الثانوي',
-      currency: 'ج.م', code: 'الكود'
+      currency: 'ج.م', code: 'الكود',
+      about: 'نبذة', groupsOpen: 'المجموعات', noGroups: 'لا توجد مجموعات مفتوحة الآن.', seats: 'المقاعد المتبقية: {n}', full: 'المجموعة مكتملة',
+      book: 'احجز بواتساب', bookText: 'السلام عليكم، أريد الحجز في مجموعة {group} مع {teacher}.', nopage: 'الصفحة غير موجودة', nopage_b: 'تأكد من العنوان أو اسأل المركز.'
     },
     en: {
       app: 'Hessa', lang: 'العربية', loading: 'Loading…', readOnly: 'Read only',
@@ -46,7 +48,9 @@
       busy: 'Too many requests', busy_b: 'Wait a minute and try again.', retry: 'Try again', refresh: 'Refresh',
       grade_P1: 'Primary 1', grade_P2: 'Primary 2', grade_P3: 'Primary 3', grade_P4: 'Primary 4', grade_P5: 'Primary 5', grade_P6: 'Primary 6',
       grade_M1: 'Preparatory 1', grade_M2: 'Preparatory 2', grade_M3: 'Preparatory 3', grade_S1: 'Secondary 1', grade_S2: 'Secondary 2', grade_S3: 'Secondary 3',
-      currency: 'EGP', code: 'Code'
+      currency: 'EGP', code: 'Code',
+      about: 'About', groupsOpen: 'Groups', noGroups: 'No open groups right now.', seats: '{n} seat(s) left', full: 'Full',
+      book: 'Book on WhatsApp', bookText: 'Hello, I would like to book a place in {group} with {teacher}.', nopage: 'Page not found', nopage_b: 'Check the address or ask the centre.'
     }
   };
   P.lang = 'ar';

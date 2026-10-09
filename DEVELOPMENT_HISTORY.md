@@ -1,6 +1,311 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## The dashboard's quick-access rail (2026-10-08)
+
+**Why:** the owner wants every form one click from the dashboard, on the side (the left in Arabic), with information and alerts,
+so nobody hunts through menus. **What:** the side column of the overview now starts with "Quick access": three groups of
+shortcuts (Register, Today's work, Follow-up and reports), each shown only when the person may use it and, for the extra
+pages, only when the page is switched on in the menu; above them "Needs attention now" shows the advisor items, students at
+risk and students who owe money, each a link to its page. Phones keep the big buttons under the thumb. **Mistake:** an
+apostrophe in "Today's" broke the English dictionary until it was escaped; `test_frontend` caught it at once. **Checks:**
+`tests/test_dashboard_rail.py` (every shortcut opens its page without a script error, Arabic and English, the rail is on the
+left in Arabic, extra pages hidden in the basic menu), `test_design`, `test_frontend`.
+
+## The whole help in polished Egyptian Arabic; "Solve a problem" with "Guide me" (2026-10-08)
+
+**Why:** the owner found the Formal Arabic of the guides heavy for centre staff and wants help that a 12-year-old understands, in
+respectful, professional Egyptian Arabic, so nobody needs to call to learn the program (Apps-Factory ADR-0005, HELP-01..04).
+**What:** 761 Arabic help texts rewritten (31 guides, 48 situations, the questions, the support section, the tour and slides,
+the coach's words); screens stay Formal Arabic. "Situations and problems" is now "Solve a problem" and 42 of its 48 problems
+carry a "Guide me" button next to "Take me there" (`SIT_GUIDE` in `js/views/guides.js`). A small tool refused any change of
+`{placeholders}` or `[[button names]]` while rewriting. **Checks:** `test_frontend` (every link points to a real guide and
+problem; no heavy formal words in help), `test_design`, browser suites. **Lesson:** help is read by the busiest person at the
+front desk; one idea per sentence, the button's name, and what happens next.
+
+## No slideshow on the first sign-in; daylight and the system font by default (2026-10-08)
+
+**Why:** the owner finds the slides on the first sign-in in the way and chose the daylight theme and the system font as the
+look of the program. **What:** `js/shell.js` no longer opens the slides by itself (Help still opens them); `js/prefs.js` and
+`js/boot.js` default to `daylight` and `system`. People who already chose a theme or font keep their choice. **Checks:**
+`test_frontend` (defaults), `test_e2e_browser` (first sign-in: no slides, daylight, system font; slides from Help still work),
+`test_design`, `test_acceptance`, `test_e2e_center`. **Lesson:** a first-run show is a decision of the owner, not of the engine.
+
+## The link to the seller's Control Center (2026-10-08)
+
+**Why:** the owner wants every sold program to report to one Control Center (Apps-Factory `apps/control-center`), so a centre can
+ask for help from inside Hessa and the seller can diagnose and repair remotely with the centre's permission instead of a visit.
+**What:** `server/vendorlink.py` + Help → "Contact the seller": a self-check (backup age, free disk, subscription, sync, errors of
+7 days) for everyone; a help request that shows the person exactly what leaves the PC and removes phone numbers (also in Arabic
+digits), e-mails, national ids and secrets before sending; a support window that only an administrator opens, for 30/60/120
+minutes with named scopes, ended at any time; repairs only from a short safe list (data check, backup, error list) and only
+while the window is open, each written in the security log; a heartbeat every 6 hours with a fixed list of numbers. It stays off
+until an administrator enters the address and install code on the centre PC itself; the code lives in `support.json` on that PC
+(never in the shared data or logs, shown only as its last 4 letters). Standard library only. **Checks:** `tests/test_support.py`
+(9 server tests against a stand-in Control Center + a Chromium test on a 360 px phone in Arabic and English) and the Part G
+suites. **Not done:** a real Control Center over HTTPS on a real centre PC (TASKS FS14). **Lesson:** a support channel is only
+trustworthy if the customer can see what leaves and can close the door; both are tested, not promised.
+
+## A raised version merged into main publishes its installer (2026-10-07)
+
+**Why:** pushing the `v1.2.0` tag from the cloud session was refused (403), and so was a manual workflow start; the
+owner agreed to this change. **What:** a small `new-version` job reads `server/version.py`; on a push to main with no
+release for that version, the Windows job builds and `gh release create` publishes it (it makes the tag). Same-version
+merges publish nothing. **Lesson:** the release path must not depend on rights the working session lacks.
+
+## Review of PR 20: an atomic WhatsApp cap, demo password after a broken load; version 1.4.1 (2026-10-07)
+
+**What:** the automatic review (after the merge) found two real issues. Requests at the same moment all read the day's count
+before any of them added to it, so together they passed `WA_DAILY_CAP`: each message now takes its place in one
+`INSERT ... ON CONFLICT DO UPDATE ... WHERE n < cap RETURNING` before it is sent, and gives it back if it does not go out
+(gateway test: twelve at once, five allowed - failed before). A sample load that stopped half way left the demo accounts
+behind with the old password while the next load showed a new one: existing demo accounts now take the shown password
+(`SamplePasswordTest`, failed before). **Lesson:** a limit that is read, then used, then written is no limit under load;
+reserve first.
+
+## Full review before sale; version 1.4.0 (2026-10-07)
+
+**Why:** the owner asked for a complete, carefully reviewed program for sale. **How:** three independent reviews ran in
+parallel and every finding was reproduced before it was fixed: the money/attendance core against a real server, security
+against a real server and the gateway, and the experience in Chromium (28 pages x phone/desktop x Arabic/English x day/night,
+plus the daily journeys by hand). **Money:** a spent credit refunded in cash; leaving/moving an ended enrolment charged months
+again; moving into a group already joined; dates in other shapes stored raw; deleting a group erased its debts; today's money
+counted credit twice. **Security:** the owner's phones and automatic WhatsApp were writable through the generic save by anyone
+with the settings permission; the trial password worked from the LAN on member PCs; the WhatsApp report leaked another teacher's
+group and money; the seller's WhatsApp had no cap and carried any link; DNS rebinding passed the "this PC" checks; the sample
+password was public and shown to the front desk. **Experience:** English errors in the Arabic sign-in (all fixed server
+sentences now go through `js/ui.js`), a paid-up monthly student offered a full month again, "already recorded" right after a
+check-in, check-ins into a class hours away, no checks on new students (grade defaulted, duplicate names, wrong mobiles), a zero
+balance labelled credit, the forced password change without its rules, tabs that only say "administrators only", raw expense
+category keys, colloquial words, English sample data, sample times in the future, an unclear drawer difference.
+**Mistake/lesson:** a server guard refusing cash expenses above the drawer blocked the month-end teacher payout from the safe -
+the review asked for a warning, not a block; it is now a confirmation in the dialog. The browser suite caught it.
+**Checks:** the full suite, the gateway tests and a scripted browser walk-through of each fixed screen.
+**The intermittent 500 (open since 2026-10-06) found:** the browser tests now name the request behind a server error and the
+harness prints the server's error log before deleting it. That showed `/api/c/status` failing with KeyError 'node' and
+"bad parameter or other API misuse": `journal.meta()` (and `hash_at`, `deps_of`, `store._visible`, `_txn_label`) read the one
+shared SQLite connection without the lock, so a read could receive another thread's row. Reproduced 3 of 3 times with six
+parallel clients (`SharedConnectionTest`), 0 of 5 after taking the lock. Lesson: on a shared connection every read takes the
+lock, not only writes; and a flaky test is a bug report - log enough to trace it instead of re-running it.
+
+## WhatsApp to parents: the short report and automatic messages; version 1.3.0 (2026-10-07)
+
+**Why:** the owner decided parents get no app: "a small, neat report on WhatsApp", sent automatically on WhatsApp.
+**What:** `server/parent_report.py` writes the few lines (attendance this month with the missed classes, the latest published
+mark and rank, the account, the next class, the link) from the dictionaries; the report/monthly messages now default to
+`{summary}`. Automatic sending uses only the official WhatsApp Business API through the seller's service (an unofficial sender
+gets numbers banned): the gateway sends approved templates (`hessa_report`, `hessa_absence`, `hessa_receipt`, values without new
+lines), once per key per centre, counts per month and keeps only a hash of the number. `server/wa_auto.py` on the administrator
+PC decides what is due (absence after the class ends, receipts from the moment it was switched on, weekly/monthly reports),
+only for parents who gave consent, and writes each message in the follow-up history. Settings → Parent links has the card.
+Version 1.3.0 so the merge publishes the installer. **Checks:** gateway tests (23), `test_wa_auto` (real gateway + a stand-in
+for Meta's API + server), `test_owner_online`, `test_center_api`, `test_center_gateway`, `test_unit`, `test_ci`, frontend tests.
+**Mistakes/lessons:** the first test expected the forced round to send, but the background round (kicked by saving the settings)
+had already sent them - a test waits for the effect, not for the caller; a receipt keeps only the minute, so "since" compares
+receipt ids taken at the moment it was switched on.
+**Review fixes (PR 19):** with an owner's phone registered the PC ran a full round every 10 s (status + picture), about 17,000
+writes a day per idle centre on a shared service whose free quota is 100,000: now the status is asked every five minutes, the
+picture goes only when the data changed (checked locally every 10 s) plus a 3-minute heartbeat, and the Worker writes
+`seen_at` at most every ten minutes (`test_an_idle_centre_writes_little_to_the_shared_service`). The self-hosted upgrade
+guide now runs `migrate-v2.sql` (re-running `schema.sql` does not add columns to existing tables). Version raised to 1.3.0.
+
+## Hessa online and the owner's live phone (2026-10-07)
+
+**Why:** the owner researched the market (competitors sell a parent app and live owner control) and asked for one online
+service in the seller's name, a live phone view for the centre owner, and short WhatsApp reports for parents instead of a parent app.
+**What:** the gateway became multi-centre: `/office/join` takes the subscription code, verifies it with the seller's Ed25519 key in
+the Worker (same format as `server/license.py`), one code joins one centre, every card/page is scoped by centre, and publishing
+stops after the grace days (renewal via `/office/licence`). `server/owner.py` builds the owner's picture (today's money,
+drawers, sessions now, watch alerts, a bilingual feed rendered from the program's own dictionaries, top debts, people signed
+in); `GatewaySync.push_owner` sends it within seconds of a data change and every minute as a heartbeat. The phone page `/o/`
+(installable, service worker, offline copy, key in a header and never in an address) reads it. Phones are added/removed by
+administrators (hash only in the shared settings; security log). Also: the installed program ignores `HS_MACHINE_ID` and
+`HS_AI_URL`. **Checks:** gateway node tests (22), `test_owner_online` (real gateway + server + Chromium), `test_unit`, `test_ci`,
+`test_center_gateway`, `test_gateway_parent`, `test_center_review`, `test_license`, `test_center_watch`, frontend tests.
+**Mistakes/lessons:** the page's CSP forbids inline styles, so bar widths are set from script; a JS comment pasted inside a
+one-line function broke the page, caught by the browser test - always run the browser check after editing the phone page.
+**Next:** the seller creates the Cloudflare service and the `HESSA_SERVICE_URL` secret; WhatsApp parent reports.
+
+## Hessa 1.2.0 release (2026-10-07)
+
+**What:** the owner asked for a new installer. Raised `VERSION` to 1.2.0 and described it in `docs/RELEASE_NOTES.md`
+(subscription, sign-in, Watch, click history, recycle bin, app window, guides). Merged, then the `v1.2.0` tag runs the
+Windows build. **Checks:** installer preflight, `test_unit`, `test_ci`. **Limits:** the WhatsApp button is empty unless the
+`HESSA_VENDOR_WHATSAPP` secret was set before the build; the trial sign-in (admin/123) is still on by the owner's choice.
+
+## The seller's WhatsApp number in the build, not in the repository (2026-10-07)
+
+**What:** the owner gave the WhatsApp number for the renewal and password-recovery buttons. The repository is public and
+CLAUDE.md forbids real phone numbers in it, so `tools/build_windows.py` writes `server/_vendor.py` from the GitHub secret
+`HESSA_VENDOR_WHATSAPP` (01xxxxxxxxx becomes 201xxxxxxxxx for wa.me), compiles it in and deletes it; `.gitignore` keeps
+it out. **Checks:** `test_unit` (number format, never committed), installer preflight. **Next:** the owner adds the secret.
+
+## Monthly subscription with per-PC activation codes and password recovery (2026-10-07)
+
+**Why/source:** the owner rents Hessa monthly and wants the .exe to stop being useful when copied or not paid for, with
+reminders before the end and a way back for a forgotten password.
+**What:** `server/license.py` - request code from the Windows MachineGuid (never from the environment in Hessa.exe),
+activation codes = Ed25519-signed {PCs, until, issued, serial} in 160 readable characters with a check letter; one code
+can name several PCs. 7-day trial (its start also taken from the oldest data), a bar at the bottom from 7 days before the
+end, 3 grace days, then LOCKED: sign-in, reading, backups and exports still work, saving is refused with err.license.*
+The highest time ever seen (license.json and the signed history) catches a clock moved back. A copied data folder shows
+another request code. Older codes cannot replace newer ones. `tools/seller.py` (+ seller.bat menu in Arabic) issues
+codes with the seller's private key, never in the repository, and keeps issued.csv. Forgotten administrator password:
+one-time request on the centre PC -> seller reset code -> new password (staff: the administrator resets as before).
+The check is always on in Hessa.exe and off in the source copy unless config `license_required` (tests).
+**Checks:** `tests/test_license.py` (9: codes, typos, forged keys, other PC, older/ended codes, trial/warn/grace/lock,
+clock moved back with license.json deleted, one-use reset code, the seller tool; the running server locked, backing up,
+refusing another PC's code, activating; password recovery from the centre PC only). Frontend test for every state's words.
+**Mistakes/lessons:** a bottom bar fixed to the window covered the account button in the menu - it lives in the page
+column now. HS_MACHINE_ID (a test override) would have let a copy pretend to be a licensed PC; the licence reads the
+MachineGuid itself in the compiled program. **Limits:** no offline licence can stop a skilled cracker from patching the
+.exe; the public repository lets anyone run the source without the check - make it private before selling widely.
+
+## The owner's control: Watch, every click, a careful sign-in, entries that explain themselves (2026-10-06)
+
+**Why/source:** the owner wants centre owners to trust the desk while they are away - "nobody steals, cheats, deletes
+or discounts by mistake or on purpose" - as the main selling point; keep the trial sign-in until the build is done.
+**What:**
+- `server/watch.py` reads the existing signed records for a period (receipts and reversals, drawers, attendance, the change
+  log, the security log, refused requests) and lists 16 patterns with a level, the person, the numbers and the page. The
+  skim (reversed and taken again smaller the same day by the same person) is critical; repeated short drawers too.
+  `/api/watch` and `/api/watch/review` are for administrators of the whole centre; the review is a settings row
+  (`watchReviewed`) that only that endpoint writes - `/api/commit` refuses it, and non-administrators cannot change the
+  `watch*` thresholds, so nobody quietens an alert about himself. Defaults: working hours 8-23, large amount 1000, 2 units.
+- `js/views/watch.js`: period, four level tiles (click to filter), people ranking, filters, each alert with "why it matters"
+  and "the right way", open the record, mark reviewed with a note, export; an overview card for administrators.
+- Clicks: the browser never sent anything to the existing `/api/log` (the activity table was empty). `HS.track` now sends
+  every click (button words, tick boxes ended on/off), page, save and failed save, screen errors; the server stamps the real
+  name. Activity log → "Clicks & screens" for administrators. Typed values are never recorded.
+- Sign-in: show/hide password, Caps Lock warning, the last user name remembered, and after sign-in "your last sign-in was
+  ... from ...; N wrong passwords since - not you? tell the administrator".
+- Entries: a discount or exemption needs its reason (server); a reversal reason must say what was wrong; e-wallet payments
+  ask for the transfer number once; the pay dialog says what remains owed or goes into credit.
+- Sample: desk2 now skims once and closes short twice in the last 12 days, so the Watch shows real patterns.
+- Guides: "Know what happened while you were away" and three situations (suspected theft, no receipt, shared password).
+**Checks:** `tests/test_center_watch.py` (a desk user skims, closes short, is refused the Watch and the review and the
+thresholds; a review keeps the note; discount without reason refused; welcome counts wrong passwords; clicks stored under
+the real name, administrators only). **Lessons:** the click log existed on the server for months with nothing feeding it -
+check the producer, not only the table. **Limits:** clicks are stored in the replicated journal (thousands a day per desk);
+watch volume on a busy centre should be measured during the pilot.
+
+## Trial sign-in, own app window, step-by-step guides and a hidden-bug review (2026-10-06)
+
+**Why/source:** the owner asked (on `main`, base `4e43522`) for a fixed first version that anyone can use with no
+help: sample data removable in one click, tick-box permissions like Mr.Ayman-HR, step-by-step guides in English and
+Arabic with the Egyptian edge cases, a temporary developer login admin / 123, a full-screen program instead of a
+browser tab, original icons everywhere, and a review for hidden bugs. Gate: L1/L2 source work (field gates unchanged).
+**What:**
+- Trial sign-in: on a brand-new PC (no accounts, not joined) "Try it now" / admin + 123 creates the administrator with
+  that password (strength rules skipped only here). Local only, never through a tunnel; a yellow bar on every page and
+  a hint on the sign-in screen until the password changes (flag file `trial-login.json`, never synced). `dev_login` is
+  on by default for now and must be switched off before a real sale. Added "Change my password" to the account panel -
+  people could not change their own password before unless forced. Password screen labels "Password (1)/(2)" fixed.
+- Own window: `server/appwindow.py` opens Edge/Chrome in app mode with its own profile (separate taskbar window with
+  Hessa's icon), maximized or full screen (Settings → Appearance, admin, on the PC itself); falls back to the browser.
+  Full-screen button (F11) in the top bar.
+- Icons: the Windows .ico (Hessa.exe, shortcut, installer) was still Trip Orders' "table and chairs"; one stdlib drawing
+  (navy tile, amber cap with lit board) now makes the .ico, the phone icons and the favicon. Eight new line icons.
+- Guides: `js/views/guides.js` - 31 guides in six areas, each step typed (open/click/type/choose/check/tip/careful)
+  and naming the button with `[[dictionary.key]]` so it always matches the screen; "Guide me" docks a coach that opens the
+  page, outlines the target and waits for the person to do it. 44 situations from Egyptian centres. "?" opens the
+  guides of the current page. All text in en.js and ar.js (Formal Arabic).
+- Permissions screen: a new person showed "Centre manager" over the Viewer ticks and was saved with the wrong profile
+  name; ready-made profile names now show in the reader's language.
+- Sample: names repeated every 60 students (7 pupils called the same); siblings had different fathers and numbers.
+  Confirm buttons said "Done" instead of "Load sample centre" / "Delete all sample data".
+**Hidden bugs fixed (each with a regression test):** nothing on the screens ever set a family, so "Pay for brothers and
+sisters" never appeared for real students - students without a family key are now one family when they share the
+parent mobile, found when read (a first version stored "tel:<number>" as the key and the LogPrivacyTest caught the number
+in the change log of a reader without contacts.view - never derive a stored key from a hidden field);
+NaN passed every "< 0" check and a new group could get a negative or text price, text in a discount or special fee gave a
+server error, NaN/negative drawer counts and NaN marks were stored; a cash expense could be reversed with no open drawer;
+an expense date was stored without checking it is a date; the "photo is being copied" picture printed a literal ….
+**Checks:** see the commit; browser suites run with the local Chromium. **Mistakes/lessons:** `pkill -f` matched its own
+shell; a guide that names a button by key cannot drift from the screen, and a probe that visits every guide target in the
+running app found two wrong selectors (groups remembered the last tab). **Limits/next:** the app window and new icon need
+a check on the centre's Windows PC (Edge); `dev_login` must be turned off for the first customer; guides cover the
+first-sale core plus administration - exams/settlements guides can follow when those pages are sold.
+
+## Isolate both PCs in the restore regression (2026-10-06)
+
+**Why/source:** while validating the form integration on `codex/form-layout-sync-20261006`
+(form commit `e69d24c`, base `b0f3950`), the 294-test source gate failed the inherited T30 restore
+scenario. The same failure reproduced in isolation; instrumentation also produced a passing run,
+consistent with a timing race. Each harness proxy blocks only incoming traffic: cutting PC1's
+proxy still lets PC1 send its supposedly offline record to the administrator. A restore may
+legitimately remove a known record absent from the backup; the intended test concerns unseen work.
+**Fix:** cut both endpoints, assert the offline record is absent on the restoring PC before and
+after restore, then reconnect both. Keep the existing convergence, surviving-record and audit
+assertions. No application, restore or sync behaviour changes and no new user-visible strings.
+**Evidence:** corrected T30 passed in three fresh processes (15.720s, 15.739s, 13.848s);
+all 35 multi-PC tests passed in 605.719s. An initial attempt to repeat the same class within one
+unittest process reused class-level databases and caused duplicate-record conflicts; fresh
+processes correctly isolate repetitions. Frontend 26/26, lint, installer preflight and whitespace
+checks passed. Browser execution remains subject to the PR's real Chrome gate before merge.
+**Lesson:** an incoming-port proxy is not a bidirectional network disconnection. Assert isolation
+in a concurrent-restore scenario instead of relying on timing. This supports L1 source validation;
+the field recovery drill remains FS3/L4.
+
+## Publish the pending form readability improvements (2026-10-06)
+
+**Why/source:** the owner requested push, merge and main synchronization. Existing uncommitted
+form changes were based on `main` at `b0f3950`; prepared on `codex/form-layout-sync-20261006`.
+**What:** separate labels from preceding controls, align responsive settings fields, group rules
+by door/school/follow-up, explain each rule in English and Formal Arabic, associate help with
+controls through `aria-describedby`, and make each switch's whole labelled row clickable.
+Message templates keep paired languages and collapse to one column on phones. Existing list
+drawers use the same spacing. Added the required task and documentation record and corrected
+a missing space between HTML attributes during review. Removed a legal reference from the new
+school-group help so it describes configuration without suggesting regulatory acceptance.
+**Tests:** the supplied frontend regression covers both languages, switch labelling/help,
+list containers, rule sections and paired message fields: 26/26 frontend tests passed.
+Python lint, installer preflight (1.1.0) and whitespace checks passed. The full local source
+gate ran 294 tests (25 skips) and exposed an inherited restore test's incomplete simulated
+partition; a separate test correction follows. Local browser checks skipped all 32 tests
+because the configured browser was absent; GitHub's real Chrome gate is required before merge.
+**Limits/next:** this is source integration for the pilot's usability, not new field acceptance.
+The published `v1.1.0` installer stays tied to its original tag; these subsequent source changes
+need a later installer build to appear in the executable. Private runtime files remain local.
+
+## Hessa 1.1.0 installer published and verified (2026-10-06)
+
+**Why:** the owner explicitly requested the Windows executable on GitHub. **Source/gate:**
+`claude/basic-first-version` at `c78db6e`, merged by PR #11 into `main` at `6b5bf2d`; FS2 / L1 distribution.
+**What:** pushed the annotated `v1.1.0` tag, synchronized local main, and monitored Actions run
+`37423171664` until the source, browser and Windows-installer jobs all succeeded. The workflow compiled
+the program, built the installer, checked startup/served pages in a temporary home, and published the release.
+**Evidence:** installer preflight passed; branch run `37421882881` and release run `37423171664` succeeded.
+Downloaded `Hessa-Setup-1.1.0.exe` (10,960,435 bytes) from the published GitHub asset;
+SHA-256 `e70fa2541e76ffa37b809f9b3a33f1b356d15fc03c53633190c568915ac60758` matches GitHub's digest.
+Release: https://github.com/coolman1984/Teachers/releases/tag/v1.1.0.
+**Recovery/lessons:** the default GitHub API route timed out; a per-command proxy connection to an
+alternate GitHub API address worked with normal TLS validation. Existing Git credentials stayed in
+memory; local helpers and private runtime files were excluded from commits. No system proxy changes.
+**Limits/next:** no local installation was performed. Clean-PC installation, real counter/printer
+acceptance and restore on a second PC remain FS3 / L2-L4. This is the limited pilot candidate, not field acceptance.
+
+## Basic first-version menu for the owner's own centre (2026-10-06)
+
+**What:** the owner asked for a first version to run their own counter, teachers and students. The menu now shows only the core of
+LAUNCH_SCOPE (overview, door, students, groups, money, reports, activity, settings, help). Exams, follow-up, teacher settlements and
+devices are "extra" pages: hidden from the menu, palette, shortcuts and phone tab bar until ticked in Settings → Centre → "Pages in the
+menu" (setting `extras`, validated by the server against `domain.EXTRA_PAGES`). Nothing is deleted, no permission changes, and a link
+to a hidden page still opens it (the overview and the advisor link to follow-up). **Why:** a non-technical owner starting with real
+students should see the daily work first; every feature stays one tick away. **Source:** main at b342c7c, gate L1 preparation.
+**Checks run on Windows:** frontend tests, the Python unit/centre suites, and the browser suites (test_e2e_browser, test_e2e_center,
+test_acceptance, test_center_devices) with the installed Chrome. **Mistake:** my new API test reused the name `test_23_` of an
+existing test in the same class, so one would silently replace the other - renamed and checked both run. **Lesson:** grep for the
+test name before adding a numbered test. **Windows test fix:** `test_ai.test_b_the_key_stays_on_this_pc` read every
+file in the data folder and failed on Windows with "Permission denied" on `program.lock`, which the running server locks (Linux CI
+never saw it); the lock file holds only a process id and is now skipped. **Test pop-up on the desk:** running the tests on the owner's PC
+opened a real Windows message box ("data saved by a newer version 9.9.9") from `test_center_safety`, which starts a throwaway
+server on a fake newer data folder; the owner thought their data was at risk. Test servers now set `HS_NO_DIALOG`, so the refusal is
+written to the log and STARTUP_PROBLEM.txt only; real starts still show the box. **Lesson:** a test run on a working PC must never
+show the person a window. `test_center_safety.SystemHealthTest` also failed on Windows only: it backdates backup files with
+`os.rename`, which refuses an existing target on Windows; `os.replace` does what Linux rename does. **Next:** FS2 release v1.1.0 from a tag, FS3 install and the acceptance journey on the
+real PC.
+
 ## First-sale documentation review corrections (2026-10-06)
 
 Keep copied/standalone optional-service guides independent of repository-relative contract paths; point implementers to the online source contract. For transport, remove the stale-release installation instruction and unconditional no-data-loss claim, and describe the office-only pilot before optional phone work. Documentation only; all branch copies retain the same contract and application history. Verified source/standalone link targets and Markdown-only diffs.
@@ -12,6 +317,98 @@ Added LAUNCH_SCOPE.md and linked every tracked Markdown guide, plan and agent sk
 # Development History and Lessons Learned
 
 Newest first. Every change adds an entry: what changed, why, mistakes, lessons.
+
+## A correction to an AI question was lost when another question was added (CI, 2026-10-06)
+
+**What:** in "Generate with AI", a teacher who started correcting one question and then added another lost the correction: the save
+of the second redrew the list from the original text. Found by the browser job on GitHub (a slower machine finished the save while the
+test was typing). **Fix:** every keystroke of a correction is kept in the question itself, so a redraw shows it. **Regression test:**
+`test_ai.AiJourneyTest` now starts a correction, adds another question, waits for the redraw and checks the text is still there
+(fails without the fix). **Review of #9:** keeping every keystroke opened the opposite hole - typing after "Add to the bank" while a slow
+save runs would show text the bank never got. A correction is now frozen (fields disabled, keystrokes ignored, also after a redraw)
+from the moment its save starts until it answers; `test_ai.test_b_slow_save_*` delays the save 1.5 s and checks shown = saved.
+**Lesson:** a list that redraws after a save must redraw from what the person typed, not from what arrived - and what is being
+saved must not move.
+
+## The "sessions now" list widened a phone at the largest font (found 2026-10-06)
+
+**What:** the full run of the acceptance tests at 15:00 found the overview wider than a 360 px phone: the list of sessions running now
+is a grid, and a grid row grows to its content, so a long group, teacher and room pushed it off the screen. The page test only sees
+it while sessions are running, which is why the morning runs passed. **Fix:** the list's column is `minmax(0, 1fr)`; the teacher and
+room line wraps. **Regression test:** `test_acceptance.test_a0_*` puts a long row on the overview at any hour (it fails without the fix).
+**Also:** the page-name check of G06 refused the free text that `test_multinode` kept in the teacher's page-name field; the test now
+writes valid page names (the merge rules it proves are unchanged). **Lesson:** a test that depends on the clock needs a twin that
+does not.
+
+## Questions written by AI, checked by the teacher (review G04, plan P9.2 - 2026-10-06)
+
+**What:** optional. An administrator pastes an Anthropic API key in Settings -> AI questions; in the question bank a teacher presses
+"Generate with AI", chooses subject, grade and lesson (and notes), and reads each question that comes back: add it as it is, correct
+it in place, or discard it. Added questions carry `source: 'ai'`.
+**Privacy and money:** the key is kept in `data/ai.json` on that PC (owner-only file, like `gateway.json`) - not in the shared data,
+the backups, the logs or any page (the page sees the last four letters). Only the subject name, grade, lesson and the teacher's
+notes are sent - no student, parent, mark or teacher name. One request at a time per PC; the activity log says who asked for how many.
+**How:** `server/ai.py` uses `urllib` (the server takes no outside packages, so the official SDK cannot be used) against the Messages
+API: structured JSON output (a schema with the text, choices, answer letter and explanation), server-side fallback on a declined
+request, the stop reason checked before reading (declined / cut short have their own messages), every question cleaned by the same
+rules as a hand-written one and a broken one dropped rather than "fixed". The model is the plan's (`claude-sonnet-5-5`), checked
+against the current model list first, as the review asked.
+**Mistakes:** the first "correct then add" opened the question editor over the dialog and lost the list on the way back; it is now an
+editor inside the list. The editor was cramped on a phone - it now stacks.
+**Evidence:** `tests/test_ai.py` with a local stand-in for the AI service: no key -> clear message and nothing sent; a bad key shape and
+a non-administrator refused; the key absent from the state, every other data file, the server output; the request carries the
+lesson but no student name, code or phone; nothing saved before the teacher adds; key refused / busy / no credit / declined / cut
+short / no internet each say what to do; a teacher limited to one teacher cannot ask for another's; in Chromium the administrator
+saves the key and the teacher adds one, corrects one and discards one. Not yet tried with a real account (needs the owner's key).
+
+## Question bank: write once, use in many exams (review G03, plan P9.2 - 2026-10-06)
+
+**Why:** a teacher writes the same kind of questions every week; the plan's AI generator also needs a place to put the questions
+a teacher accepts. **What:** a `questions` entity per teacher (subject, grade, lesson, 2-5 choices, the right answer, an
+explanation, source manual/ai), Exams -> Question bank (search and filters, edit, delete to the Recycle Bin), "Add from the question
+bank" in the exam form (order with arrows, remove), printing of the question paper and of the answer key with the explanations.
+**Decisions:** an exam keeps a *copy* of each question (`paper`), not a link: a change in the bank never changes an exam already
+made. The exam shows "Changed in the bank" and the teacher chooses "Use the new version"; if marks were already saved the page asks
+first and the saved marks stay as they are (only sheets read later use the new key). The server derives the number of questions,
+the choices and the answer key from the paper - the page cannot send a key that does not match. Questions are teacher-scoped like
+exams and written with "Create exams and answer keys" (an assistant is refused).
+**Mistakes:** an exam could not be opened for editing once created (the form existed, no button reached it); the marks sheet now has
+"Edit exam", which asks before leaving marks that were typed but not saved.
+**Evidence:** `tests/test_qbank.py` - bad questions refused with one clear message, the key follows the paper, a bank edit leaves the
+exam alone, marks counted with the exam's own key, delete keeps the exam's copy and shows in the Recycle Bin, a teacher sees only
+their bank and cannot write into another's, an assistant is refused; in Chromium (Arabic): write a question, add two to a new exam,
+reorder, print paper and key, change the bank, take the new version with the confirmation, marks unchanged. Screens checked at
+360 px and on a PC; the paper and key printed to A4 PDF.
+
+## A public page for every teacher who wants one (review G06, plan P9.3 - 2026-10-06)
+
+**Why:** parents look for a teacher before they come; today the centre sends timetables as pictures in WhatsApp groups that are old
+the next day. **What:** a "Page name" in the teacher's form (for example `mr-ahmed`) publishes `<gateway>/p/mr-ahmed` on the same
+internet mailbox as the parent cards: the teacher's name, bio and subjects, every active group with its days, times, price and the
+seats still free, and a "Book on WhatsApp" button to the centre's booking number (Settings -> Centre). The centre PC sends the page
+only when something on it changed (a signature per page, kept in `gateway-pages.json`); emptying the name takes the page down.
+**Privacy:** only what a poster on the centre's door would show - never a student, a parent, the teacher's own phone or the
+centre's share. **Decisions:** the address is English letters, numbers and dashes, 3-40 characters, unique (`err.slug`,
+`err.slugTaken`); the page is read-only like the parent card; school groups are not listed.
+**Mistakes:** the first Arabic text for free seats ("متبقٍ 3 مقعد") was wrong grammar - now "المقاعد المتبقية: 3"; an English bio
+in the Arabic page put the full stop on the wrong side - the bio now follows its own direction (`dir="auto"`).
+**Evidence:** `tests/test_gateway_parent.test_d_the_teacher_page` (bad and taken names refused, the page on a real local gateway
+shows the group and 28 free seats of 30, no child names or phone numbers, the page address serves the app, removing the name gives
+404) and `gateway/test/gateway.test.js` (pages stored, read publicly, removed); the page checked on a 360 px phone in both languages.
+
+## main green again: a race in copying photos, a phone overflow and a test that clicked too early (2026-10-06)
+
+**Why:** after #6 the browser job on main was red (top-students picture), and the next runs showed two more failures that came and went.
+**What:** (1) *Real bug:* with three or more PCs, two sync threads could download the same photo at the same moment into the same
+`.part` file; the second kept appending after the first had moved it into place, so the stored photo came out longer than the
+original (or the download failed its checksum). Now one download per file at a time (`SyncService.fetching`), and a file that is
+already in place is not fetched again. (2) The overview's "Sessions now and next" rows could not shrink: on a 360 px phone with the
+largest font the page was 4 px too wide - only at hours when that list is full. (3) The G05 browser test clicked "Top students" when
+the server had saved "shown to parents" but the panel had not yet got the answer; it now waits for the panel's own state.
+**Mistakes:** all three passed locally most of the time; each was found only by reading the CI log and reproducing the exact condition
+(three PCs, time of day, a slower browser).
+**Evidence:** `tests/test_sync_files.py` - two threads fetch one file: corrupted/lost on the old code, intact and stored once now;
+`test_acceptance` phone check reproduced at the same hour and passes now; G05 passes repeatedly.
 
 ## Integrate all outstanding branches and enforce the actual safety boundaries (2026-10-05)
 

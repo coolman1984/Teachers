@@ -94,7 +94,7 @@ class Server:
         self.data_dir = data_dir or os.path.join(self.root, 'data')
         self.cfg_path = os.path.join(self.root, 'config.json')
         cfg = {'port': self.port, 'host': '127.0.0.1', 'data_dir': self.data_dir, 'backup_dir': os.path.join(self.root, 'backups'),
-               'open_browser': False, 'sync_port': self.sync_port, 'sync_interval_seconds': 1, 'device_name': name,
+               'open_browser': False, 'dev_login': False, 'sync_port': self.sync_port, 'sync_interval_seconds': 1, 'device_name': name,
                'backup_interval_hours': 1000}
         cfg.update(extra_cfg or {})
         with open(self.cfg_path, 'w') as f:
@@ -118,7 +118,7 @@ class Server:
             json.dump(cfg, f)
 
     def start(self, wait=True):
-        env = dict(os.environ, HS_CONFIG=self.cfg_path, PYTHONUNBUFFERED='1')
+        env = dict(os.environ, HS_CONFIG=self.cfg_path, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
         self.proc = subprocess.Popen([sys.executable, APP], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         threading.Thread(target=self._drain, args=(self.proc,), daemon=True).start()
         if wait:
@@ -166,6 +166,14 @@ class Server:
 
     def cleanup(self):
         self.kill()
+        # a server error (HTTP 500) is written only to the PC's log: show it before the folder goes, or it can never be traced
+        try:
+            with open(os.path.join(self.data_dir, 'logs', 'server.log'), encoding='utf-8', errors='replace') as f:
+                text = f.read()
+            if ' ERROR ' in text or 'Traceback' in text:
+                sys.stderr.write(f'\n--- server errors of {self.name} ---\n' + text[text.find('ERROR') - 40 if 'ERROR' in text else 0:][-6000:] + '\n')
+        except OSError:
+            pass
         shutil.rmtree(self.root, ignore_errors=True)
 
 

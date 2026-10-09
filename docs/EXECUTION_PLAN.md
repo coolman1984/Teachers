@@ -123,7 +123,8 @@ Every row also has engine columns: `id, ver, created_at/by, updated_at/by, delet
 | `shifts` | shifts | no, user, userId, node, openedAt, openingCash, closedAt, expectedCash, countedCash, diff, diffReason, status(open/closed) | — |
 | `expenses` | expenses | no, date, at, amount, category, teacherId, groupId, method, shiftId, voidOf, note, by | teacherId |
 | `materials` | materials | name, teacherId, gradeCode, price, cost, **stock (counter)**, active | teacherId |
-| `exams` | exams | title, teacherId, groupIds[], date, kind, maxScore, questions, choices, answerKey[], published | teacherId |
+| `exams` | exams | title, teacherId, groupIds[], date, kind, maxScore, questions, choices, answerKey[], published, paper[] (copies of bank questions: qid, text, choices, answer, explanation) | teacherId |
+| `questions` | questions | teacherId, subjectId, gradeCode, topic, text, choices[2-5], answer (A-E), explanation, source (manual/ai), active | teacherId |
 | `marks` | marks | examId, studentId, teacherId, score, absent, via, answers[], note | teacherId |
 | `followups` | followups | studentId, teacherId, date, type, reason, outcome, by | teacherId |
 | `settlements` | settlements | teacherId, period(YYYY-MM), revenue, centerShare, teacherShare, deductions, paid, status, detail{}, by, at | teacherId |
@@ -241,9 +242,9 @@ Grades: الصف الأول الابتدائي … السادس الابتدائ
 ### Phase P1 — Make the fork run again (the shell, no trip traces)
 **P1.1 index.html.** Script list exactly: `lib/qrcode.min.js, js/core.js, js/i18n.js, js/i18n/en.js, js/i18n/ar.js, js/prefs.js,
 js/shell.js, js/data.js, js/ui.js, js/views/join.js, js/views/auth.js, js/views/overview.js, js/views/door.js, js/views/students.js,
-js/views/groups.js, js/views/money.js, js/views/exams.js, js/views/followup.js, js/views/settlements.js, js/views/reports.js,
-js/views/lists.js, js/views/importx.js, js/views/print.js, js/omr.js, js/views/audit.js, js/views/activity.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
-js/views/mailbox.js, js/views/soon.js, js/views/settings.js, js/views/help.js, js/app.js`. `<title>Hessa</title>`,
+js/views/groups.js, js/views/money.js, js/views/exams.js, js/views/qbank.js, js/views/followup.js, js/views/settlements.js, js/views/reports.js,
+js/views/lists.js, js/views/importx.js, js/views/print.js, js/omr.js, js/views/audit.js, js/views/activity.js, js/views/watch.js, js/views/license.js, js/views/access.js, js/views/datatab.js, js/views/devices.js,
+js/views/mailbox.js, js/views/soon.js, js/views/settings.js, js/views/help.js, js/views/guides.js, js/app.js`. `<title>Hessa</title>`,
 noscript text "Hessa needs JavaScript. يحتاج نظام حصة إلى تفعيل جافاسكريبت." New favicon (amber square + cap).
 Create each new view file as a minimal `HS.views.<id> = HS.withData({render, mount})` first (skeleton), then fill it in its task.
 
@@ -383,7 +384,7 @@ delete exactly them in one changeset). Content (Egypt-realistic, fake names):
 - Exams: weekly per secondary group (8 weeks), monthly per group; marks normal(68%, 15%) clipped; ranks.
 - Follow-ups for 10 risky students. Settlements of last month approved for 6 teachers.
 - Users: `owner` (Centre manager), `desk1`, `desk2` (Front desk), `t.ahmed` (Teacher, scope = his teacher id),
-  `asst.mona` (Assistant). Passwords printed in the console and in `docs/GUIDE_ADMIN.md` sample section (`Hessa-2026!`),
+  `asst.mona` (Assistant). Passwords printed in the console and in `docs/GUIDE_ADMIN.md` sample section (a new password per load, shown to administrators only),
   `must_change` on.
 Test `tests/test_sample.py`: build twice → identical ops (determinism); load into a fresh server; `/api/c/dashboard`
 numbers non-zero; risk list 10–40; profitability has every signal at least once; delete-all-sample leaves 0 rows.
@@ -515,7 +516,7 @@ area (mean darkness); pick the darkest above a threshold, flag 0 or 2+ marks; re
 `center.grade_answers` logic (port to JS) → show a review screen (student, answers, flags, score) → Save → `/api/c/marks`
 with `answers` and `via 'omr'`. Test with generated sheets (render the print page, rasterise with Playwright screenshot,
 add rotation/blur noise) → ≥ 98% bubbles correct.
-**P9.2 AI exam generator (optional, needs the owner's API key).** Settings → AI: API key stored in `gateway.json`-like
+**P9.2 AI exam generator (optional, needs the owner's API key) - built (review G04): `server/ai.py`, Settings -> AI questions, Question bank -> Generate with AI; the model id was checked against the current model list before use.** Settings → AI: API key stored in `gateway.json`-like
 local file `ai.json` (never in the shared DB, never logged). `POST /api/c/ai/questions {subject, grade, system, track,
 topic, count, type}` calls the Claude Messages API (`https://api.anthropic.com/v1/messages`, model `claude-sonnet-5-5`,
 `urllib.request`, timeout 60 s) with a prompt that requires the Egyptian curriculum and JSON output
@@ -571,7 +572,7 @@ node --test tests/test_frontend.js                                              
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 python3 tools/build_windows.py --check                                            # every file the installer ships
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_xlsx test_integration   # always (~2 min)
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx test_integration   # always (~2 min)
 python3 -m unittest test_sample test_multinode test_gateway_parent test_recovery                                  # before a PR (~5 min)
 HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance        # when screens changed
 cd ../gateway && node --test --no-warnings test/gateway.test.js                                                   # when gateway changed
@@ -632,6 +633,8 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | AI key, video hosting | default: features hidden until configured |
 | 2026-10-05 | Remote work (owner: run on the client PC, work from phone or another PC over the internet) | Outbound tunnel (Tailscale recommended, Cloudflare Tunnel alternative), no own relay; remote work off until switched on at the centre, only `remote.use`; a laptop with its own copy covers the PC being off (`docs/REMOTE_ACCESS.md`) |
 | 2026-10-05 | Version | 1.1.0 (continues after the engine's 1.0.2, never lowered) |
+| 2026-10-08 | Help language | Help texts (guides, "Solve a problem", questions, support, tour) in **polished, respectful Egyptian Arabic** that a 12-year-old understands; screens stay Formal Arabic; every problem offers "Take me there" and "Guide me" (Apps-Factory HELP-01..04) |
+| 2026-10-08 | First sign-in and appearance | **No slideshow on the first sign-in** (slides only from Help); defaults: **daylight theme + system font**; help texts to become polished Egyptian Arabic with a "Solve a problem" section (Apps-Factory ADR-0005) |
 | open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |
 | open | Forgive the debt of a student who left for good | default: no — the debt stays visible, marked “left” |
 | open | Monthly groups during the mid-year break (23 Jan – 4 Feb 2027) | default: full months are charged |

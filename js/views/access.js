@@ -11,6 +11,14 @@
   function load() {
     return Promise.all([HS.get('/api/users'), HS.get('/api/quick-links')]).then(function (r) { cache = { users: r[0], links: r[1] }; return cache; });
   }
+  // ready-made profiles keep their English name in the data; the screen shows them in the reader's language unless renamed
+  var BUILTIN = { 'full-access': 'Centre manager', administrator: 'Administrator', secretary: 'Front desk', teacher: 'Teacher', assistant: 'Assistant', accountant: 'Accountant', viewer: 'Viewer' };
+  function roleLabel(name) {
+    if (!name || name === 'Custom') return HS.t('acc.custom');
+    for (var id in BUILTIN) if (BUILTIN[id] === name && HS.has('prof.' + id)) return HS.t('prof.' + id);
+    return name;
+  }
+  HS.roleLabel = roleLabel;
   function linkFor(uid) { return (cache.links.users || []).filter(function (l) { return l.id === uid; })[0] || {}; }
   function linkUrl(l) { return l.token ? location.origin + '/k/' + l.token : ''; }
 
@@ -19,7 +27,7 @@
     var users = cache.users.users.filter(function (u) { return !u.deleted; });
     return U.table([
       { h: 'f.name', cell: function (u) { return '<b>' + HS.esc(u.full_name) + '</b><div class="muted" style="font-size:.85rem">@' + HS.esc(u.username) + (u.title ? ' · ' + HS.esc(u.title) : '') + '</div>'; } },
-      { h: 'acc.profile', cell: function (u) { return '<span class="badge ' + (u.role === 'Administrator' ? 'signal' : '') + '">' + HS.esc(u.role || 'Custom') + '</span>'; } },
+      { h: 'acc.profile', cell: function (u) { return '<span class="badge ' + (u.role === 'Administrator' ? 'signal' : '') + '">' + HS.esc(roleLabel(u.role)) + '</span>'; } },
       { h: 'acc.login', cell: function (u) { var l = linkFor(u.id); return l.login === 'link' ? '<span class="badge info">' + HS.icon('chat', 'sm') + HS.esc(HS.t('acc.login.link')) + '</span>' : '<span class="badge">' + HS.icon('lock', 'sm') + HS.esc(HS.t('acc.login.pw')) + '</span>'; } },
       { h: 'acc.teachers', cell: function (u) { return u.scopes ? '<span class="badge warn">' + HS.fmt.num(u.scopes.length) + ' ' + HS.esc(HS.t('acc.teachersOnly')) + '</span>' : '<span class="muted">' + HS.esc(HS.t('acc.allTeachers')) + '</span>'; } },
       { h: 'acc.last', cell: function (u) { return u.last_login ? '<span class="num">' + U.dt(u.last_login) + '</span>' : '<span class="faint">–</span>'; } },
@@ -41,7 +49,10 @@
   /* ---------- user form ---------- */
   function openUser(u) {
     var isNew = !u, l = u ? linkFor(u.id) : {}, profiles = cache.users.profiles, teachers = HS.data.list('teachers');
-    var perms = u ? u.perms : (profiles.filter(function (p) { return p.id === 'viewer'; })[0] || { perms: [] }).perms;
+    // a new person starts with the smallest ready-made profile (Viewer), and the list shows that same profile - it showed
+    // "Centre manager" over the Viewer ticks, and saving kept the wrong name on the person
+    var start = isNew ? (profiles.filter(function (p) { return p.id === 'viewer'; })[0] || { name: 'Custom', perms: [] }) : null;
+    var perms = u ? u.perms : start.perms, role = u ? u.role : start.name;
     var mode = l.login === 'link' ? 'link' : 'password';
     var scoped = !!(u && u.scopes);
     HS.panel.open({ title: isNew ? HS.t('acc.add') : u.full_name,
@@ -51,7 +62,7 @@
         '<div data-pwbox class="stack"><div class="field"><label>' + HS.esc(HS.t('auth.username')) + '</label><input class="input" name="username" dir="ltr" value="' + HS.esc(u ? u.username : '') + '" autocapitalize="off" spellcheck="false"></div>' +
         (isNew ? '<div class="field"><label>' + HS.esc(HS.t('auth.password')) + '</label><input class="input" name="password" type="text" dir="ltr" autocomplete="off"><span class="help">' + HS.esc(HS.t('acc.pw.h')) + '</span></div>' : '') + '</div>' +
         '<div class="field"><label>' + HS.esc(HS.t('acc.title')) + '</label><input class="input" name="title" value="' + HS.esc(u ? u.title : '') + '"></div>' +
-        '<div class="field"><label>' + HS.esc(HS.t('acc.profile')) + '</label><select class="input" name="role">' + profiles.map(function (p) { return '<option value="' + HS.esc(p.name) + '"' + (u && u.role === p.name ? ' selected' : '') + '>' + HS.esc(p.name) + '</option>'; }).join('') + '<option value="Custom"' + (u && (!u.role || u.role === 'Custom') ? ' selected' : '') + '>' + HS.esc(HS.t('acc.custom')) + '</option></select><span class="help">' + HS.esc(HS.t('acc.profile.h')) + '</span></div>' +
+        '<div class="field"><label>' + HS.esc(HS.t('acc.profile')) + '</label><select class="input" name="role">' + profiles.map(function (p) { return '<option value="' + HS.esc(p.name) + '"' + (role === p.name ? ' selected' : '') + '>' + HS.esc(roleLabel(p.name)) + '</option>'; }).join('') + '<option value="Custom"' + (!role || role === 'Custom' ? ' selected' : '') + '>' + HS.esc(HS.t('acc.custom')) + '</option></select><span class="help">' + HS.esc(HS.t('acc.profile.h')) + '</span></div>' +
         '<div class="field"><label>' + HS.esc(HS.t('acc.teachers')) + '</label><div class="seg" role="group"><button type="button" data-scope="all" aria-pressed="' + (!scoped) + '">' + HS.esc(HS.t('acc.allTeachers')) + '</button><button type="button" data-scope="some" aria-pressed="' + scoped + '">' + HS.esc(HS.t('acc.teachersOnly')) + '</button></div>' +
           '<div data-teachers class="chip-row" style="margin-top:.4rem"' + (scoped ? '' : ' hidden') + '>' + teachers.map(function (c) { return '<label class="perm"><input type="checkbox" data-teacher="' + HS.esc(c.id) + '"' + (u && u.scopes && u.scopes.indexOf(c.id) >= 0 ? ' checked' : '') + '><span>' + HS.esc(HS.data.teacherName(c.id)) + '</span></label>'; }).join('') + '</div></div>' +
         '<div class="field"><div class="row"><span class="switch"><input type="checkbox" name="active"' + (!u || u.active ? ' checked' : '') + '><span></span></span><label style="font-weight:600">' + HS.esc(HS.t('f.active')) + '</label></div></div>' +
@@ -113,7 +124,7 @@
     var list = cache.users.profiles;
     var el = HS.dialog({ title: HS.t('acc.profiles'), wide: true,
       body: '<p class="muted">' + HS.esc(HS.t('acc.profiles.h')) + '</p><div class="stack">' + list.map(function (p) {
-        return '<div class="card row" style="justify-content:space-between"><div><b>' + HS.esc(p.name) + '</b><div class="muted" style="font-size:.85rem">' + HS.fmt.num(p.perms.length) + ' ' + HS.esc(HS.t('acc.perms.count')) + '</div></div>' +
+        return '<div class="card row" style="justify-content:space-between"><div><b>' + HS.esc(roleLabel(p.name)) + '</b><div class="muted" style="font-size:.85rem">' + HS.fmt.num(p.perms.length) + ' ' + HS.esc(HS.t('acc.perms.count')) + '</div></div>' +
           (p.id === 'administrator' ? '<span class="badge signal">' + HS.icon('lock', 'sm') + HS.esc(HS.t('acc.locked')) + '</span>' : '<button class="btn sm" data-edit="' + HS.esc(p.id) + '">' + HS.esc(HS.t('common.open')) + '</button>') + '</div>'; }).join('') + '</div>',
       footer: '<button class="btn primary" data-newprofile>' + HS.icon('plus', 'sm') + HS.esc(HS.t('acc.profile.add')) + '</button>' });
     el.addEventListener('click', function (e) {
@@ -122,7 +133,7 @@
     });
   }
   function editProfile(p) {
-    var el = HS.dialog({ title: p ? p.name : HS.t('acc.profile.add'), wide: true,
+    var el = HS.dialog({ title: p ? roleLabel(p.name) : HS.t('acc.profile.add'), wide: true,
       body: '<div class="field"><label>' + HS.esc(HS.t('f.name')) + '</label><input class="input" id="pf-name" value="' + HS.esc(p ? p.name : '') + '"></div><div class="field"><div class="row"><span class="switch"><input type="checkbox" id="pf-apply" checked><span></span></span><label for="pf-apply" style="font-weight:600">' + HS.esc(HS.t('acc.profile.apply')) + '</label></div></div>' + ticks(p ? p.perms : []) + '<div class="tip err" hidden role="alert" style="background:var(--bad-soft);color:var(--bad)"></div>',
       footer: (p ? '<button class="btn danger" data-del style="margin-inline-end:auto">' + HS.esc(HS.t('common.delete')) + '</button>' : '') + '<button class="btn ghost" data-close>' + HS.esc(HS.t('common.cancel')) + '</button><button class="btn primary" data-ok>' + HS.esc(HS.t('common.save')) + '</button>' });
     el.querySelector('[data-ok]').addEventListener('click', function () {

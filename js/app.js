@@ -11,6 +11,7 @@
         HS.me = s.me;
         if (s.me.must_change) { HS.views.auth.mustChange(); return; }
         HS.data.load().then(function () { HS.shell.start(); HS.data.startPolling(); }, function () { HS.shell.start(); });
+        if (HS.license) HS.license.start();      // the subscription bar at the bottom (js/views/license.js)
         clearInterval(keepAlive);
         keepAlive = setInterval(function () { HS.get('/api/version').catch(function () { /* a 401 signs out through HS.api */ }); }, 45000);
       } else {
@@ -23,7 +24,10 @@
     });
   }
   HS.on('logged-in', start);
-  HS.on('logged-out', function () { HS.shell.stop(); HS.data.stopPolling(); HS.data.state = null; start(); });
+  HS.on('logged-out', function () {
+    if (HS.track) HS.track.clear();          // nobody to send them for any more
+    HS.shell.stop(); HS.data.stopPolling(); HS.data.state = null; start();
+  });
   HS.on('auth-rerender', function () { if (HS.status) HS.views.auth.show(HS.status); });
 
   document.addEventListener('DOMContentLoaded', function () {

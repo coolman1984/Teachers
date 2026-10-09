@@ -33,7 +33,7 @@ def main():
         post('/api/auth/login',{'username':args.username,'password':getpass.getpass('Administrator password: ')})
         result=post('/api/c/sample',{})
         print(json.dumps(result,ensure_ascii=False))
-        print('Sample users: '+', '.join(a[0] for a in sample.ACCOUNT_SPECS)+'; temporary password: '+sample.PASSWORD)
+        print('Sample users: '+', '.join(a[0] for a in sample.ACCOUNT_SPECS)+'; temporary password: '+str(result.get('password')))
     else:
         ops=sample.build(args.date)
         args.output.parent.mkdir(parents=True,exist_ok=True)

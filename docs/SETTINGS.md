@@ -7,9 +7,19 @@ Settings → Lists contains subjects, rooms, teachers and handouts. New/edit ope
 Teacher terms support percentage, monthly rent, session rent, student-visit rent or a mixture. The example uses 10,000 EGP,
 20 sessions and 300 visits. Changing the settlement model clears the fields that no longer apply.
 
+Settings → Centre → "Pages in the menu" chooses the extra pages (Exams, Follow-up, Teacher settlements, Devices). Without a
+choice the menu is the basic first version: overview, door, students, groups, money, reports, activity, settings and help. The
+setting `extras` is a list of those page ids, checked by the server (`domain.EXTRA_PAGES`). Hiding a page only shortens the menu,
+the palette, the shortcuts and the phone tab bar: the data stays, permissions are unchanged and a link to the page still opens it.
+
 Centre and Rules tabs save structured settings rows with their current settingsVer values in one audited commit. Numeric rules
 are validated by the server. Messages edits six kinds in both languages. Templates accept {student}, {group}, {date}, {amount},
 {balance}, {center} and {link}; the preview uses example data and does not send anything.
+
+Forms keep each label close to its control and leave space between fields. Rules are grouped into Door and attendance,
+School groups, and Follow-up alerts, with explanations in English and Formal Arabic. Each switch can be toggled from its
+whole labelled row; help text is linked to the control for assistive technology. Message templates pair Arabic and English
+on larger screens and stack on phones. The receipt footer spans the form's columns. Saving and permissions are unchanged.
 
 Parent links are optional. Gateway status exposes configuration and connection errors, never keys. Generate keys once and copy the
 explicitly revealed setup code only to another authorised centre PC. Keys remain in gateway.json outside the shared database.

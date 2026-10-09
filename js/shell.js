@@ -13,12 +13,14 @@
     { id: 'groups', icon: 'layers', group: 'ops', perm: 'groups.view', key: 'g', phase: 1 },
     // the desk can collect and close its own shift without seeing everybody's money (money.view)
     { id: 'money', icon: 'sheet', group: 'money', perm: ['money.view', 'money.collect', 'expenses.add', 'shifts.close'], key: 'm', phase: 1 },
-    { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1 },
-    { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1 },
-    { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1 },
+    // extra: left out of the basic menu until the centre turns it on (Settings > Centre); the page itself still opens
+    { id: 'exams', icon: 'doc', group: 'learn', perm: 'exams.view', key: 'e', phase: 1, extra: true },
+    { id: 'followup', icon: 'bell', group: 'learn', perm: 'followup.view', key: 'f', phase: 1, extra: true },
+    { id: 'settlements', icon: 'chart', group: 'money', perm: 'settlements.view', key: 't', phase: 1, extra: true },
     { id: 'reports', icon: 'chart', group: 'insight', perm: 'reports.view', key: 'r', phase: 1 },
+    { id: 'watch', icon: 'shield', group: 'control', perm: 'users.manage', key: 'w', phase: 1 },   // the owner's watch: administrators
     { id: 'activity', icon: 'activity', group: 'control', perm: 'logs.view', key: 'a', phase: 1 },
-    { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1 },
+    { id: 'devices', icon: 'sync', group: 'control', perm: 'users.manage', key: 'v', phase: 1, extra: true },
     { id: 'settings', icon: 'settings', group: 'control', perm: null, key: 'c', phase: 1 },
     { id: 'help', icon: 'help', group: 'control', perm: null, key: 'h', phase: 1 }
   ];
@@ -32,7 +34,15 @@
     var list = Array.isArray(perm) ? perm : [perm];
     return list.some(function (p) { return (me.perms || []).indexOf(p) >= 0; });
   };
-  function visiblePages() { return PAGES.filter(function (p) { return HS.can(p.perm); }); }
+  // the centre setting "extras" lists the extra pages shown in the menu; without it the menu is the basic one
+  HS.EXTRAS = PAGES.filter(function (p) { return p.extra; }).map(function (p) { return p.id; });
+  HS.extraOn = function (id) {
+    var list = ((HS.data && HS.data.state) || {}).settings;
+    list = list && Array.isArray(list.extras) ? list.extras : [];
+    return list.indexOf(id) >= 0;
+  };
+  function inMenu(p) { return HS.can(p.perm) && (!p.extra || HS.extraOn(p.id)); }
+  function visiblePages() { return PAGES.filter(inMenu); }
 
   /* ---------- router ---------- */
   HS.route = function () {
@@ -64,7 +74,7 @@
         '<div class="brand"><div class="mark">' + HS.icon('cap', 'lg') + '</div><div class="name">' + HS.esc(HS.t('app.name')) + '<small>' + HS.esc(HS.t('app.tagline')) + '</small></div></div>' +
         '<nav class="nav" data-tour="nav">' + groups + '</nav>' +
         '<div class="side-foot"><button class="icon-btn" data-act="account" aria-label="' + HS.esc(HS.t('top.account')) + '" style="background:var(--side-active);color:var(--side-ink);font-weight:700;border-radius:50%">' + HS.esc(initials) + '</button>' +
-          '<div class="who"><b>' + HS.esc(me.full_name || me.username) + '</b><small>' + HS.esc(me.role || '') + '</small></div>' +
+          '<div class="who"><b>' + HS.esc(me.full_name || me.username) + '</b><small>' + HS.esc(HS.roleLabel ? HS.roleLabel(me.role) : me.role || '') + '</small></div>' +
           '<button class="icon-btn mirror-ic" data-act="collapse" aria-label="' + HS.esc(HS.t('top.collapse')) + '" title="' + HS.esc(HS.t('top.collapse')) + ' ([)">' + HS.icon('collapse') + '</button></div>' +
       '</aside>' +
       '<div class="main">' +
@@ -80,9 +90,12 @@
           '<button class="icon-btn" data-act="lang" aria-label="' + HS.esc(HS.t('top.lang')) + '" title="' + HS.esc(HS.t('top.lang')) + ' (L)">' + HS.icon('globe') + '</button>' +
           '<button class="icon-btn" data-act="theme" id="theme-btn" aria-label="' + HS.esc(HS.t('top.theme')) + '" title="' + HS.esc(HS.t('top.theme')) + ' (T)"></button>' +
           '<button class="icon-btn" data-act="help-here" aria-label="' + HS.esc(HS.t('top.helpHere')) + '" title="' + HS.esc(HS.t('top.helpHere')) + '">' + HS.icon('help') + '</button>' +
+          '<button class="icon-btn desk-only" data-act="full" id="full-btn" aria-label="' + HS.esc(HS.t('top.full')) + '" title="' + HS.esc(HS.t('top.full')) + ' (F11)">' + HS.icon('expand') + '</button>' +
           '<button class="icon-btn desk-only" data-act="keys" aria-label="' + HS.esc(HS.t('top.shortcuts')) + '" title="' + HS.esc(HS.t('top.shortcuts')) + ' (?)">' + HS.icon('keyboard') + '</button>' +
           '</span>' +
         '</header>' +
+        (me.trialPassword ? '<div class="trial-bar" role="alert">' + HS.icon('key') + '<span class="grow"><b>' + HS.esc(HS.t('trial.bar')) + '</b> ' + HS.esc(HS.t('trial.bar.b')) + '</span>' +
+          '<button class="btn sm primary" data-act="password">' + HS.esc(HS.t('pw.change')) + '</button></div>' : '') +
         '<div class="offline-bar" role="alert">' + HS.icon('alert') + '<span><b>' + HS.esc(HS.t('top.offline')) + '</b> ' + HS.esc(HS.t('top.offline.b')) + '</span></div>' +
         '<main class="content" id="view" tabindex="-1"></main>' +
       '</div>' + tabbarHTML() +
@@ -93,7 +106,7 @@
   /* On a phone the four most used pages sit under the thumb, like an app; "More" opens the full menu. */
   var TABS = ['overview', 'door', 'students', 'followup', 'groups', 'exams'];
   function tabbarHTML() {
-    var tabs = TABS.map(function (id) { return PAGES.filter(function (p) { return p.id === id && HS.can(p.perm); })[0]; }).filter(Boolean).slice(0, 4);
+    var tabs = TABS.map(function (id) { return PAGES.filter(function (p) { return p.id === id && inMenu(p); })[0]; }).filter(Boolean).slice(0, 4);
     return '<nav class="tabbar" aria-label="' + HS.esc(HS.t('top.menu')) + '">' + tabs.map(function (p) {
       return '<a href="#/' + p.id + '" data-tab="' + p.id + '">' + HS.icon(p.icon) + '<span>' + HS.esc(HS.t('nav.' + p.id)) + '</span></a>';
     }).join('') + '<button data-act="menu">' + HS.icon('menu') + '<span>' + HS.esc(HS.t('top.more')) + '</span></button></nav>';
@@ -108,10 +121,29 @@
       refreshThemeButton();
       window.addEventListener('hashchange', renderRoute);
       renderRoute();
-      if (!HS.prefs.data.welcomed) setTimeout(function () { HS.slides.open(true); }, 500);
+      // owner's decision 2026-10-08: no slideshow on the first sign-in; the slides stay available from Help
+      showWelcome();
     },
-    stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); }
+    stop: function () { shellReady = false; window.removeEventListener('hashchange', renderRoute); },
+    rebuild: function () { if (shellReady) rebuildShell(); }   // after the menu's extra pages change
   };
+
+  /* right after signing in: when you were last here, and whether someone tried your password since ("not you? tell the
+     administrator") - the first thing a careful person wants to know */
+  function showWelcome() {
+    var w = HS.welcome; HS.welcome = null;
+    if (!w || !w.last) return;
+    var bar = document.createElement('div');
+    bar.className = 'welcome-bar' + (w.failed ? ' bad' : '');
+    bar.setAttribute('role', w.failed ? 'alert' : 'status');
+    bar.innerHTML = HS.icon(w.failed ? 'alert' : 'shield') + '<span class="grow">' + HS.esc(HS.t('auth.last', { when: HS.ui.dt(w.last).replace(/<[^>]+>/g, ''), ip: !w.lastIp ? '–' : /^(127\.|::1$|::ffff:127\.)/.test(w.lastIp) ? HS.t('auth.thisPc') : w.lastIp })) +
+      (w.failed ? ' <b>' + HS.esc(HS.t('auth.failedSince', { n: w.failed })) + '</b>' : '') + '</span><button class="icon-btn" aria-label="' + HS.esc(HS.t('common.close')) + '">' + HS.icon('x', 'sm') + '</button>';
+    var main = HS.$('.main'), view = HS.$('#view');
+    if (!main || !view) return;
+    main.insertBefore(bar, view);
+    bar.querySelector('button').addEventListener('click', function () { bar.remove(); });
+    if (!w.failed) setTimeout(function () { if (bar.parentNode) bar.remove(); }, 12000);
+  }
 
   function refreshThemeButton() {
     var b = HS.$('#theme-btn');
@@ -135,6 +167,7 @@
     if (view.mount) view.mount(host, ctx);
     window.scrollTo(0, 0);
     HS.emit('route', r);
+    if (HS.track) HS.track('page', r.path + (location.hash.indexOf('?') > 0 ? location.hash.slice(location.hash.indexOf('?')) : ''), HS.t('nav.' + page.id));
   }
   HS.rerender = function () { renderRoute(); };
 
@@ -310,14 +343,59 @@
     var me = HS.me;
     HS.panel.open({ title: HS.t('panel.account'), body:
       '<div class="card"><h3>' + HS.esc(me.full_name || me.username) + '</h3><span class="muted">@' + HS.esc(me.username) + '</span>' +
-      '<dl class="kv" style="margin-top:1rem"><dt>' + HS.esc(HS.t('panel.account.role')) + '</dt><dd>' + HS.esc(me.role || '') + '</dd>' +
+      '<dl class="kv" style="margin-top:1rem"><dt>' + HS.esc(HS.t('panel.account.role')) + '</dt><dd>' + HS.esc(HS.roleLabel ? HS.roleLabel(me.role) : me.role || '') + '</dd>' +
       '<dt>' + HS.esc(HS.t('panel.account.node')) + '</dt><dd>' + HS.esc(me.node ? me.node.name : '') + '</dd>' +
       '<dt>' + HS.esc(HS.t('panel.account.perms')) + '</dt><dd><span class="num">' + (me.perms || []).length + '</span></dd></dl></div>',
-      footer: '<button class="btn" data-logout>' + HS.icon('logout', 'sm') + HS.esc(HS.t('auth.logout')) + '</button>',
-      mount: function (el) { el.querySelector('[data-logout]').addEventListener('click', logout); } });
+      footer: (me.viaLink ? '' : '<button class="btn" data-pw>' + HS.icon('key', 'sm') + HS.esc(HS.t('pw.change')) + '</button>') +
+        '<button class="btn" data-logout>' + HS.icon('logout', 'sm') + HS.esc(HS.t('auth.logout')) + '</button>',
+      mount: function (el) {
+        el.querySelector('[data-logout]').addEventListener('click', logout);
+        var pw = el.querySelector('[data-pw]'); if (pw) pw.addEventListener('click', changePassword);
+      } });
   }
 
+  /* Change my own password (any PC; the trial password 123 asks for it on every page until it is done). */
+  function changePassword() {
+    var min = HS.me.minPasswordLength || 8;
+    HS.panel.open({ title: HS.t('pw.change'), body:
+      '<form id="pw-form" class="stack" autocomplete="off">' +
+        '<div class="tip">' + HS.icon('info') + '<span>' + HS.esc(HS.t('pw.rules', { n: min })) + '</span></div>' +
+        '<div class="field"><label for="pw-old">' + HS.esc(HS.t('pw.old')) + '</label><input class="input" id="pw-old" type="password" required dir="ltr" autocomplete="current-password"></div>' +
+        '<div class="field"><label for="pw-new">' + HS.esc(HS.t('pw.new')) + '</label><input class="input" id="pw-new" type="password" required dir="ltr" autocomplete="new-password"></div>' +
+        '<div class="field"><label for="pw-again">' + HS.esc(HS.t('pw.again')) + '</label><input class="input" id="pw-again" type="password" required dir="ltr" autocomplete="new-password"></div>' +
+        '<div class="tip bad" id="pw-err" hidden role="alert"></div></form>',
+      footer: '<button class="btn primary" data-pw-save>' + HS.icon('check', 'sm') + HS.esc(HS.t('common.save')) + '</button>',
+      mount: function (el) {
+        var err = el.querySelector('#pw-err'), btn = el.querySelector('[data-pw-save]'), form = el.querySelector('#pw-form');
+        function save(e) {
+          if (e) e.preventDefault();
+          var o = el.querySelector('#pw-old').value, n = el.querySelector('#pw-new').value, a = el.querySelector('#pw-again').value;
+          err.hidden = true;
+          if (n !== a) { err.hidden = false; err.textContent = HS.t('pw.mismatch'); return; }
+          btn.disabled = true;
+          HS.post('/api/auth/password', { old: o, new: n }).then(function () {
+            HS.panel.close(); HS.toast(HS.t('pw.done'), 'ok');
+            return HS.get('/api/me').then(function (m) { HS.me = m; HS.shell.rebuild(); });
+          }, function (er) { btn.disabled = false; err.hidden = false; err.textContent = er.message || HS.t('common.error'); });
+        }
+        btn.addEventListener('click', save); form.addEventListener('submit', save);
+        el.querySelector('#pw-old').focus();
+      } });
+  }
+  HS.changePassword = changePassword;
+
+  /* full screen: the app window fills the whole screen (F11 or the button; Esc leaves) */
+  function toggleFull() {
+    var d = document;
+    if (d.fullscreenElement) { if (d.exitFullscreen) d.exitFullscreen(); }
+    else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(function () {});
+  }
+  document.addEventListener('fullscreenchange', function () {
+    var b = HS.$('#full-btn'); if (b) b.innerHTML = HS.icon(document.fullscreenElement ? 'shrink' : 'expand');
+  });
+
   function logout() {
+    if (HS.track) HS.track.flush();        // the last clicks go before the session ends
     HS.post('/api/auth/logout').then(function () { HS.emit('logged-out'); }, function () { HS.emit('logged-out'); });
   }
   function toggleCollapse() {
@@ -335,9 +413,11 @@
     else if (a === 'theme') HS.prefs.toggleTheme();
     else if (a === 'lang') HS.prefs.toggleLang();
     else if (a === 'keys') showKeys();
-    else if (a === 'help-here') HS.go('help?topic=' + (HS.helpTopic ? HS.helpTopic(HS.route().path) : 'start'));
+    else if (a === 'help-here') HS.go('help?view=guides&for=' + HS.route().path);   // the guides of this page first
     else if (a === 'collapse') toggleCollapse();
     else if (a === 'account') openAccount();
+    else if (a === 'password') changePassword();
+    else if (a === 'full') toggleFull();
     else if (a === 'menu') { var app = HS.$('#app-shell'); app.dataset.menu = app.dataset.menu === '1' ? 0 : 1; }
   });
   document.addEventListener('click', function (e) {   // on a phone the menu closes after choosing a page

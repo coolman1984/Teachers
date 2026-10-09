@@ -138,8 +138,119 @@
     });
   };
 
+  // the server's fixed English sentences (auth.py, app.py) in the reader's language; a sentence not listed is shown as written.
+  // {p} is a permission label, shown by its own dictionary name. tests/test_center_review.ServerWordsTest keeps this complete.
+  var SERVER = [
+    [/^The system is still starting\. Try again in a moment\.$/, 'starting'],
+    [/^This change could not be saved: (.+)$/, 'notSaved'],
+    [/^The password must have at least (\d+) characters\.$/, 'pwShort'],
+    [/^The password is too long \(maximum 128 characters\)\.$/, 'pwLong'],
+    [/^This password is too easy to guess\. Choose another one\.$/, 'pwEasy'],
+    [/^The password must not contain the user name or the person's name\.$/, 'pwName'],
+    [/^The password must contain letters and at least one number or symbol\.$/, 'pwMix'],
+    [/^User name: 3-32 letters, numbers, dot, dash or underscore \(no spaces\)\.$/, 'userName'],
+    [/^Enter the full name\.$/, 'fullName'],
+    [/^The administrator account already exists\. Please log in\.$/, 'adminExists'],
+    [/^This PC belongs to another administrator PC\. Wait until its user accounts have arrived\.$/, 'otherAdmin'],
+    [/^Wrong user name or password\.$/, 'wrong'],
+    [/^This account is locked for (\d+) more minute\(s\) after too many wrong passwords\. Wait, or ask the administrator to unlock it\.$/, 'lockedFor'],
+    [/^Too many wrong passwords\. The account is locked for (\d+) minutes\.$/, 'lockedNow'],
+    [/^This account is disabled\. Ask the administrator\.$/, 'disabledAsk'],
+    [/^This link does not work any more\.$/, 'linkDead'],
+    [/^This account is disabled\.$/, 'disabled'],
+    [/^Administrator accounts must log in with their password\.$/, 'adminPw'],
+    [/^This user no longer exists\.$/, 'noUser'],
+    [/^People with administrator rights cannot get a personal link - they always log in with their password\.$/, 'adminNoLink'],
+    [/^The current password is wrong\.$/, 'curWrong'],
+    [/^The new password must be different from the current one\.$/, 'pwSame'],
+    [/^For security, please change your password once on the administrator PC .*$/, 'pwOld'],
+    [/^Give the profile a name, e\.g\. \"Visitor\"\.$/, 'profName'],
+    [/^\"Custom\" is used for people with their own set of permissions\. Choose another name\.$/, 'profCustom'],
+    [/^\"(.+)\" was the old name of the profile \"(.+)\"\. Choose another name\.$/, 'profOld'],
+    [/^This profile no longer exists\.$/, 'profGone'],
+    [/^The Administrator profile always has every right\. It cannot be changed\.$/, 'profAdmin'],
+    [/^There is already a profile called \"(.+)\"\.$/, 'profDup'],
+    [/^At least one active person must keep the right to manage people and permissions\.$/, 'keepManager'],
+    [/^You have this profile yourself\. You cannot remove your own right to manage people and permissions\.$/, 'profSelf'],
+    [/^(.+) has this profile and has a personal link\. People with a link cannot have administrator rights .*$/, 'profLink'],
+    [/^The Administrator profile cannot be deleted\.$/, 'profAdminDel'],
+    [/^People who log in with a personal link cannot have administrator rights .*$/, 'linkAdmin'],
+    [/^The user name \"(.+)\" is already used by a deleted user\.$/, 'userDupDeleted'],
+    [/^The user name \"(.+)\" is already used\.$/, 'userDup'],
+    [/^(.+) was changed by (.+) at (.+)\. Close and open it again\.$/, 'changedBy'],
+    [/^(.+) also has a personal link\. People with a link cannot have administrator rights\. .*$/, 'userLink'],
+    [/^You cannot disable yourself or remove your own right to manage users\.$/, 'selfDisable'],
+    [/^At least one active user must keep the right to manage users\.$/, 'keepUserManager'],
+    [/^There is no account with this user name\.$/, 'noAccount'],
+    [/^You cannot delete your own account\.$/, 'selfDelete'],
+    [/^Choose a USB drive or another disk of this PC, not a network folder \(the backups contain the passwords\)\.$/, 'bkNetwork'],
+    [/^Type the full folder, for example E:\\Hessa-Backups\.$/, 'bkFull'],
+    [/^Choose a folder on another disk or a USB drive, not inside the program data\.$/, 'bkInside'],
+    [/^This folder cannot be used \(not found or no permission to write\)\. Check the drive and try again\.$/, 'bkBad'],
+    [/^The setting could not be saved \(config\.json is damaged or cannot be written\)\.$/, 'cfgBad'],
+    [/^Only a user with the permission \"(.+)\" for all teachers can replace all data\.$/, 'replaceAll'],
+    [/^You are limited to certain teachers and cannot add new ones\.$/, 'scopeAdd'],
+    [/^Contact details require the permission to view contacts\.$/, 'contacts'],
+    [/^You are not allowed to (add|change|delete) (.+)\. Ask the administrator for the permission \"(.+)\"\.$/, 'notAllowed'],
+    [/^You may work only inside the centre\. .*$/, 'insideOnly'],
+    [/^You do not have permission for this\. Ask the administrator for: \"(.+)\"\.$/, 'needPerm'],
+    [/^Request too large \((\d+) MB\)$/, 'tooLarge'],
+    [/^This shows the whole centre\. It is only for users who work with all teachers\.$/, 'wholeCentre'],
+    [/^Only an administrator can open this\.$/, 'adminOnly'],
+    [/^Only on this PC itself\.$/, 'thisPc'],
+    [/^The complete export contains all teachers; you only have access to some of them\.$/, 'exportAll'],
+    [/^Request from another web site was blocked\.$/, 'csrf'],
+    [/^Too many attempts\. Wait a minute and try again\.$/, 'tooMany'],
+    [/^Too many wrong attempts from this computer\. Wait a minute and try again\.$/, 'tooManyPc'],
+    [/^Joining is only possible on a new, not yet set up PC, on the PC itself\.$/, 'joinNew'],
+    [/^Only on a new, not yet set up PC, on the PC itself\.$/, 'newPc'],
+    [/^Not possible\.$/, 'notPossible'],
+    [/^Recover a password on the centre PC itself\.$/, 'recoverHere'],
+    [/^Recover a password on the centre PC \(the administrator PC\)\.$/, 'recoverAdmin'],
+    [/^The first administrator account can only be created on the PC with the program itself\.$/, 'firstAdmin'],
+    [/^Please change your temporary password first\.$/, 'tempPw'],
+    [/^This PC needs a decision first: .*$/, 'moved'],
+    [/^Conflicts are decided only in Devices & Sync by an administrator\.$/, 'conflicts'],
+    [/^Alerts are reviewed on the Watch page by an administrator\.$/, 'alerts'],
+    [/^Only an administrator changes what the Watch looks for\.$/, 'watchRules'],
+    [/^Use the dedicated centre operation for attendance and money records\.$/, 'useOp'],
+    [/^Choose how the program opens on this PC itself\.$/, 'windowHere'],
+    [/^Set up the link to the seller on the centre PC itself\.$/, 'supportHere'],
+    [/^Remote work is switched on at the centre itself, not from outside\.$/, 'remoteHere'],
+    [/^Only an administrator can choose the backup folder\.$/, 'bkAdmin'],
+    [/^For safety, choose the backup folder on this PC itself\.$/, 'bkHere'],
+    [/^For safety, save the administrator key on the administrator PC itself\.$/, 'keyHere'],
+    [/^Only the administrator PC can save the administrator key\.$/, 'keyAdmin'],
+    [/^The passphrase must have at least 12 characters\.$/, 'passphrase'],
+    [/^Record not found$/, 'notFound'],
+    [/^File type (.+) is not allowed$/, 'fileType'],
+    [/^Empty file$/, 'emptyFile'],
+    [/^Please log in\.$/, 'login'],
+    [/^This is changed only on its own page, by an administrator\.$/, 'ownPage'],
+    [/^The trial password works only on the centre PC itself\. Change it there first\.$/, 'trialRemote'],
+  ];
+  var PERM_AT = { replaceAll: 1, notAllowed: 3, needPerm: 1 };     // which captured value is a permission label
+  function permName(label) {
+    var groups = (HS.me && HS.me.permissions) || [];
+    for (var i = 0; i < groups.length; i++) {
+      var list = groups[i][1] || [];
+      for (var j = 0; j < list.length; j++) if (list[j][1] === label) return HS.t('perm.' + list[j][0]);
+    }
+    return label;
+  }
+  U.serverText = function (msg) {
+    msg = String(msg || '');
+    for (var i = 0; i < SERVER.length; i++) {
+      var m = SERVER[i][0].exec(msg);
+      if (!m) continue;
+      var key = SERVER[i][1], vars = { a: m[1], b: m[2], c: m[3] };
+      if (PERM_AT[key]) vars.p = permName(m[PERM_AT[key]]);
+      return HS.t('srv.' + key, vars);
+    }
+    return msg;
+  };
   U.errorText = function (e) {
-    return e && e.data && e.data.key ? HS.t(e.data.key, e.data.vars) : (e && e.message) || HS.t('common.error');
+    return e && e.data && e.data.key ? HS.t(e.data.key, e.data.vars) : (e && e.message ? U.serverText(e.message) : HS.t('common.error'));
   };
 
   /* ---------- forms ---------- */
@@ -151,7 +262,10 @@
   }
   U.field = function (f, value) {
     var id = 'f-' + f.key, lab = HS.t(f.label), val = value === undefined || value === null ? '' : value;
-    var attrs = (f.required ? ' required' : '') + (f.ltr ? ' dir="ltr"' : '') + (f.placeholder ? ' placeholder="' + HS.esc(HS.t(f.placeholder)) + '"' : '');
+    var help = f.help ? '<span class="help" id="' + id + '-h">' + HS.esc(HS.t(f.help)) + '</span>' : '';
+    var attrs = (f.required ? ' required' : '') + (f.ltr ? ' dir="ltr"' : '') + (f.placeholder ? ' placeholder="' + HS.esc(HS.t(f.placeholder)) + '"' : '') +
+      (f.help ? ' aria-describedby="' + id + '-h"' : '');
+    var cls = 'field' + (f.wide ? ' wide' : '');
     var input;
     if (f.type === 'multi') {
       input = '<select class="input" multiple id="' + id + '" name="' + f.key + '"' + attrs + '>' + f.options.map(function (o) {
@@ -165,8 +279,9 @@
       input = '<input class="input" id="' + id + '" name="' + f.key + '" list="dl-' + id + '" autocomplete="off" value="' + HS.esc(cur ? cur.l : '') + '"' + attrs + ' data-ref="' + f.entity + '">' +
         '<datalist id="dl-' + id + '">' + opts.map(function (o) { return '<option value="' + HS.esc(o.l) + '"></option>'; }).join('') + '</datalist>';
     } else if (f.type === 'bool') {
-      return '<div class="field"><div class="row"><span class="switch"><input type="checkbox" id="' + id + '" name="' + f.key + '"' + (val ? ' checked' : '') + '><span></span></span><label for="' + id + '" style="font-weight:600">' + HS.esc(lab) + '</label></div>' +
-        (f.help ? '<span class="help">' + HS.esc(HS.t(f.help)) + '</span>' : '') + '</div>';
+      // an on/off setting is one row you can click anywhere on: the words (and their explanation) first, the switch at the end
+      return '<div class="' + cls + ' toggle"><label class="toggle-row" for="' + id + '"><span class="toggle-text"><span class="lbl">' + HS.esc(lab) + '</span>' + help + '</span>' +
+        '<span class="switch"><input type="checkbox" id="' + id + '" name="' + f.key + '"' + (val ? ' checked' : '') + (f.help ? ' aria-describedby="' + id + '-h"' : '') + '><span></span></span></label></div>';
     } else if (f.type === 'textarea') {
       input = '<textarea class="input" id="' + id + '" name="' + f.key + '" rows="3"' + attrs + '>' + HS.esc(val) + '</textarea>';
     } else {
@@ -174,7 +289,7 @@
       input = '<input class="input" id="' + id + '" name="' + f.key + '" type="' + type + '"' + (type === 'number' ? ' inputmode="numeric" step="any"' : '') + ' value="' + HS.esc(type === 'datetime-local' ? String(val).slice(0, 16) : val) + '"' + attrs + (f.suggest ? ' list="dl-' + id + '" autocomplete="off"' : '') + '>' +
         (f.suggest ? '<datalist id="dl-' + id + '">' + f.suggest().map(function (x) { return '<option value="' + HS.esc(x) + '"></option>'; }).join('') + '</datalist>' : '');
     }
-    return '<div class="field"><label for="' + id + '">' + HS.esc(lab) + (f.required ? ' <span class="faint">*</span>' : '') + '</label>' + input + (f.help ? '<span class="help">' + HS.esc(HS.t(f.help)) + '</span>' : '') + '</div>';
+    return '<div class="' + cls + '"><label for="' + id + '">' + HS.esc(lab) + (f.required ? ' <span class="faint">*</span>' : '') + '</label>' + input + help + '</div>';
   };
   U.fields = function (fields, values) { return fields.map(function (f) { return U.field(f, (values || {})[f.key]); }).join(''); };
 

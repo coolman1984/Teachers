@@ -358,6 +358,63 @@ class NodeSafetyTest(unittest.TestCase):
             os.environ.pop('HS_MACHINE_ID', None)
             shutil.rmtree(d)
 
+    def test_installed_program_ignores_environment_overrides(self):
+        """Sale hardening: in Hessa.exe, HS_MACHINE_ID would hide a copied folder and HS_AI_URL would send the AI key elsewhere."""
+        import ai
+        import node
+        os.environ['HS_MACHINE_ID'] = 'pretend-pc'
+        os.environ['HS_AI_URL'] = 'http://evil.invalid'
+        try:
+            self.assertEqual(node.machine_fingerprint(), 'pretend-pc')       # tests and source runs only
+            self.assertEqual(ai.api_url(), 'http://evil.invalid')
+            node.__compiled__ = ai.__compiled__ = True
+            self.assertNotEqual(node.machine_fingerprint(), 'pretend-pc')
+            self.assertEqual(ai.api_url(), 'https://api.anthropic.com')
+        finally:
+            del node.__compiled__, ai.__compiled__
+            os.environ.pop('HS_MACHINE_ID', None)
+            os.environ.pop('HS_AI_URL', None)
+
+    def test_an_idle_centre_writes_little_to_the_shared_service(self):
+        """Review of PR 19: with an owner's phone registered, every round asked the service's status and re-sent the picture,
+        about 17,000 writes a day per idle centre on a service whose free quota (100,000) serves every centre."""
+        import gateway_client as gwc
+        d = tempfile.mkdtemp()
+        try:
+            sec = gwc.Secrets(os.path.join(d, 'gateway.json'))
+            sec.data.update(url='https://gw.invalid', officeSecret='o' * 40, linkSecret='l' * 40, centre='c' * 32)
+            calls = []
+
+            class FakeClient:
+                def status(self):
+                    calls.append('status')
+                    return {'cards': 0}
+
+                def put_owner(self, state=None, devices=None):
+                    calls.append('owner')
+
+            class FakeStore:
+                v = 1
+
+                def version(self):
+                    return self.v
+
+            st = FakeStore()
+            g = gwc.GatewaySync(st, None, 'n', sec, None, owner_fn=lambda want_state=True: ({'today': {}} if want_state else None, ['a' * 64]))
+            g.client = lambda: FakeClient()
+            g.push_cards = lambda: None
+            for _ in range(5):
+                g.cycle(force=False)                 # five background rounds on an idle centre
+            self.assertEqual(calls.count('status'), 1)
+            self.assertEqual(calls.count('owner'), 1)
+            st.v = 2                                 # a change goes out at once
+            g.cycle(force=False)
+            self.assertEqual(calls.count('owner'), 2)
+            g.cycle()                                # "Send now" asks the status at once
+            self.assertEqual(calls.count('status'), 2)
+        finally:
+            shutil.rmtree(d)
+
     def test_rolled_back_journal_gets_new_epoch(self):
         from system import System
         d = tempfile.mkdtemp()
@@ -579,3 +636,69 @@ class SecondReviewTest(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
         self.assertTrue(c.now() > 0)
+
+
+class AppWindowTest(unittest.TestCase):
+    """Hessa.exe shows the program in its own window (server/appwindow.py), never silently nothing."""
+
+    def test_the_window_command(self):
+        import appwindow
+        cmd = appwindow.command('C:/Edge/msedge.exe', 'http://localhost:8095/', 'maximized', 'C:/U/Hessa/window')
+        self.assertEqual(cmd[0], 'C:/Edge/msedge.exe')
+        self.assertIn('--app=http://localhost:8095/', cmd)
+        self.assertIn('--user-data-dir=C:/U/Hessa/window', cmd)   # own profile: own taskbar window, never the person's browser
+        self.assertIn('--start-maximized', cmd)
+        self.assertIn('--start-fullscreen', appwindow.command('e', 'u', 'fullscreen', 'p'))
+
+    def test_falls_back_to_the_browser(self):
+        import appwindow
+        opened = []
+        real_find, real_open = appwindow.find_browser, appwindow.webbrowser.open
+        appwindow.find_browser = lambda: None
+        appwindow.webbrowser.open = opened.append
+        try:
+            self.assertEqual(appwindow.open_window('http://localhost:1/', 'maximized', tempfile.gettempdir()), 'browser')
+            appwindow.find_browser = lambda: os.path.join(tempfile.gettempdir(), 'no-such-browser.exe')
+            self.assertEqual(appwindow.open_window('http://localhost:2/', 'nonsense', tempfile.gettempdir(), log=lambda m: None), 'browser')
+        finally:
+            appwindow.find_browser, appwindow.webbrowser.open = real_find, real_open
+        self.assertEqual(opened, ['http://localhost:1/', 'http://localhost:2/'])
+
+    def test_server_code_compiles_without_warnings(self):
+        """A bytes literal with \\u2026 showed the six characters on the 'photo is being copied' picture."""
+        import warnings
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for folder in ('server', 'tools'):
+            for name in sorted(os.listdir(os.path.join(root, folder))):
+                if name.endswith('.py'):
+                    with open(os.path.join(root, folder, name), encoding='utf-8') as f:
+                        src = f.read()
+                    with warnings.catch_warnings():
+                        warnings.simplefilter('error')
+                        compile(src, name, 'exec')
+
+    def test_the_program_icon_is_hessas(self):
+        """Hessa.exe, its shortcut and the installer carried the Trip Orders icon (a table and chairs): the .ico is now
+        drawn by the same code as the phone icons - the navy tile with the amber cap."""
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools'))
+        import make_app_icons
+        import make_icon
+        data = make_icon.ico(sizes=(16,))
+        self.assertEqual(data[6 + 16:], make_app_icons.png(16))
+        corner, centre = make_app_icons.pixel(0, 0, 32), make_app_icons.pixel(14, 13, 32)
+        self.assertEqual(corner[3], 0)                       # rounded tile: transparent corner
+        self.assertGreater(centre[0], 200)                   # amber cap in the middle
+        self.assertLess(make_app_icons.pixel(16, 29, 32)[0], 60)   # navy below it
+
+    def test_the_sellers_whatsapp_is_written_as_wa_me_wants_and_never_committed(self):
+        sys_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server')
+        import sys as _sys
+        _sys.path.insert(0, sys_path)
+        from version import wa_international
+        self.assertEqual(wa_international('01012345678'), '201012345678')
+        self.assertEqual(wa_international('+20 10 1234 5678'), '201012345678')
+        self.assertEqual(wa_international('12345'), '')
+        root = os.path.dirname(sys_path)
+        self.assertIn('server/_vendor.py', open(os.path.join(root, '.gitignore'), encoding='utf-8').read())
+        self.assertNotIn('VENDOR_WHATSAPP = \'2', open(os.path.join(sys_path, 'version.py'), encoding='utf-8').read())

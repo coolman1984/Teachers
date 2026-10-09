@@ -102,7 +102,7 @@ class Secrets:
     def setup_code(self):
         if not self.configured:
             raise GatewayError('The mailbox is not set up yet.', 'gw.err.notSetUp')
-        return b64url(json.dumps({'v': 1, 'u': self.url, 'o': self.data['officeSecret'], 'l': self.data['linkSecret']}).encode())
+        return b64url(json.dumps({'v': 1, 'u': self.url, 'o': self.data['officeSecret'], 'l': self.data['linkSecret'], 'c': self.centre}).encode())
 
     def from_code(self, code):
         try:
@@ -113,19 +113,41 @@ class Secrets:
             raise GatewayError('This setup code is not valid. Copy it again from the first office PC.', 'gw.err.code')
         self.set_url(d['u'])
         self.data['officeSecret'], self.data['linkSecret'] = d['o'], d['l']
+        self.data['centre'] = d.get('c') or ''
         self.save()
+
+    @property
+    def centre(self):
+        """The centre's id on the seller's "Hessa online" service ('' when the centre runs its own gateway)."""
+        return str(self.data.get('centre') or '')
+
+    def join(self, url, licence, name=''):
+        """Connect to the seller's service with the subscription code: new secrets, then the gateway gives the centre its id."""
+        self.set_url(url)
+        office, link = pysecrets.token_urlsafe(32), pysecrets.token_urlsafe(32)
+        res = Client(self.url, office).join(licence, name)
+        self.data.update(officeSecret=office, linkSecret=link, centre=res['centre'], until=res.get('until'), licenceSent=_code_key(licence))
+        self.save()
+        return res
 
 
 # --------------------------------------------------------------------------- talking to the gateway
-class Client:
-    def __init__(self, url, secret, timeout=25):
-        self.url, self.secret, self.timeout = url.rstrip('/'), secret, timeout
+def _code_key(code):
+    return hashlib.sha256(''.join(c for c in str(code or '').upper() if c.isalnum()).encode()).hexdigest()[:16]
 
-    def call(self, method, path, obj=None, raw=False):
+
+class Client:
+    def __init__(self, url, secret, timeout=25, centre=''):
+        self.url, self.secret, self.timeout, self.centre = url.rstrip('/'), secret, timeout, centre
+
+    def call(self, method, path, obj=None, raw=False, signed=True):
         body = b'' if obj is None else json.dumps(obj).encode()
-        req = urllib.request.Request(self.url + path, data=body if method != 'GET' else None, method=method,
-                                     headers={**sign_headers(self.secret, method, path, body if method != 'GET' else b''), 'Content-Type': 'application/json',
-                                              'User-Agent': 'Hessa-Office'})
+        headers = {'Content-Type': 'application/json', 'User-Agent': 'Hessa-Office'}
+        if signed:
+            headers.update(sign_headers(self.secret, method, path, body if method != 'GET' else b''))
+            if self.centre:
+                headers['X-HS-Centre'] = self.centre
+        req = urllib.request.Request(self.url + path, data=body if method != 'GET' else None, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 data = r.read()
@@ -133,6 +155,16 @@ class Client:
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 raise GatewayError('The mailbox refused this PC. The secret does not match the one set on the gateway.', 'gw.err.refused')
+            if e.code == 402:
+                raise GatewayError('The Hessa online subscription has ended. Renew it to publish again.', 'gw.err.ended')
+            if e.code == 409:
+                raise GatewayError('This subscription code is already connected. On another PC of the centre use "Paste the setup code".', 'gw.err.joined')
+            if e.code == 400 and path == '/office/join':
+                raise GatewayError('The online service did not accept the subscription code. Activate the program first.', 'gw.err.licence')
+            if e.code == 429 and path.startswith('/office/whatsapp'):
+                raise GatewayError('The daily WhatsApp limit of this centre is reached. The rest goes tomorrow; ask the seller for a higher limit.', 'wa.err.limit')
+            if e.code == 503 and path.startswith('/office/whatsapp'):
+                raise GatewayError('WhatsApp is not set up on the Hessa online service yet. Ask the seller.', 'wa.err.notReady')
             if e.code == 503:
                 raise GatewayError('The mailbox is running but has no secret yet. Set OFFICE_SECRET on it (see the setup guide).', 'gw.err.noSecret')
             raise GatewayError(f'The mailbox answered with an error ({e.code}).', 'gw.err.status', code=e.code)
@@ -142,8 +174,25 @@ class Client:
     def status(self):
         return self.call('GET', '/office/status')
 
+    def join(self, licence, name=''):
+        return self.call('POST', '/office/join', {'licence': licence, 'secret': self.secret, 'name': name}, signed=False)
+
+    def renew(self, licence):
+        return self.call('PUT', '/office/licence', {'licence': licence})
+
+    def put_owner(self, state=None, devices=None):
+        body = {}
+        if state is not None:
+            body['state'] = state
+        if devices is not None:
+            body['devices'] = devices
+        return self.call('PUT', '/office/owner', body)
+
     def put_cards(self, cards, remove=(), revoke_students=()):
         return self.call('PUT', '/office/cards', {'cards': cards, 'remove': list(remove), 'revokeStudents': list(revoke_students)})
+
+    def put_pages(self, pages, remove=()):
+        return self.call('PUT', '/office/pages', {'pages': pages, 'remove': list(remove)})
 
 
 # --------------------------------------------------------------------------- the card a parent reads
@@ -196,6 +245,30 @@ def card_for(store, student_id, center_name=''):
             'wallet': f['wallet'], 'updatedAt': _now()}
 
 
+def page_for(store, teacher, center_name='', booking=''):
+    """The teacher's public page (<gateway>/p/<slug>, review G06): who the teacher is, the subjects, every active group with its
+    times and the seats still free, and a WhatsApp link to book. Never a student, a parent or a price agreement."""
+    import center
+    import domain as D
+    from datetime import date
+    subjects = {s['id']: s for s in store.rows('subjects')}
+    enrolled = center._enrolled_counts(store, date.today().isoformat())
+    groups = []
+    for g in store.rows('groups', 'teacher_id=?', (teacher['id'],)):
+        if g.get('active') is False or g.get('kind') == 'school':
+            continue
+        sub = subjects.get(g.get('subjectId')) or {}
+        cap = int(g.get('capacity') or 0)
+        groups.append({'name': g.get('name', ''), 'subject': sub.get('name', ''), 'subjectEn': sub.get('nameEn', ''), 'grade': g.get('gradeCode'),
+                       'system': g.get('system'), 'track': g.get('track'), 'slots': D.clean_slots(g.get('slots')), 'feeType': g.get('feeType'),
+                       'fee': g.get('fee'), 'seats': max(0, cap - enrolled.get(g['id'], 0)) if cap else None})
+    groups.sort(key=lambda x: (x['grade'] or '', x['name']))
+    subs = [subjects[i] for i in (teacher.get('subjectIds') or []) if i in subjects]
+    return {'name': teacher.get('name'), 'bio': (teacher.get('bio') or '')[:1500], 'center': center_name,
+            'subjects': [{'name': x.get('name'), 'nameEn': x.get('nameEn')} for x in subs], 'groups': groups[:40],
+            'booking': D.wa_number(booking) if booking else '', 'updatedAt': _now()}
+
+
 def _published(store, exam_id):
     """A mark reaches the parent only when the teacher pressed "Show to parents" on that exam."""
     ex = store.row('exams', exam_id)
@@ -203,9 +276,16 @@ def _published(store, exam_id):
 
 
 # --------------------------------------------------------------------------- the background service
+HEARTBEAT = 180        # seconds: the owner's phone says "PC off" after twice this without news
+
+
 class GatewaySync:
-    def __init__(self, store, journal, node_id, secrets, save_file, log_fn=None):
+    def __init__(self, store, journal, node_id, secrets, save_file, log_fn=None, owner_fn=None, licence_fn=None):
         self.store, self.journal, self.node_id, self.secrets, self.save_file = store, journal, node_id, secrets, save_file
+        self.owner_fn = owner_fn            # () -> (state or None, [phone token hashes]) - the owner's live picture
+        self.licence_fn = licence_fn        # () -> this PC's subscription code, sent again when it is renewed
+        self._owner_sig, self._owner_at, self._phones_sig = None, 0, None
+        self.wa = None                      # server/wa_auto.Sender - automatic WhatsApp through the seller's service
         self.say = log_fn or (lambda *a: None)
         self.lock = threading.Lock()
         self.wake = threading.Event()
@@ -214,6 +294,12 @@ class GatewaySync:
         # removed is still revoked after an internet outage or a restart
         self.known_path = os.path.join(os.path.dirname(secrets.path), 'gateway-cards.json')
         self.known = self._load_known()
+        self.pages_path = os.path.join(os.path.dirname(secrets.path), 'gateway-pages.json')   # slug -> signature of the published page
+        try:
+            with open(self.pages_path, encoding='utf-8') as f:
+                self.pushed_pages = dict(json.load(f))
+        except (OSError, ValueError, TypeError):
+            self.pushed_pages = {}
         self._pushed_version, self._pushed_at = None, 0
         self.stat = {'lastOk': None, 'lastError': None, 'lastTry': None, 'cards': None, 'gatewayTime': None}
         self._stop = False
@@ -236,12 +322,12 @@ class GatewaySync:
     def client(self):
         if not self.secrets.configured:
             raise GatewayError('The mailbox is not set up yet.', 'gw.err.notSetUp')
-        return Client(self.secrets.url, self.secrets.data['officeSecret'])
+        return Client(self.secrets.url, self.secrets.data['officeSecret'], centre=self.secrets.centre)
 
     def _loop(self):
-        delay = 5
+        delay, due = 5, 0
         while not self._stop:
-            self.wake.wait(delay if delay > 0 else 1)
+            woken = self.wake.wait(delay if delay > 0 else 1)
             self.wake.clear()
             if self._stop:
                 break
@@ -249,8 +335,17 @@ class GatewaySync:
                 delay = 30
                 continue
             try:
-                self.cycle()
-                delay = int(self.secrets.data.get('pollSeconds') or 60)
+                if not woken and self._phones_sig and time.time() < due:
+                    # between rounds, an owner's phone gets a change within seconds - and only a change: an idle centre
+                    # writes nothing extra to the shared service (its free daily writes serve every centre)
+                    if self.store.version() != getattr(self, '_owner_ver', None):
+                        with self.lock:
+                            self.push_owner()
+                    delay = 10
+                    continue
+                self.cycle(force=False)
+                due = time.time() + int(self.secrets.data.get('pollSeconds') or 60)
+                delay = 10 if self._phones_sig else int(self.secrets.data.get('pollSeconds') or 60)
             except GatewayError as e:
                 self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = str(e), e.key, e.vars
                 delay = min(max(delay * 2, 10), 600)
@@ -263,11 +358,18 @@ class GatewaySync:
         return {'configured': self.secrets.configured, 'url': self.secrets.url, 'pollSeconds': int(self.secrets.data.get('pollSeconds') or 60), **self.stat}
 
     # -- one round
-    def cycle(self):
+    def cycle(self, force=True):
+        """One round. The status question costs the shared service a write, so the background asks it every five minutes;
+        a person pressing "Send now" or "Test" (force) gets it at once."""
         with self.lock:
             self.stat['lastTry'] = _now()
+            self.renew()
             self.push_cards()
-            self.check()
+            self.push_owner()
+            self.send_whatsapp()
+            if force or time.time() - getattr(self, '_checked_at', 0) >= 300:
+                self.check()
+                self._checked_at = time.time()
             self.stat['lastOk'] = _now()
             self.stat['lastError'], self.stat['lastErrorKey'], self.stat['lastErrorVars'] = None, None, {}
 
@@ -322,18 +424,99 @@ class GatewaySync:
             for i in range(0, len(removed), 100):
                 cl.put_cards([], revoke_students=removed[i:i + 100])
             self._save_known()
+        self.push_pages(cl if (cards or stale) else None, name)
         self._pushed_version, self._pushed_at = v, time.time()
+
+    def push_pages(self, cl, name):
+        """Teachers with a page address get a public page; a removed address (or teacher) is taken down."""
+        import center
+        booking = str(center.settings(self.store).get('bookingPhone') or '')
+        pages, sigs = [], {}
+        for t in self.store.rows('teachers', "slug IS NOT NULL AND slug<>''"):
+            if t.get('active') is False:
+                continue
+            body = page_for(self.store, t, name, booking)
+            sig = hashlib.sha1(json.dumps({k: v for k, v in body.items() if k != 'updatedAt'}, sort_keys=True, default=str).encode()).hexdigest()
+            sigs[t['slug']] = sig
+            if self.pushed_pages.get(t['slug']) != sig:
+                pages.append({'slug': t['slug'], 'body': body})
+        gone = sorted(set(self.pushed_pages) - set(sigs))
+        if pages or gone:
+            cl = cl or self.client()
+            cl.put_pages(pages, remove=gone)
+            self.pushed_pages = sigs
+            self._save_pages()
+
+    def _save_pages(self):
+        tmp = self.pages_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(self.pushed_pages, f)
+        os.replace(tmp, self.pages_path)
 
     def check(self):
         """How many cards the gateway holds: the settings page compares it with the links made here."""
         st = self.client().status()
         self.stat['cards'] = st.get('cards')
         self.stat['gatewayTime'] = st.get('serverTime')
+        self.stat['owners'] = st.get('owners')
+        if 'until' in st:
+            self.stat['until'], self.stat['active'] = st.get('until'), st.get('active')
+
+    def send_whatsapp(self, force=False):
+        """Automatic WhatsApp (seller's service only). Its own problems are shown on its own card, never as a broken mailbox."""
+        if not self.wa or not self.secrets.centre:
+            return 0
+        try:
+            n = self.wa.run(self.client(), force)
+            self.wa.last_error = None
+            return n
+        except GatewayError as e:
+            self.wa.last_error = {'key': e.key, 'vars': e.vars, 'text': str(e)}
+            return 0
+
+    def renew(self):
+        """On the seller's service: after the subscription was renewed on this PC, the service learns the new last day."""
+        if not self.secrets.centre or not self.licence_fn:
+            return
+        code = self.licence_fn()
+        if not code or self.secrets.data.get('licenceSent') == _code_key(code):
+            return
+        res = self.client().renew(code)
+        self.secrets.data.update(licenceSent=_code_key(code), until=res.get('until'))
+        self.secrets.save()
+
+    def push_owner(self, force=False):
+        """The owner's live picture: sent when the data changed (checked every round, so within seconds) and at least every
+        minute while a phone is registered, so the phone also knows the PC is on. The list of phones is sent when it
+        changes (remembered in gateway.json, so a phone removed while this PC was off is still removed)."""
+        if not self.owner_fn:
+            return
+        hashes = sorted(self.owner_fn(want_state=False)[1])
+        psig = hashlib.sha1(json.dumps(hashes).encode()).hexdigest() if hashes else ''
+        phones_changed = psig != (self.secrets.data.get('phonesSent') or '')
+        self._phones_sig = psig or None
+        if not hashes and not phones_changed:
+            return
+        state, sig = None, None
+        if hashes:
+            ver = self.store.version()
+            if not force and not phones_changed and ver == getattr(self, '_owner_ver', None) and time.time() - self._owner_at < HEARTBEAT:
+                return
+            import owner
+            state = self.owner_fn(want_state=True)[0]
+            sig = owner.signature(state)
+            self._owner_ver = ver
+        self.client().put_owner(state, [{'tokenHash': h} for h in hashes] if phones_changed else None)
+        if phones_changed:
+            self.secrets.data['phonesSent'] = psig
+            self.secrets.save()
+        if sig:
+            self._owner_sig, self._owner_at = sig, time.time()
 
     # -- links
     def make_link(self, student_id, nonce):
         if not self.secrets.configured:
-            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Parent links.', 'gw.err.notSetUp')
+            raise GatewayError('The mailbox is not set up yet. An administrator sets it up in Settings, Online & WhatsApp.', 'gw.err.notSetUp')
         tok = link_token(self.secrets.data['linkSecret'], student_id, nonce)
         return tok, f'{self.secrets.url}/t/{tok}'
 

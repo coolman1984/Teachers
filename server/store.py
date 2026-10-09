@@ -97,7 +97,12 @@ ENTITIES = {
     'exams': ('exams', 'Exams', [
         ('title', 'title', T, 'Exam'), ('teacherId', 'teacher_id', T, 'Teacher'), ('groupIds', 'group_ids', J, 'Groups'),
         ('date', 'date', T, 'Date'), ('kind', 'kind', T, 'Kind'), ('maxScore', 'max_score', R, 'Full Mark'), ('questions', 'questions', I, 'Questions'),
-        ('choices', 'choices', I, 'Choices'), ('answerKey', 'answer_key', J, 'Answer Key'), ('published', 'published', B, 'Shown to Parents')]),
+        ('choices', 'choices', I, 'Choices'), ('answerKey', 'answer_key', J, 'Answer Key'), ('published', 'published', B, 'Shown to Parents'),
+        ('paper', 'paper', J, 'Questions on the Paper')]),
+    'questions': ('questions', 'Question Bank', [
+        ('teacherId', 'teacher_id', T, 'Teacher'), ('subjectId', 'subject_id', T, 'Subject'), ('gradeCode', 'grade_code', T, 'Grade'),
+        ('topic', 'topic', T, 'Lesson'), ('text', 'text', T, 'Question'), ('choices', 'choices', J, 'Choices'), ('answer', 'answer', T, 'Answer'),
+        ('explanation', 'explanation', T, 'Explanation'), ('source', 'source', T, 'Source'), ('active', 'active', B, 'Active')]),
     'marks': ('marks', 'Marks', [
         ('examId', 'exam_id', T, 'Exam'), ('studentId', 'student_id', T, 'Student'), ('teacherId', 'teacher_id', T, 'Teacher'),
         ('score', 'score', R, 'Score'), ('absent', 'absent', B, 'Absent'), ('via', 'via', T, 'Entered By'), ('answers', 'answers', J, 'Answers'),
@@ -113,7 +118,7 @@ ENTITIES = {
 }
 # rows that belong to one teacher (the scope used to limit a user to some teachers)
 TEACHER_SCOPED = {'groups', 'enrollments', 'sessions', 'attendance', 'payments', 'expenses', 'materials', 'exams', 'marks', 'followups',
-                  'settlements'}
+                  'settlements', 'questions'}
 # money records are never changed or deleted: a mistake is corrected by a new reversing record (voidOf)
 LEDGERS = {'payments', 'expenses'}
 # rows the browser gets only for the recent past (the rest is read through the reports and the student file)
@@ -315,8 +320,9 @@ class Store:
             return None, None
         allowed = set(scopes)
         marks = ','.join('?' * len(allowed)) or "''"
-        students = {r[0] for r in self.conn.execute(
-            f'SELECT DISTINCT student_id FROM enrollments WHERE deleted=0 AND teacher_id IN ({marks})', tuple(allowed))}
+        with self.lock:      # the shared connection: an unlocked read could get another thread's rows
+            students = {r[0] for r in self.conn.execute(
+                f'SELECT DISTINCT student_id FROM enrollments WHERE deleted=0 AND teacher_id IN ({marks})', tuple(allowed))}
         return allowed, students
 
     def _filter(self, entity, rows, allowed, students):
@@ -675,9 +681,9 @@ class Store:
                 for r in self.conn.execute(f'SELECT * FROM {table} WHERE deleted=1 AND deleted_txn IS NOT NULL ORDER BY rowid'):
                     g = groups.setdefault(r['deleted_txn'], {'txn': r['deleted_txn'], 'ts': r['deleted_at'], 'user': r['deleted_by'], 'items': {}, 'names': []})
                     g['items'][title] = g['items'].get(title, 0) + 1
-                    if e in ('students', 'teachers', 'groups', 'rooms', 'subjects', 'materials', 'exams'):
+                    if e in ('students', 'teachers', 'groups', 'rooms', 'subjects', 'materials', 'exams', 'questions'):
                         js = self._row_js(e, r)
-                        g['names'].append(js.get('name') or js.get('title') or r['id'])
+                        g['names'].append(js.get('name') or js.get('title') or (js.get('text') or '')[:60] or r['id'])
             for g in groups.values():
                 g['label'] = self._txn_label(g['txn'])
                 g['names'] = g['names'][:6]
@@ -696,7 +702,8 @@ class Store:
         return self.commit(user, ip, 'Restore deleted: ' + (t[0] or txn), ops, force=True)
 
     def _txn_label(self, txn):
-        t = self.conn.execute('SELECT label FROM transactions WHERE id=?', (txn,)).fetchone()  # saved before the upgrade
+        with self.lock:
+            t = self.conn.execute('SELECT label FROM transactions WHERE id=?', (txn,)).fetchone()  # saved before the upgrade
         if t:
             return t[0]
         d = self.journal.describe(txn=txn) if self.journal else None
