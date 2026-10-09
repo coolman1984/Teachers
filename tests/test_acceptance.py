@@ -63,6 +63,24 @@ class SampleCentreTest(BrowserBase):
         self.maxDiff = None
         self.assertEqual(problems, [])
 
+    def test_a2_settings_fit_a_phone_with_a_wide_linux_font(self):
+        """With the system font, Linux PCs show DejaVu Sans, which is much wider than the fonts here: the backup and data-check
+        buttons left the card headers and a gateway button grew wider than a 360 px phone (seen on the CI runner only)."""
+        problems = []
+        for lang in ('ar', 'en'):
+            pg = self.open({'lang': lang, 'theme': 'night', 'size': 'xl'}, width=360, height=740)
+            for page in [p for p in PAGES if p.startswith('settings')]:
+                pg.goto(self.S.base + '/#/' + page)
+                pg.wait_for_selector('#view > *')
+                pg.wait_for_timeout(700)
+                pg.add_style_tag(content="body, body * { font-family: 'DejaVu Sans' !important; }")
+                pg.wait_for_timeout(200)
+                wide = pg.evaluate('document.documentElement.scrollWidth')
+                if wide > 362:
+                    problems.append((lang, page, wide))
+            pg.context.close()
+        self.assertEqual(problems, [])
+
     def test_b_a_check_in_reaches_another_screen_within_3_seconds_without_a_full_reload(self):
         watcher = self.open({'lang': 'ar'})
         watcher.goto(self.S.base + '/#/door')

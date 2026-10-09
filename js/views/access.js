@@ -15,7 +15,11 @@
   var BUILTIN = { 'full-access': 'Centre manager', administrator: 'Administrator', secretary: 'Front desk', teacher: 'Teacher', assistant: 'Assistant', accountant: 'Accountant', viewer: 'Viewer' };
   function roleLabel(name) {
     if (!name || name === 'Custom') return HS.t('acc.custom');
-    for (var id in BUILTIN) if (BUILTIN[id] === name && HS.has('prof.' + id)) return HS.t('prof.' + id);
+    // by the profile's stable id: a renamed ready-made profile frees its English name, and another profile given that name
+    // must not borrow the translation of rights it does not have
+    var p = cache && cache.users.profiles.filter(function (x) { return x.name === name; })[0];
+    if (p) return BUILTIN[p.id] === name && HS.has('prof.' + p.id) ? HS.t('prof.' + p.id) : name;
+    for (var id in BUILTIN) if (BUILTIN[id] === name && HS.has('prof.' + id)) return HS.t('prof.' + id);   // a deleted ready-made profile
     return name;
   }
   HS.roleLabel = roleLabel;
@@ -119,6 +123,26 @@
     }
   }
 
+  /* ---------- who can do what: every permission against every profile, printable (factory access standard) ---------- */
+  function matrixHTML() {
+    var list = cache.users.profiles;
+    return '<div class="table-wrap"><table class="tbl matrix"><thead><tr><th>' + HS.esc(HS.t('acc.matrix.perm')) + '</th>' + list.map(function (p) { return '<th class="c">' + HS.esc(roleLabel(p.name)) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      cache.users.permissions.map(function (g) {
+        return '<tr class="group-row"><th colspan="' + (list.length + 1) + '">' + HS.esc(groupLabel(g[0])) + '</th></tr>' + g[1].map(function (x) {
+          return '<tr><td>' + HS.esc(permLabel(x[0], x[1])) + '</td>' + list.map(function (p) { return '<td class="c">' + (p.perms.indexOf(x[0]) >= 0 ? '<b aria-label="' + HS.esc(HS.t('acc.matrix.yes')) + '">✓</b>' : '<span class="faint" aria-label="' + HS.esc(HS.t('acc.matrix.no')) + '">–</span>') + '</td>'; }).join('') + '</tr>';
+        }).join('');
+      }).join('') + '</tbody></table></div>';
+  }
+  // printed across, small and wrapping, so every profile column stays on the paper even with many custom profiles
+  var MATRIX_PAGE = '@page { size: A4 landscape; margin: 8mm; } #print-sheet .tbl.matrix { width: 100%; table-layout: fixed; font-size: 7.5pt; } ' +
+    '#print-sheet .tbl.matrix th, #print-sheet .tbl.matrix td { white-space: normal; overflow-wrap: anywhere; padding: 1.5pt 3pt; } ' +
+    '#print-sheet .tbl.matrix th:first-child, #print-sheet .tbl.matrix td:first-child { width: 26%; } #print-sheet .table-wrap { overflow: visible; }';
+  function openMatrix() {
+    var el = HS.dialog({ title: HS.t('acc.matrix'), wide: true, body: '<p class="muted">' + HS.esc(HS.t('acc.matrix.h')) + '</p>' + matrixHTML(),
+      footer: '<button class="btn" data-print>' + HS.icon('printer', 'sm') + HS.esc(HS.t('acc.matrix.print')) + '</button><button class="btn primary" data-close>' + HS.esc(HS.t('common.close')) + '</button>' });
+    el.querySelector('[data-print]').addEventListener('click', function () { HS.printHTML('<h1>' + HS.esc(HS.t('acc.matrix')) + '</h1>' + matrixHTML(), MATRIX_PAGE); });
+  }
+
   /* ---------- profiles ---------- */
   function openProfiles() {
     var list = cache.users.profiles;
@@ -126,8 +150,9 @@
       body: '<p class="muted">' + HS.esc(HS.t('acc.profiles.h')) + '</p><div class="stack">' + list.map(function (p) {
         return '<div class="card row" style="justify-content:space-between"><div><b>' + HS.esc(roleLabel(p.name)) + '</b><div class="muted" style="font-size:.85rem">' + HS.fmt.num(p.perms.length) + ' ' + HS.esc(HS.t('acc.perms.count')) + '</div></div>' +
           (p.id === 'administrator' ? '<span class="badge signal">' + HS.icon('lock', 'sm') + HS.esc(HS.t('acc.locked')) + '</span>' : '<button class="btn sm" data-edit="' + HS.esc(p.id) + '">' + HS.esc(HS.t('common.open')) + '</button>') + '</div>'; }).join('') + '</div>',
-      footer: '<button class="btn primary" data-newprofile>' + HS.icon('plus', 'sm') + HS.esc(HS.t('acc.profile.add')) + '</button>' });
+      footer: '<button class="btn" data-matrix style="margin-inline-end:auto">' + HS.icon('sheet', 'sm') + HS.esc(HS.t('acc.matrix')) + '</button><button class="btn primary" data-newprofile>' + HS.icon('plus', 'sm') + HS.esc(HS.t('acc.profile.add')) + '</button>' });
     el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-matrix]')) { HS.overlay.close(); openMatrix(); return; }
       if (e.target.closest('[data-newprofile]')) { HS.overlay.close(); editProfile(null); }
       var b = e.target.closest('[data-edit]'); if (b) { HS.overlay.close(); editProfile(list.filter(function (p) { return p.id === b.dataset.edit; })[0]); }
     });

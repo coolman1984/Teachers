@@ -5,6 +5,7 @@
 
 Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Record verified evidence, not assumptions. Later-release work below stays available; do not tick it complete merely because it is deferred.
 
+- [x] Factory access standard (2026-10-09): `tests/test_access_gate.py` runs the factory gate (`server/afaccess.py`); Profiles → "Who can do what" matrix, printable (browser test `test_who_can_do_what_and_a_new_person_starts_as_viewer`)
 - [x] FS1 Basic first-version menu: the extra pages (exams, follow-up, settlements, devices) are off until Settings → Centre → "Pages in the menu" turns them on (`test_center_api` 22b, `test_e2e_center` zzz)
 - [x] FS2 Publish v1.1.0: merged by PR #11, tagged `v1.1.0` at `6b5bf2d`, built by Actions run `37423171664`, downloaded and SHA-256 verified `Hessa-Setup-1.1.0.exe` (L1 distribution evidence; field acceptance remains FS3)
 - [x] FS1a Form readability: spaced list/settings fields, complete switch rows, grouped rules with English/Formal Arabic explanations, and linked accessible help (`tests/test_frontend.js` regression; publishing checks recorded in DEVELOPMENT_HISTORY.md)

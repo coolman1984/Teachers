@@ -1,6 +1,27 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Factory access standard: the gate and "Who can do what" (2026-10-09)
+
+**Why:** the owner made BAMS's people-and-permissions model a factory standard (`Apps-Factory/docs/ACCESS_AND_ADMINISTRATION_STANDARD.md`,
+controls IAM-08…IAM-12) so Hessa, Trip Orders and Al-Store follow one set of rules instead of drifting copies.
+**What:** `server/afaccess.py` (vendored from `Apps-Factory/packages/af-access`) and `tests/test_access_gate.py` check the
+catalogue on every run: one administrator group, the locked Administrator profile with every right, every menu page
+(`js/shell.js`) opened by a known permission, every permission/group/profile named in English and Formal Arabic, every
+profile usable, and a personal link never carries an administrator right. New: Settings → People & access → Profiles →
+**Who can do what**, a table of every permission against every profile, printable (`HS.printHTML`).
+**Result:** Hessa passed the gate with no finding (it already carried the BAMS fixes, e.g. a new person starting as Viewer).
+**Tests:** `test_access_gate` (4), browser `test_who_can_do_what_and_a_new_person_starts_as_viewer`.
+**Lesson:** a copied engine stays correct only if the rules are copied as a test too.
+**Also fixed (CI red on `main` since #23):** with the system font, the GitHub runner (Linux) draws DejaVu Sans, much wider than
+the fonts here. At XL size on a 360 px phone the backup and "Check my data now" buttons left their card headers and the gateway's
+"Copy the office secret" button grew wider than the screen. Card headers now wrap, the gateway step's column and its inputs and
+buttons may shrink and wrap. Reproduced here by forcing DejaVu Sans (393/378/369 px, the runner's numbers); new
+`test_acceptance` test `test_a2_settings_fit_a_phone_with_a_wide_linux_font` fails without the CSS and passes with it.
+**Lesson:** a layout test that depends on the machine's fonts must also run with the widest font a customer may have.
+**Also found:** `test_sample` failed every Friday (it failed on CI and here on Friday 2026-10-09): the sample centre's slots use
+days 0–5 (Saturday to Thursday), so on Friday nobody is checked in. The test now expects 0 on Friday and more than 0 on other days.
+
 ## The dashboard's quick-access rail (2026-10-08)
 
 **Why:** the owner wants every form one click from the dashboard, on the side (the left in Arabic), with information and alerts,

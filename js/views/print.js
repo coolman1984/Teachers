@@ -85,7 +85,7 @@
       (setting('receiptFooter') ? '<p class="r-foot">' + HS.esc(setting('receiptFooter')) + '</p>' : '') +
       '<p class="r-foot">' + HS.esc(HS.t('receipt.keep')) + '</p></div>');
   };
-  HS.printHTML = function (html) { printSheet(html); };
+  HS.printHTML = function (html, pageCss) { printSheet(html, pageCss); };   // pageCss: e.g. a landscape page for a wide table
   /* bubble sheets (js/omr.js): one A4 page each, true size, no margins - the reader finds the corner squares */
   HS.printBubbleSheets = function (exam, students, lang) {
     var centre = setting('systemName') || HS.t('app.name');
