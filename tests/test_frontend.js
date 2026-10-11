@@ -560,3 +560,26 @@ test('owner 2026-10-08: every problem\'s "Guide me" points to a real guide, and 
   const heavy = /(يُرجى|نظرًا ل|يتعذّر|تعذّر|يجب عليك|الرجاء)/;
   assert.deepEqual(help.filter(l => heavy.test(l)), []);
 });
+
+test('the course and the finished lessons belong to the person, not to the PC (review: shared centre PC)', () => {
+  const HS = startup('en');
+  HS.prefs.data = Object.assign({}, HS.prefs.data, { learn: { a: { path: 'viewer', guidesDone: { cards: 1 } } } });
+  const G = HS.guides, perms = ['students.view', 'students.manage', 'door.use', 'money.collect', 'print', 'reports.view', 'attendance.mark'];
+  HS.me = { id: 'a', perms };
+  assert.equal(G.myPath().id, 'viewer');
+  assert.ok(G.lessons(G.myPath(), {}).find((x) => x.g.id === 'cards').done);
+  HS.me = { id: 'b', role: 'Front desk', perms };
+  assert.equal(G.myPath().id, 'desk');
+  HS.me = { id: 'b', role: 'Viewer', perms };
+  assert.ok(!G.lessons(G.myPath(), {}).find((x) => x.g.id === 'cards').done);
+});
+
+test('a failed facts fetch after a change of person never shows the previous person\'s facts (review)', async () => {
+  const HS = startup('en');
+  HS.me = { id: 'a', perms: [] };
+  HS.get = () => Promise.resolve({ myPayment: true });
+  assert.equal((await HS.guides.loadFacts(true)).myPayment, true);
+  HS.me = { id: 'b', perms: [] };
+  HS.get = () => Promise.reject(new Error('offline'));
+  assert.equal(Object.keys(await HS.guides.loadFacts()).length, 0);
+});
