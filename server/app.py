@@ -1490,6 +1490,9 @@ class Handler(BaseHTTPRequestHandler):
             for key, value in values.items():
                 text = text.replace('{' + key + '}', value)
             return self.send(200, {'to': center.D.wa_number(st.get('parentMobile')), 'text': text})
+        if action == 'guide-facts':              # the learning path: what this person (and the centre) already did
+            return self.send(200, center.guide_facts(STORE, self.user, self.u['id'], bool(self.u.get('must_change')),
+                                                     len(AUTH.list_users()), len(BACKUPS.extra or [])))
         if action == 'today':
             self.need('door.use', 'groups.view', 'attendance.mark')
             d = center.D.as_date(qs.get('date')) or center.date.today()

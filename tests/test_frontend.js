@@ -50,7 +50,7 @@ test('command centre shows scoped numbers, escaped advice, permission-aware acti
     assert.ok(!html.includes('data-k="money"'));assert.ok(!html.includes('quick-btn'));assert.ok(!html.includes('undefined'));
     HS.me.perms.push('money.view','door.use','students.manage');html=HS.views.overview.render({});
     assert.ok(html.includes('data-k="money"'));assert.ok(html.includes('href="#/door"'));assert.ok(html.includes(HS.t('ov.act.student')));
-    assert.ok(html.includes(HS.t('ov.guide.title')));                                   // an empty centre gets the guide
+    assert.ok(html.includes('data-pathcard'));                                         // the learning path card (filled from the facts)
     const els={},root={isConnected:true,addEventListener(){},querySelector:s=>els[s]||(els[s]={innerHTML:'',textContent:''})};
     HS.get=async url=>url.includes('advice')
       ?[{id:'groupsFull',level:'info',page:'groups',icon:'layers',vars:{n:1,name:'<b>G</b>'}},{id:'debts',level:'warn',page:'followup?tab=debts',icon:'sheet',vars:{n:2,amount:1500}}]

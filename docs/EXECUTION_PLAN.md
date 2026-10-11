@@ -572,7 +572,7 @@ node --test tests/test_frontend.js                                              
 python3 -m pyflakes server/*.py tools/*.py tests/*.py
 python3 tools/build_windows.py --check                                            # every file the installer ships
 cd tests
-python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx test_integration   # always (~2 min)
+python3 -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_review test_center_remote test_qbank test_ai test_xlsx test_integration test_access_gate test_guide_gate   # always (~3 min)
 python3 -m unittest test_sample test_multinode test_gateway_parent test_recovery                                  # before a PR (~5 min)
 HS_CHROMIUM=/opt/pw-browsers/chromium python3 -m unittest test_e2e_center test_e2e_browser test_acceptance        # when screens changed
 cd ../gateway && node --test --no-warnings test/gateway.test.js                                                   # when gateway changed
@@ -633,6 +633,7 @@ Never run `playwright install`; never edit `server/` or `js/` while multi-PC or 
 | open | AI key, video hosting | default: features hidden until configured |
 | 2026-10-05 | Remote work (owner: run on the client PC, work from phone or another PC over the internet) | Outbound tunnel (Tailscale recommended, Cloudflare Tunnel alternative), no own relay; remote work off until switched on at the centre, only `remote.use`; a laptop with its own copy covers the PC being off (`docs/REMOTE_ACCESS.md`) |
 | 2026-10-05 | Version | 1.1.0 (continues after the engine's 1.0.2, never lowered) |
+| 2026-10-09 | Learning path + help language | Every role has a learning path (المنهج): ordered lessons (setup first for the administrator), "you are here" from the real records (`center.GUIDE_FACTS`, `/api/c/guide-facts`), next lesson on the overview. All help texts move to **simple formal Arabic** (Apps-Factory HELP_AND_GUIDANCE_STANDARD §2–§3, HELP-08); `tests/test_guide_gate.py` runs the factory gate `server/afguide.py`. Replaces the 2026-10-08 "polished Egyptian" rule below |
 | 2026-10-08 | Help language | Help texts (guides, "Solve a problem", questions, support, tour) in **polished, respectful Egyptian Arabic** that a 12-year-old understands; screens stay Formal Arabic; every problem offers "Take me there" and "Guide me" (Apps-Factory HELP-01..04) |
 | 2026-10-08 | First sign-in and appearance | **No slideshow on the first sign-in** (slides only from Help); defaults: **daylight theme + system font**; help texts to become polished Egyptian Arabic with a "Solve a problem" section (Apps-Factory ADR-0005) |
 | open | Discount/exemption changes: from today, or retroactive? | default: retroactive (as before); recommended: from today |

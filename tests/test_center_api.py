@@ -816,3 +816,20 @@ class CenterMoneyEdgeTest(CenterFixture):
         self.open_shift(0)
         self.c.post('/api/c/expense/void', {'id': e['id'], 'reason': 'Bought by mistake'})
         self.assertEqual(self.c.get('/api/c/shift')['expected'], 30)
+
+    def test_guide_facts_follow_the_real_records(self):
+        """The learning path's "you are here" comes from the rows: what this person did, never a stored tick."""
+        import center
+        facts = self.c.get('/api/c/guide-facts')
+        self.assertEqual(set(facts), set(center.GUIDE_FACTS))
+        self.assertTrue(facts['studentsAdded'] and facts['enrolled'] and facts['teachersAdded'] and facts['groupsAdded'])
+        self.open_shift(0)
+        self.pay(50)
+        facts = self.c.get('/api/c/guide-facts')
+        self.assertTrue(facts['myShiftOpened'] and facts['myPayment'])
+        self.assertTrue(facts['myStudentAdded'] and facts['myEnrolment'])            # the administrator added them
+        # a new receptionist in a busy centre still has their own lessons ahead (review: facts per person, not per centre)
+        desk = self.scoped_client(['students.view', 'students.manage', 'groups.view', 'door.use'])
+        mine = desk.get('/api/c/guide-facts')
+        self.assertTrue(mine['studentsAdded'])
+        self.assertFalse(mine['myStudentAdded'] or mine['myEnrolment'] or mine['myShiftOpened'] or mine['myPayment'])

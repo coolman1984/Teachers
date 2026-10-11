@@ -422,6 +422,23 @@ class DoorTest(BrowserBase):
         pg.wait_for_selector('.present', state='detached')
         self.assertEqual(self.errors, [])
 
+    def test_learning_path_shows_where_the_person_stands_and_starts_the_coach(self):
+        pg = self.open({'lang': 'ar'})
+        pg.goto(self.S.base + '/#/overview')
+        pg.wait_for_selector('[data-pathcard] .path-next [data-guide]')          # the next lesson waits on the first page
+        pg.goto(self.S.base + '/#/help?view=path')
+        pg.wait_for_selector('.path-list li[aria-current="step"]')
+        self.assertEqual(pg.locator('.path-list li.here').count(), 1)              # exactly one "you are here"
+        self.assertGreater(pg.locator('.path-list li.ok').count(), 0)              # the administrator already did something
+        pg.click('.path-list li.here [data-guide]')
+        pg.wait_for_selector('#coach .coach-card')
+        pg.click('#coach [data-cx]')
+        pg.goto(self.S.base + '/#/help?view=path')                                 # the coach opened the lesson's page
+        pg.select_option('[data-pathpick]', 'desk')                               # another path, remembered
+        pg.wait_for_selector('[data-path="desk"]')
+        self.assertEqual(pg.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), True)
+        self.assertEqual(self.errors, [])
+
     def test_help_for_this_page_and_arabic_search(self):
         pg = self.open({'lang': 'ar'})
         pg.goto(self.S.base + '/#/money')

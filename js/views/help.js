@@ -125,12 +125,13 @@
     render: function (ctx) {
       var list = visible(), q = (ctx && ctx.route && ctx.route.q) || {};
       // three ways in: step-by-step guides (default), situations from real centres, questions and answers
-      var view = q.view || (q.topic || q.q ? 'faq' : 'guides');
-      var seg = '<div class="seg help-views" role="tablist">' + ['guides', 'situations', 'faq', 'support'].map(function (v) {
-        return '<button type="button" role="tab" data-hview="' + v + '" aria-pressed="' + (v === view) + '">' + HS.icon(v === 'guides' ? 'compass' : v === 'situations' ? 'life' : v === 'support' ? 'chat' : 'help', 'sm') + HS.esc(HS.t('help.view.' + v)) + '</button>'; }).join('') + '</div>';
+      var view = q.view || (q.topic || q.q ? 'faq' : 'path');   // owner 2026-10-09: the learning path comes first
+      var seg = '<div class="seg help-views" role="tablist">' + ['path', 'guides', 'situations', 'faq', 'support'].map(function (v) {
+        return '<button type="button" role="tab" data-hview="' + v + '" aria-pressed="' + (v === view) + '">' + HS.icon(v === 'path' ? 'flag' : v === 'guides' ? 'compass' : v === 'situations' ? 'life' : v === 'support' ? 'chat' : 'help', 'sm') + HS.esc(HS.t('help.view.' + v)) + '</button>'; }).join('') + '</div>';
       var head = '<div class="page-head"><div class="titles"><h1>' + HS.esc(HS.t('help.title')) + '</h1><p>' + HS.esc(HS.t('help.sub')) + '</p></div>' +
           '<button class="btn" data-a="tour">' + HS.icon('play', 'sm') + HS.esc(HS.t('help.tour.start')) + '</button>' +
           '<button class="btn" data-a="slides">' + HS.icon('present', 'sm') + HS.esc(HS.t('help.slides.start')) + '</button></div>' + seg;
+      if (view === 'path' && HS.guides) return head + '<div class="stack">' + HS.guides.pathShell() + '</div>';
       if (view === 'guides' && HS.guides) return head + '<div class="stack">' + HS.guides.html(q.for || '') + '</div>';
       if (view === 'situations' && HS.guides) return head + '<div class="stack">' + HS.guides.situationsHTML() + '</div>';
       if (view === 'support') return head + '<div class="stack" data-support><p class="faint">' + HS.esc(HS.t('common.loading')) + '</p></div>';
@@ -145,6 +146,7 @@
         var v = e.target.closest('[data-hview]'); if (v) HS.go('help?view=' + v.dataset.hview);
       });
       mountSupport(root);
+      if (HS.guides) HS.guides.fillPath(root);
       var gid = ctx && ctx.route && ctx.route.q.guide, g = gid && root.querySelector('#guide-' + gid);
       if (g) { g.open = true; setTimeout(function () { if (g.scrollIntoView) g.scrollIntoView({ block: 'start' }); }, 50); }
       if (!root.querySelector('#help-q')) { HS.$$('[data-a="tour"]', root).forEach(function (b) { b.addEventListener('click', function () { HS.go('overview'); setTimeout(HS.tour.start, 350); }); });
