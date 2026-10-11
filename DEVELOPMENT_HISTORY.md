@@ -10,6 +10,7 @@ this person never did. The "you are here" facts were also cached for 15 seconds 
 (`prefs.learn[<user id>]`), and the facts cache remembers whose facts it holds. Regression test in `tests/test_frontend.js`
 (fails without the fix).
 **Mistake:** the new helper was first called `mine`, which a local variable of the guide list already used.
+Codex then found that a failed facts fetch right after a change of person still returned the previous person's facts. It now returns nothing in that case, and a regression test covers it.
 
 ## Help checked by the factory's own af-guide checker (2026-10-11)
 

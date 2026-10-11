@@ -191,7 +191,7 @@
   function loadFacts(force) {
     var who = (HS.me && HS.me.id) || '_';
     if (!force && facts && factsFor === who && Date.now() - factsAt < 15000) return Promise.resolve(facts);
-    return HS.get('/api/c/guide-facts').then(function (f) { facts = f || {}; factsAt = Date.now(); factsFor = who; return facts; }, function () { return facts || {}; });
+    return HS.get('/api/c/guide-facts').then(function (f) { facts = f || {}; factsAt = Date.now(); factsFor = who; return facts; }, function () { return (factsFor === who && facts) || {}; });   // on a failed fetch: never another person's facts
   }
   function defaultPath() {
     var me = HS.me || {}, id = ROLE_PATH[me.role];

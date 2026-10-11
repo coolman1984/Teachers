@@ -573,3 +573,13 @@ test('the course and the finished lessons belong to the person, not to the PC (r
   HS.me = { id: 'b', role: 'Viewer', perms };
   assert.ok(!G.lessons(G.myPath(), {}).find((x) => x.g.id === 'cards').done);
 });
+
+test('a failed facts fetch after a change of person never shows the previous person\'s facts (review)', async () => {
+  const HS = startup('en');
+  HS.me = { id: 'a', perms: [] };
+  HS.get = () => Promise.resolve({ myPayment: true });
+  assert.equal((await HS.guides.loadFacts(true)).myPayment, true);
+  HS.me = { id: 'b', perms: [] };
+  HS.get = () => Promise.reject(new Error('offline'));
+  assert.equal(Object.keys(await HS.guides.loadFacts()).length, 0);
+});
