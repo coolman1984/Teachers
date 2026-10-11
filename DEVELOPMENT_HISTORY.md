@@ -1,6 +1,16 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Learning progress belongs to the person, not to the PC (2026-10-11)
+
+**Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's
+preferences, so on a shared front-desk PC the next person inherited them: "My path" showed another role and skipped lessons
+this person never did. The "you are here" facts were also cached for 15 seconds without checking who was signed in.
+**What:** `js/views/guides.js` keeps the course, the finished guides and "hide the card" under the signed-in person's id
+(`prefs.learn[<user id>]`), and the facts cache remembers whose facts it holds. Regression test in `tests/test_frontend.js`
+(fails without the fix).
+**Mistake:** the new helper was first called `mine`, which a local variable of the guide list already used.
+
 ## Help checked by the factory's own af-guide checker (2026-10-11)
 
 **Why:** the factory merged the owner's af-guide 0.1.x (courses, coach runtime, per-person progress, «العربية الميسّرة» lexicon)

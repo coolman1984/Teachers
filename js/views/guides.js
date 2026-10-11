@@ -182,10 +182,16 @@
   // ready-made profiles keep their English name on the person (auth.BUILTIN_PROFILES)
   var ROLE_PATH = { 'Administrator': 'admin', 'Centre manager': 'manager', 'Front desk': 'desk', 'Teacher': 'teacher', 'Assistant': 'assistant',
     'Accountant': 'accountant', 'Viewer': 'viewer' };
-  var facts = null, factsAt = 0;
+  var facts = null, factsAt = 0, factsFor = null;   // facts belong to the person signed in
+  // the course and the lessons a person finished belong to that person, not to the PC (review: a shared office PC)
+  function learner() {
+    var all = HS.prefs.data.learn || (HS.prefs.data.learn = {}), id = (HS.me && HS.me.id) || '_';
+    return all[id] || (all[id] = {});
+  }
   function loadFacts(force) {
-    if (!force && facts && Date.now() - factsAt < 15000) return Promise.resolve(facts);
-    return HS.get('/api/c/guide-facts').then(function (f) { facts = f || {}; factsAt = Date.now(); return facts; }, function () { return facts || {}; });
+    var who = (HS.me && HS.me.id) || '_';
+    if (!force && facts && factsFor === who && Date.now() - factsAt < 15000) return Promise.resolve(facts);
+    return HS.get('/api/c/guide-facts').then(function (f) { facts = f || {}; factsAt = Date.now(); factsFor = who; return facts; }, function () { return facts || {}; });
   }
   function defaultPath() {
     var me = HS.me || {}, id = ROLE_PATH[me.role];
@@ -194,11 +200,11 @@
     return id;
   }
   function pathOf(id) { return PATHS.filter(function (p) { return p.id === id; })[0] || PATHS.filter(function (p) { return p.id === defaultPath(); })[0]; }
-  function myPath() { return pathOf((HS.prefs.data || {}).path || defaultPath()); }
+  function myPath() { return pathOf(learner().path || defaultPath()); }
   function guideOf(id) { return GUIDES.filter(function (g) { return g.id === id; })[0]; }
   // the lessons this person may do (a guide they have no right for is left out), each with done / here
   function lessons(p, f) {
-    var doneGuides = (HS.prefs.data && HS.prefs.data.guidesDone) || {}, out = [], here = -1;
+    var doneGuides = learner().guidesDone || {}, out = [], here = -1;
     p.lessons.forEach(function (x) {
       var g = guideOf(x.guide); if (!g || !allowed(g)) return;
       var done = x.fact ? !!(f || {})[x.fact] : !!doneGuides[x.guide];
@@ -228,7 +234,7 @@
   // the first page: one card with the next lesson, until the path is complete (it can be hidden)
   function nextCardHTML(p, f) {
     var ls = lessons(p, f), cur = ls.filter(function (x) { return x.here; })[0];
-    if (!cur || (HS.prefs.data && HS.prefs.data.pathHidden)) return '';
+    if (!cur || learner().pathHidden) return '';
     var n = ls.filter(function (x) { return x.done; }).length, k = ls.indexOf(cur) + 1;
     return '<div class="row wrap path-next"><span class="tile-ic">' + HS.icon('compass') + '</span><div class="grow"><b>' + HS.esc(HS.t('path.continue')) + '</b>' +
       '<small class="muted">' + HS.esc(HS.t('path.next', { n: k, m: ls.length, lesson: HS.t('gd.' + cur.g.id + '.t') })) + '</small>' +
@@ -238,11 +244,11 @@
   }
   document.addEventListener('change', function (e) {
     var pick = e.target.closest && e.target.closest('[data-pathpick]'); if (!pick) return;
-    HS.prefs.data.path = pick.value; HS.prefs.save(); if (HS.rerender) HS.rerender();
+    learner().path = pick.value; HS.prefs.save(); if (HS.rerender) HS.rerender();
   });
   document.addEventListener('click', function (e) {
     if (!e.target.closest || !e.target.closest('[data-pathhide]')) return;
-    HS.prefs.data.pathHidden = true; HS.prefs.save(); var c = e.target.closest('[data-pathcard]'); if (c) c.innerHTML = '';
+    learner().pathHidden = true; HS.prefs.save(); var c = e.target.closest('[data-pathcard]'); if (c) c.innerHTML = '';
   });
 
   function allowed(g) { return !g.perm || HS.can(g.perm); }
@@ -330,7 +336,7 @@
       var g = C.g; if (!g) return;
       unhot(); C.g = null;
       var h = document.getElementById('coach'); if (h) { h.className = ''; h.innerHTML = ''; }
-      if (finished && g) { factsAt = 0; var done = HS.prefs.data.guidesDone || {}; done[g.id] = 1; HS.prefs.data.guidesDone = done; HS.prefs.save(); HS.toast(HS.t('guide.finished'), 'ok'); }
+      if (finished && g) { factsAt = 0; var done = learner().guidesDone || {}; done[g.id] = 1; learner().guidesDone = done; HS.prefs.save(); HS.toast(HS.t('guide.finished'), 'ok'); }
     },
     active: function () { return !!C.g; }
   };
@@ -351,7 +357,7 @@
 
   /* ---------- the guide library (Help page) ---------- */
   function guideCard(g) {
-    var done = (HS.prefs.data.guidesDone || {})[g.id];
+    var done = (learner().guidesDone || {})[g.id];
     var steps = g.steps.map(function (s, k) {
       return '<li class="k-' + s.k + '"><span class="step-ic" title="' + HS.esc(HS.t('guide.k.' + s.k)) + '">' + HS.icon(KINDS[s.k]) + '</span><span>' + rich(stepText(g, k + 1)) + '</span></li>'; }).join('');
     return '<details class="guide" id="guide-' + g.id + '" data-gid="' + g.id + '"><summary><span class="tile-ic">' + HS.icon(g.icon) + '</span><span class="grow"><b>' + HS.esc(HS.t('gd.' + g.id + '.t')) + '</b>' +
@@ -386,7 +392,7 @@
     // guides that act on this page first, then the rest; each category in its own block
     html: function (forPage) {
       var list = GUIDES.filter(allowed), mine = forPage ? list.filter(function (g) { return g.steps.some(function (s) { return pageOf(s.page) === forPage; }); }) : [];
-      var done = HS.prefs.data.guidesDone || {}, count = list.filter(function (g) { return done[g.id]; }).length;
+      var done = learner().guidesDone || {}, count = list.filter(function (g) { return done[g.id]; }).length;
       return '<div class="guide-intro card"><div class="row wrap"><span class="tile-ic">' + HS.icon('compass') + '</span><div class="grow"><h2>' + HS.esc(HS.t('guide.title')) + '</h2><p class="muted">' + HS.esc(HS.t('guide.sub')) + '</p></div>' +
           '<span class="badge ' + (count === list.length ? 'ok' : '') + '">' + HS.esc(HS.t('guide.progress', { n: count, m: list.length })) + '</span></div>' +
           '<ul class="kind-legend">' + Object.keys(KINDS).map(function (k) { return '<li class="k-' + k + '"><span class="step-ic">' + HS.icon(KINDS[k]) + '</span>' + HS.esc(HS.t('guide.k.' + k)) + '</li>'; }).join('') + '</ul></div>' +
