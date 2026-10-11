@@ -1,21 +1,63 @@
 'use strict';
-// Prints Hessa's help as the factory catalogue (Apps-Factory packages/af-guide): guides, learning paths, problems, both
-// languages, and the Arabic of every other help text (questions, support, tour). Used by tests/test_guide_gate.py.
+// Writes Hessa's help in the factory's af-guide format (Apps-Factory packages/af-guide, catalogue "format": 1), so the
+// factory checker and its «العربية الميسّرة» lint read every guide, course and problem. Hessa keeps its own engine
+// (js/views/guides.js); this file only translates it. Used by tests/test_guide_gate.py: node guide_catalogue.js out.json
 const { startup } = require('./test_startup.js');
 const LANGS = ['ar', 'en'];
-const HELP_PREFIXES = ['gd.', 'sit.', 'hq.', 'help.', 'guide.', 'sup.', 'tour.', 'slide.', 'path.'];
 const by = {};
 for (const lang of LANGS) { const HS = startup(lang); HS.lang = lang; by[lang] = HS; }
 const HS = by.ar, G = HS.guides;
-const page = (p) => String(p || '').split('?')[0].split('/')[0];
-const texts = (keys) => Object.fromEntries(LANGS.map((l) => [l, keys.map((k) => by[l].has(k) ? by[l].t(k) : '')]));
-const cat = {
-  product: 'hessa', languages: LANGS, setup_guides: ['first', 'centre'],
-  roles: ['full-access', 'administrator', 'secretary', 'teacher', 'assistant', 'accountant', 'viewer'],
-  guides: G.list.map((g) => ({ id: g.id, perm: g.perm || null, steps: g.steps.length, pages: [...new Set(g.steps.map((s) => page(s.page)).filter(Boolean))],
-    texts: texts(['gd.' + g.id + '.t', 'gd.' + g.id + '.d', ...g.steps.map((_, i) => 'gd.' + g.id + '.' + (i + 1)), 'gd.' + g.id + '.ok']) })),
-  paths: G.paths.map((p) => ({ id: p.id, admin: !!p.admin, roles: p.roles, lessons: p.lessons, texts: texts(['path.' + p.id + '.t', 'path.' + p.id + '.d']) })),
-  situations: G.situations.map((x) => ({ id: x[0], guide: G.sitGuide[x[0]] || null, texts: texts(['sit.' + x[0] + '.q', 'sit.' + x[0] + '.a']) })),
-  other_ar: Object.fromEntries(Object.keys(HS.dict.ar || {}).filter((k) => HELP_PREFIXES.some((p) => k.startsWith(p))).map((k) => [k, HS.t(k)])),
-};
-require('fs').writeFileSync(process.argv[2], JSON.stringify(cat));   // a file: requiring test_startup.js also prints its own test lines
+const page = (p) => String(p || '').split('?')[0].split('/')[0] || null;
+const kebab = (s) => s.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+const ACTION = { click: 1, type: 1, choose: 1, check: 1 };
+
+const targets = {}, states = [...new Set(G.paths.flatMap((p) => p.lessons.map((l) => l.fact)).filter(Boolean))];
+const doneOf = {};
+G.paths.forEach((p) => p.lessons.forEach((l) => { if (l.fact && !doneOf[l.guide]) doneOf[l.guide] = l.fact; }));
+const guides = G.list.map((g) => {
+  let at = null;
+  const steps = g.steps.map((s, i) => {
+    const pg = page(s.page);
+    if (pg) at = pg;
+    const out = { k: s.k };
+    if (pg) out.page = pg;
+    if (s.sel) { const id = 'hs.' + g.id + '.' + (i + 1); targets[id] = { page: pg || at, sel: s.sel }; out.target = id; }
+    else if (ACTION[s.k]) out.k = 'tip';   // "check that it worked" without a control: a sentence to read
+    return out;
+  });
+  steps.push({ k: 'done' });
+  const perm = Array.isArray(g.perm) ? g.perm[0] : g.perm || '*';
+  return { id: g.id, cat: g.cat, perm, minutes: Math.max(1, Math.min(15, Math.ceil(g.steps.length / 2))), requires: [],
+    ...(doneOf[g.id] ? { done: { state: doneOf[g.id] } } : {}), steps };
+});
+const problems = G.situations.map((x) => ({ id: kebab(x[0]), cat: x[2] || 'daily', page: page(x[1]),
+  ...(G.sitGuide[x[0]] ? { guide: G.sitGuide[x[0]] } : {}), errors: [], roles: [] }));
+const roles = G.paths.map((p) => ({ id: p.id, profiles: p.roles, path: p.lessons.map((l) => l.guide).filter((v, i, a) => a.indexOf(v) === i) }));
+
+function texts(lang) {
+  const H = by[lang], t = (k) => (H.has(k) ? H.t(k) : '');
+  const out = {};
+  G.paths.forEach((p) => { out['role.' + p.id + '.title'] = t('path.' + p.id + '.t'); out['role.' + p.id + '.intro'] = t('path.' + p.id + '.d'); });
+  G.list.forEach((g) => {
+    const k = 'guide.' + g.id + '.';
+    out[k + 'title'] = t('gd.' + g.id + '.t'); out[k + 'why'] = t('gd.' + g.id + '.d'); out[k + 'ok'] = t('gd.' + g.id + '.ok');
+    g.steps.forEach((_, i) => { out[k + (i + 1)] = t('gd.' + g.id + '.' + (i + 1)); });
+    out[k + (g.steps.length + 1)] = t('gd.' + g.id + '.ok');
+    if (H.has('gd.' + g.id + '.x')) out[k + 'mistake'] = t('gd.' + g.id + '.x');
+  });
+  G.situations.forEach((x) => {
+    const k = 'problem.' + kebab(x[0]) + '.', a = t('sit.' + x[0] + '.a');
+    const cut = a.search(/[.؟!]\s/);   // the first sentence says why, the rest says what to do
+    out[k + 'see'] = t('sit.' + x[0] + '.q');
+    out[k + 'why'] = cut > 0 ? a.slice(0, cut + 1) : a;
+    out[k + 'do.1'] = cut > 0 ? a.slice(cut + 2) : a;
+  });
+  // every other help text (questions, support, tour, slides) only for the lint
+  Object.keys(H.dict[lang] || {}).filter((k) => ['hq.', 'help.', 'guide.', 'sup.', 'tour.', 'slide.'].some((p) => k.startsWith(p)))
+    .forEach((k) => { out['other.' + k] = t(k); });
+  return out;
+}
+const cat = { product: 'hessa', format: 1, languages: LANGS, defaultLang: 'ar', uiLanguages: LANGS, unguided: ['help'],
+  states, checklist: [], targets, guides, roles, problems };
+require('fs').writeFileSync(process.argv[2], JSON.stringify({ cat, texts: { ar: texts('ar'), en: texts('en') },
+  ui: { ar: by.ar.dict.ar, en: by.en.dict.en } }));   // a file: requiring test_startup.js also prints its own test lines

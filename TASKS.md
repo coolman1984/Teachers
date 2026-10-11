@@ -5,6 +5,7 @@
 
 Use LAUNCH_SCOPE.md gates L1–L6 before the historical unchecked backlog. Record verified evidence, not assumptions. Later-release work below stays available; do not tick it complete merely because it is deferred.
 
+- [x] Help checked by the factory's af-guide 0.1.4 (2026-10-11): `tests/test_guide_gate.py` = `afguide.check(release=True)` on all guides, courses, problems and help texts (84 long sentences split)
 - [x] Learning path per role (owner 2026-10-09): Help opens on "My path" – ordered lessons for administrator, front desk, teacher, assistant, accountant and viewer, "you are here" from the real records (`center.guide_facts`, `test_center_api.test_guide_facts_follow_the_real_records`), a path picker, the next lesson on the overview with "Guide me"; 4 new guides (exams, follow-up calls, monthly settlement, devices); all 761 help texts rewritten in simple formal Arabic; factory gate `tests/test_guide_gate.py` (`server/afguide.py`)
 - [x] Factory access standard (2026-10-09): `tests/test_access_gate.py` runs the factory gate (`server/afaccess.py`); Profiles → "Who can do what" matrix, printable (browser test `test_who_can_do_what_and_a_new_person_starts_as_viewer`)
 - [x] FS1 Basic first-version menu: the extra pages (exams, follow-up, settlements, devices) are off until Settings → Centre → "Pages in the menu" turns them on (`test_center_api` 22b, `test_e2e_center` zzz)
