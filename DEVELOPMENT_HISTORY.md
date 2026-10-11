@@ -1,6 +1,19 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Help checked by the factory's own af-guide checker (2026-10-11)
+
+**Why:** the factory merged the owner's af-guide 0.1.x (courses, coach runtime, per-person progress, «العربية الميسّرة» lexicon)
+while Hessa's first gate (#28) used an earlier checker of the same name. A stale copy is a release blocker (`vendored-drift`).
+**What:** `server/afguide.py` + `server/afguide_ar_lexicon.json` are now the factory's af-guide 0.1.4 (server files only; Hessa
+keeps its own coach in `js/views/guides.js`). `tests/guide_catalogue.js` writes Hessa's guides, courses and problems in the factory
+format; `tests/test_guide_gate.py` runs `afguide.check(..., release=True)` with the real dictionaries and the af-access catalogue:
+no error on 36 guides, 7 courses and 48 problems, and the lint is clean on every help text in both languages. The release lint
+found 84 sentences longer than the factory limit (18 Arabic / 22 English words), 5 «يعني», and 5 steps that joined two actions
+with «ثم»; all were rewritten (split into short sentences; «معناه / أي»; one action per step). The English Q&A "How do I set up
+a new centre?" now points to Help → My path instead of the removed overview checklist.
+**Lesson:** fetch `main` of the factory before building a shared part: the second checker had to be replaced by the first.
+
 ## The learning path (المنهج) and simple formal Arabic in the whole help (2026-10-09)
 
 **Why:** the owner wants a new person to learn alone, in order, per job: the administrator first sets the centre up and

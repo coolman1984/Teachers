@@ -27,7 +27,7 @@ Read `CLAUDE.md` (rules), then `docs/EXECUTION_PLAN.md`, `TASKS.md`, and `DEVELO
 | a field | `server/store.py` `ENTITIES` |
 | a permission | `server/auth.py` `PERMISSIONS` + `perm.<id>` in both dictionaries |
 | a page | `js/views/<id>.js`, `index.html` order, `js/shell.js` `PAGES`, `tests/test_acceptance.PAGES` |
-| words | `js/i18n/en.js` + `js/i18n/ar.js` (screens: Formal Arabic; help `gd./sit./hq./help./guide./sup./tour./slide./path.`: simple formal Arabic, gate `tests/test_guide_gate.py`); guides in `docs/GUIDE_*.md` are Egyptian Arabic |
+| words | `js/i18n/en.js` + `js/i18n/ar.js` (screens: Formal Arabic; help `gd./sit./hq./help./guide./sup./tour./slide./path.`: simple formal Arabic, gate `tests/test_guide_gate.py` = factory af-guide release lint: at most 18 Arabic / 22 English words per sentence, one action per step, no street or stiff office words; update the checker with `python3 ../Apps-Factory/scripts/vendor_guide.py` server files only); guides in `docs/GUIDE_*.md` are Egyptian Arabic |
 | learning paths | `js/views/guides.js` `PATHS` (lessons = guide + fact); facts `server/center.py` `GUIDE_FACTS`/`guide_facts`, `/api/c/guide-facts`; a new fact goes into both and into `test_center_api.test_guide_facts_follow_the_real_records` |
 | parent card / gateway | `server/gateway_client.py` `card_for`, `gateway/src/worker.js`, `gateway/public/app/*` |
 | guide pictures | `python3 tools/make_screens.py` (fictional sample centre) |
