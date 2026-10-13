@@ -35,6 +35,8 @@ import parent_report  # noqa: E402
 import wa_auto  # noqa: E402
 import watch  # noqa: E402
 import license as license_mod  # noqa: E402
+import assist_licence as assist_licence_mod  # noqa: E402
+import licence as af_licence_mod  # noqa: E402
 import xlsx  # noqa: E402
 from auth import ADMIN_PERMS, ALL, DEV_PASSWORD, DEV_USER, PERMISSIONS, AuthError, Forbidden  # noqa: E402
 import center  # noqa: E402
@@ -160,7 +162,8 @@ def write_config(key, value):
 
 # what still works when the subscription has ended: signing in and out, the activation itself, the clicks log, making a
 # backup (people's data is never held hostage); exports and every page are GET requests and stay open
-LICENSE_OPEN = {'/api/auth/password', '/api/auth/logout', '/api/log', '/api/license/activate', '/api/backups', '/api/data-safety/check'}
+LICENSE_OPEN = {'/api/auth/password', '/api/auth/logout', '/api/log', '/api/license/activate', '/api/backups', '/api/data-safety/check',
+                '/api/licence', '/api/licence/activate', '/api/licence/request', '/api/licence/request/retry', '/api/licence/request/clear', '/api/licence/preview'}
 
 
 def trusted_ts(ts):
@@ -240,8 +243,17 @@ if INSTANCE:
             r = JOURNAL.conn.execute("SELECT MAX(ts), MIN(ts) FROM audit WHERE kind='data'").fetchone()
         return (r[0], r[1]) if r else (None, None)
     LICENSE = license_mod.License(DATA_DIR, data_time, required=license_mod._compiled() or bool(CFG.get('license_required')))
+
+    def site_shop_name():
+        try:
+            return str(center.settings(STORE).get('systemName') or '')
+        except Exception:  # noqa: BLE001
+            return ''
+
+    AF_ASSIST = assist_licence_mod.Assist(DATA_DIR, CFG)
+    AF_LIC = af_licence_mod.Licence(AF_ASSIST, ROOT, HOME, CFG, shop_name=site_shop_name)
 else:
-    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = None
+    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = AF_ASSIST = AF_LIC = None
 GATE = None
 AI_BUSY = threading.Lock()
 formats.OFFICE_TMP = os.path.join(DATA_DIR, 'tmp')
@@ -849,6 +861,15 @@ class Handler(BaseHTTPRequestHandler):
             if not (u and is_admin(u)):
                 st = {k: v for k, v in st.items() if k not in ('history', 'serial', 'request')} if not (self.ip in LOCAL_IPS and not self.via_proxy) else {k: v for k, v in st.items() if k != 'history'}
             return self.send(200, {**st, 'vendor': VENDOR_WHATSAPP})
+        if p == '/api/licence':
+            return self.send(200, {**AF_LIC.status(), 'request': AF_LIC.public()})
+        if p == '/api/licence/request':
+            return self.send(200, AF_LIC.public())
+        if p == '/api/licence/preview':
+            kind = qs.get('kind', 'trial')
+            if kind not in af_licence_mod.KINDS:
+                kind = 'trial'
+            return self.send(200, AF_LIC.preview(kind, qs.get('ref', '')))
         if p == '/api/join/status':
             if self.ip not in LOCAL_IPS or AUTH.has_users() and NODE.role != 'member':
                 raise Forbidden('Only on this PC itself.')
@@ -1154,6 +1175,28 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/license/activate':
             self.need_admin()
             return self.license_activate()
+        if p == '/api/licence/activate':
+            self.need_admin()
+            try:
+                st = AF_LIC.activate(self.json_body().get('code', ''))
+            except ValueError as e:
+                raise center.Problem('lic.' + str(e), f'This code cannot be used ({e}).')
+            AUTH.log(self.u['display'], self.ip, 'licence', st.get('serial') or '-', 'Commercial licence activated: ' + st.get('state', ''))
+            return self.send(200, {**st, 'request': AF_LIC.public()})
+        if p in ('/api/licence/request', '/api/licence/request/retry', '/api/licence/request/clear'):
+            self.need_admin()
+            if p.endswith('/clear'):
+                return self.send(200, AF_LIC.clear())
+            if p.endswith('/retry'):
+                return self.send(200, AF_LIC.step(force=True))
+            d = self.json_body()
+            try:
+                AF_LIC.begin(d.get('kind'), str(d.get('ref') or ''), self.u['id'],
+                             shop=d.get('shop') if d.get('shop') is not None else None)
+            except LookupError:
+                raise center.Problem('lic.hub_off', 'This copy cannot ask the seller online. Send the device code and paste the code you receive.')
+            AUTH.log(self.u['display'], self.ip, 'licence', d.get('kind'), 'Licence requested from the seller')
+            return self.send(200, AF_LIC.step())
         if LICENSE.blocked() and p not in LICENSE_OPEN:
             # the subscription ended: everything can still be read, backed up and exported - nothing new is saved
             st = LICENSE.status()
@@ -1863,6 +1906,7 @@ def main(background=False):
     BACKUPS.start()
     SYNC.start()
     GATE.start()
+    AF_LIC.start()
     SUPPORT.start()
 
     print('=' * 64)

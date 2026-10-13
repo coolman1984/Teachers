@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import ApiError, Server, make_authority  # noqa: E402
@@ -20,6 +21,30 @@ SEED = ed25519.generate()
 PUB = ed25519.public_key(SEED)
 OTHER = ed25519.generate()
 HERE_PC, OTHER_PC = 'synthetic-guid-centre', 'synthetic-guid-elsewhere'
+
+
+def _required_like_app(cfg_license_required=False):
+    return L._compiled() or bool(cfg_license_required)
+
+
+class CompiledTest(unittest.TestCase):
+    """Nuitka may mark license.py with __uncompiled__ instead of __compiled__."""
+
+    def test_source_run_is_not_required_by_default(self):
+        self.assertFalse(_required_like_app(False))
+
+    def test_uncompiled_marker_counts_as_installed(self):
+        with patch.dict(L.__dict__, {'__uncompiled__': True}, clear=False):
+            self.assertTrue(L._compiled())
+            self.assertTrue(_required_like_app(False))
+
+    def test_compiled_marker_counts_as_installed(self):
+        with patch.dict(L.__dict__, {'__compiled__': True}, clear=False):
+            self.assertTrue(L._compiled())
+
+    def test_frozen_counts_as_installed(self):
+        with patch.object(sys, 'frozen', True, create=True):
+            self.assertTrue(L._compiled())
 
 
 class Clock:

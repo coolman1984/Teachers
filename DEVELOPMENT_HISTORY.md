@@ -1,6 +1,13 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Port Yousef commercial licence + licence-hub (owner 2026-10-13)
+
+**What:** `licence-hub/` Cloudflare Worker template (product `teachers`), `server/afcodes.py`, `server/licence.py`, `server/assist_licence.py`, Settings subscription UI with online 14-day trial + offline paste (`js/views/licence_commercial.js`), `docs/HUB_SETUP.md`. Hub fix: approving a **monthly** request issues a **standard** 31-day code via `LICENCE_PAID_SIGNING_KEY`, never a trial code. Legacy `server/license.py` + Hessa Online gateway codes unchanged. Merged sale-hardening pieces from open PRs #37 (`__uncompiled__`, CI smoke `/api/license`), commercial tests adapted for `center.db`.
+**Why:** Owner decision to match `coolman1984/Yousef-Transportation` licensing (PR #29) on Teachers/Hessa.
+**Checks:** `cd licence-hub && npm test` (28 pass); `cd tests && python3 -m unittest test_licence_hub_signer test_commercial_licence test_license.CompiledTest test_ci` (pass).
+**Conflicts:** PR #35 frozen-clock runtime in `license.py` not merged here (commercial `licence.py` has its own clock rules). PR #36 `tools/seller.py` serial lock not touched. Dual subscription systems until owner unifies enforcement.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

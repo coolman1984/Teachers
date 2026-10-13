@@ -43,9 +43,12 @@ jobs:
       - name: Gateway tests (Worker + D1 stand-in)
         working-directory: gateway
         run: node --test --no-warnings test/gateway.test.js test/service.test.js
+      - name: Licence hub tests
+        working-directory: licence-hub
+        run: npm test
       - name: Office tests (engine, centre, Excel, samples and two PCs)
         working-directory: tests
-        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_center_watch test_license test_owner_online test_wa_auto test_money_review test_qbank test_ai test_support test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration test_sync_files
+        run: python -m unittest test_unit test_convergence test_design test_ci test_center_domain test_center_api test_center_multinode test_center_network test_center_domain_remote test_center_api_remote test_center_multinode_remote test_center_join test_center_devices test_center_safety test_center_gateway test_center_links test_center_review test_center_remote test_center_roles test_center_watch test_license test_commercial_licence test_licence_hub_signer test_owner_online test_wa_auto test_money_review test_qbank test_ai test_support test_gateway_parent test_multinode test_recovery test_sample test_xlsx test_integration test_sync_files
 
   browser:
     # the screens in a real browser (Chromium of the runner): the core journeys, both languages, the parent page and phones
@@ -127,7 +130,8 @@ jobs:
               $s = Invoke-RestMethod http://127.0.0.1:18080/api/auth/status
               $page = (Invoke-WebRequest http://127.0.0.1:18080/ -UseBasicParsing).Content
               $js = (Invoke-WebRequest http://127.0.0.1:18080/js/app.js -UseBasicParsing).StatusCode
-              if ($s.about.installed -and $page -match 'Hessa' -and $js -eq 200) { $ok = $true }
+              $lic = Invoke-RestMethod http://127.0.0.1:18080/api/license
+              if ($s.about.installed -and $page -match 'Hessa' -and $js -eq 200 -and $lic.required -eq $true -and $lic.state -eq 'trial') { $ok = $true }
             } catch { }
           }
           Stop-Process -Id $p.Id -Force
