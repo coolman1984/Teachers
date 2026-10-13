@@ -150,7 +150,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  { ssPostInstall runs after files are copied (Inno Setup help); failures set SetupExitCode in DeinitializeSetup }
+  { ssPostInstall runs after files are copied; exceptions here are caught by Inno — use booleans only }
   if CurStep <> ssPostInstall then
     exit;
   if not RunPostInstall then
@@ -159,16 +159,18 @@ begin
     MsgBox(
       PostInstallError + #13#10 + #13#10 +
       'The program files were installed, but permissions or the boot task could not be set up. ' +
-      'Run the installer again or register the task manually (see docs/OPERATIONS.md).' + #13#10 + #13#10 +
-      'تم تثبيت ملفات البرنامج، لكن لم تُضبط الصلاحيات أو مهمة التشغيل. أعد تشغيل المثبّت أو سجّل المهمة يدويًا (راجع docs/OPERATIONS.md).',
+      'There is no automatic rollback — run the installer again or fix the task manually (see docs/OPERATIONS.md).' + #13#10 + #13#10 +
+      'تم تثبيت ملفات البرنامج، لكن لم تُضبط الصلاحيات أو مهمة التشغيل. لا يوجد تراجع تلقائي — أعد تشغيل المثبّت أو أصلح المهمة يدويًا (راجع docs/OPERATIONS.md).',
       mbError, MB_OK);
   end;
 end;
 
-procedure DeinitializeSetup();
+function GetCustomSetupExitCode(): Integer;
 begin
   if PostInstallFailed then
-    SetupExitCode := 3;
+    Result := 3
+  else
+    Result := 0;
 end;
 
 function TryStrToInt(const S: String; var I: Longint): Boolean;
@@ -260,6 +262,7 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Code: Integer;
+  DataDir, AppDir: String;
 begin
   { stop the running program (it is safe to stop at any moment), so its files can be replaced }
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Hessa.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
@@ -278,6 +281,35 @@ begin
   begin
     Result := 'This PC is missing schtasks.exe (required to register the Hessa boot task).';
     exit;
+  end;
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -ExecutionPolicy Bypass -Command "exit 0"', '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+  begin
+    Result := 'Windows PowerShell could not run (required to register the Hessa boot task).';
+    exit;
+  end;
+  DataDir := ExpandConstant('{commonappdata}\Hessa');
+  if not DirExists(DataDir) then
+  begin
+    if not ForceDirectories(DataDir) then
+    begin
+      Result := 'Could not create the Hessa data folder: ' + DataDir;
+      exit;
+    end;
+  end;
+  AppDir := ExpandConstant('{app}');
+  if DirExists(AppDir) then
+  begin
+    if not FileExists(AppDir + '\register_boot_task.ps1') then
+    begin
+      Result := 'The installed Hessa folder is missing register_boot_task.ps1 — run a full setup, not a partial copy.';
+      exit;
+    end;
+    if not FileExists(AppDir + '\Hessa.exe') then
+    begin
+      Result := 'The installed Hessa folder is missing Hessa.exe — run a full setup, not a partial copy.';
+      exit;
+    end;
   end;
   Result := '';
 end;

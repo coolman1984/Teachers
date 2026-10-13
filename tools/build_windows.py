@@ -53,10 +53,29 @@ def preflight():
         sys.exit(f'docs/RELEASE_NOTES.md does not describe version {VERSION} (server/version.py). Write what changed first.')
 
 
+def compile_installer_script():
+    """Compile hessa.iss with ISCC using a minimal stub dist (no Nuitka). Used in CI on Windows."""
+    os.makedirs(BUILD, exist_ok=True)
+    dist = os.path.join(BUILD, 'hs_main.dist')
+    os.makedirs(dist, exist_ok=True)
+    exe = os.path.join(dist, 'Hessa.exe')
+    if not os.path.isfile(exe):
+        open(exe, 'wb').close()
+    icon = os.path.join(BUILD, 'hessa.ico')
+    if not os.path.isfile(icon):
+        open(icon, 'wb').close()
+    run([iscc(), f'/DAppVersion={VERSION}', f'/DAppPublisher={DEVELOPER}', f'/DAppCopyright={COPYRIGHT}',
+         os.path.join('installer', 'hessa.iss')])
+    print('Installer script compiled (smoke):', glob.glob(os.path.join(ROOT, 'dist', f'Hessa-Setup-{VERSION}.exe')))
+
+
 def main():
     preflight()
     if '--check' in sys.argv:
         print('Everything the installer needs is here, version', VERSION)
+        return
+    if '--compile-installer' in sys.argv:
+        compile_installer_script()
         return
     os.makedirs(BUILD, exist_ok=True)
     assets = os.path.join(ROOT, 'server', '_assets.py')

@@ -2,10 +2,12 @@
 import os
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 
 TASK = 'Hessa'
 MARKER = 'boot_task_missing_warned'
-_RUN_RE = re.compile(r'hessa\.exe.*--background|--background.*hessa\.exe', re.IGNORECASE)
+_TASK_NS = '{http://schemas.microsoft.com/windows/2004/02/mit/task}'
+_HESSA_EXE = re.compile(r'(?:^|[\\/])Hessa\.exe\s*$', re.IGNORECASE)
 
 
 def installed_program():
@@ -16,13 +18,13 @@ def installed_program():
         return False
 
 
-def _task_query_text():
+def _task_xml():
     if os.name != 'nt':
         return ''
     schtasks = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'schtasks.exe')
     flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
     try:
-        r = subprocess.run([schtasks, '/Query', '/TN', TASK, '/FO', 'LIST', '/V'],
+        r = subprocess.run([schtasks, '/Query', '/TN', TASK, '/XML'],
                            capture_output=True, text=True, check=False, creationflags=flags)
     except OSError:
         return ''
@@ -31,26 +33,48 @@ def _task_query_text():
     return r.stdout or ''
 
 
-def _task_action_ok(text):
-    for line in text.splitlines():
-        low = line.strip().lower()
-        if low.startswith('scheduled task state:') and 'disabled' in low:
+def _enabled(settings_el):
+    if settings_el is None:
+        return True
+    enabled = settings_el.find(f'{_TASK_NS}Enabled')
+    if enabled is None or enabled.text is None:
+        return True
+    return enabled.text.strip().lower() not in ('false', '0')
+
+
+def _action_ok(command, arguments):
+    cmd = (command or '').strip().strip('"')
+    if not _HESSA_EXE.search(cmd):
+        return False
+    parts = (arguments or '').split()
+    return any(p == '--background' for p in parts)
+
+
+def task_ok_from_xml(xml_text):
+    if not xml_text or not xml_text.strip():
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    settings = root.find(f'.//{_TASK_NS}Settings')
+    if not _enabled(settings):
+        return False
+    found = False
+    for exec_el in root.findall(f'.//{_TASK_NS}Exec'):
+        cmd_el = exec_el.find(f'{_TASK_NS}Command')
+        args_el = exec_el.find(f'{_TASK_NS}Arguments')
+        command = cmd_el.text if cmd_el is not None else ''
+        arguments = args_el.text if args_el is not None else ''
+        if _action_ok(command, arguments):
+            found = True
+        elif command or arguments:
             return False
-        if low.startswith('status:') and low.endswith('disabled'):
-            return False
-        if 'task to run:' in low:
-            action = line.split(':', 1)[1].strip()
-            if not _RUN_RE.search(action.replace('"', '')):
-                return False
-            return True
-    return False
+    return found
 
 
 def task_registered():
-    text = _task_query_text()
-    if not text:
-        return False
-    return _task_action_ok(text)
+    return task_ok_from_xml(_task_xml())
 
 
 def warn_once(data_dir, log, interactive):

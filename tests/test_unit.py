@@ -609,11 +609,24 @@ class Review231Test(unittest.TestCase):
 
     def test_boot_task_registered_requires_enabled_hessa_background(self):
         import boot_task
-        good = 'Task To Run: C:\\Program Files\\Hessa\\Hessa.exe --background\n'
-        self.assertTrue(boot_task._task_action_ok(good))
-        self.assertFalse(boot_task._task_action_ok('Scheduled Task State: Disabled\n' + good))
-        self.assertFalse(boot_task._task_action_ok('Task To Run: C:\\Program Files\\Hessa\\Hessa.exe\n'))
-        self.assertFalse(boot_task._task_action_ok('Task To Run: C:\\Windows\\notepad.exe\n'))
+        good = '''<?xml version="1.0"?>
+<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Settings><Enabled>true</Enabled></Settings>
+  <Actions><Exec><Command>C:\\Program Files\\Hessa\\Hessa.exe</Command><Arguments>--background</Arguments></Exec></Actions>
+</Task>'''
+        disabled = good.replace('<Enabled>true</Enabled>', '<Enabled>false</Enabled>')
+        wrong_exe = good.replace('Hessa\\Hessa.exe', 'Hessa\\NotHessa.exe')
+        no_bg = good.replace('<Arguments>--background</Arguments>', '<Arguments></Arguments>')
+        late_disabled = '''<?xml version="1.0"?>
+<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Actions><Exec><Command>C:\\Program Files\\Hessa\\Hessa.exe</Command><Arguments>--background</Arguments></Exec></Actions>
+  <Settings><Enabled>false</Enabled></Settings>
+</Task>'''
+        self.assertTrue(boot_task.task_ok_from_xml(good))
+        self.assertFalse(boot_task.task_ok_from_xml(disabled))
+        self.assertFalse(boot_task.task_ok_from_xml(wrong_exe))
+        self.assertFalse(boot_task.task_ok_from_xml(no_bg))
+        self.assertFalse(boot_task.task_ok_from_xml(late_disabled))
 
     def test_backup_create_refuses_junctioned_root(self):
         import backup
@@ -630,6 +643,55 @@ class Review231Test(unittest.TestCase):
                 with self.assertRaises(OSError):
                     b.create('manual')
             self.assertFalse(os.path.exists(os.path.join(backups, 'db')))
+        finally:
+            shutil.rmtree(d)
+
+    def test_backup_create_refuses_junction_at_db_dir(self):
+        import backup
+        from store import Store
+        d = tempfile.mkdtemp()
+        try:
+            data = os.path.join(d, 'data')
+            uploads = os.path.join(data, 'uploads')
+            backups = os.path.join(data, 'backups')
+            os.makedirs(uploads)
+            os.makedirs(backups)
+            store = Store(data)
+            b = backup.Backups(store, uploads, backups)
+            db_dir = os.path.join(backups, 'db')
+
+            def blocked(path, root):
+                return os.path.normpath(path) == os.path.normpath(db_dir)
+
+            with mock.patch.object(backup, 'mirror_target_blocked', side_effect=blocked):
+                with self.assertRaises(OSError):
+                    b.create('manual')
+            self.assertFalse(os.path.exists(db_dir))
+        finally:
+            shutil.rmtree(d)
+
+    def test_backup_create_refuses_symlinked_extra_db_dir(self):
+        import backup
+        from store import Store
+        d = tempfile.mkdtemp()
+        try:
+            data = os.path.join(d, 'data')
+            uploads = os.path.join(data, 'uploads')
+            backups = os.path.join(data, 'backups')
+            extra = os.path.join(d, 'extra-out')
+            os.makedirs(uploads)
+            os.makedirs(extra)
+            store = Store(data)
+            b = backup.Backups(store, uploads, backups, extra_dirs=[extra])
+            extra_db = os.path.join(extra, 'db')
+
+            def blocked(path, root):
+                return os.path.normpath(path) == os.path.normpath(extra_db)
+
+            with mock.patch.object(backup, 'mirror_target_blocked', side_effect=blocked):
+                name = b.create('manual')
+            self.assertTrue(os.path.isfile(os.path.join(backups, 'db', name)))
+            self.assertFalse(os.path.exists(extra_db))
         finally:
             shutil.rmtree(d)
 

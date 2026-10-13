@@ -47,6 +47,17 @@ class ShippedFilesTest(unittest.TestCase):
         r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'build_windows.py'), '--check'], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_installer_script_compiles_with_iscc_when_available(self):
+        import os
+        import subprocess
+        import sys
+        if os.name != 'nt' and not __import__('shutil').which('iscc'):
+            self.skipTest('Inno Setup ISCC is only run on Windows CI (installer-script job)')
+        r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'build_windows.py'), '--compile-installer'],
+                           capture_output=True, text=True, cwd=str(ROOT))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(list((ROOT / 'dist').glob('Hessa-Setup-*.exe')), 'ISCC should produce Hessa-Setup-*.exe')
+
     def test_every_file_the_workflow_ships_exists(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         for f in re.findall(r'(docs/[A-Z_]+\.md)', workflow):
@@ -89,8 +100,9 @@ class InstallerTest(unittest.TestCase):
         self.assertIn('procedure CurStepChanged', code)
         self.assertIn('ssPostInstall', code)
         self.assertNotIn('InstallStep', code)
-        self.assertIn('procedure DeinitializeSetup', code)
-        self.assertIn('SetupExitCode', code)
+        self.assertIn('function GetCustomSetupExitCode', code)
+        self.assertNotRegex(code, r'\bSetupExitCode\s*:=')
+        self.assertNotIn('RaiseException', code)
         self.assertIn('RemoveBootTask', code)
         self.assertIn('register_boot_task.ps1', code)
         self.assertIn('icacls.exe', code.split('function PrepareToInstall', 1)[1])

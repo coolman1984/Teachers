@@ -117,8 +117,14 @@ class Backups:
         if mirror_target_blocked(root, self.data_root):
             raise OSError(f'Backup folder is a junction or symlink and cannot be used: {root}')
 
+    def _reject_blocked_db_dir(self, root):
+        db_dir = os.path.join(root, 'db')
+        if mirror_target_blocked(db_dir, self.data_root):
+            raise OSError(f'Backup db folder is a junction or symlink and cannot be used: {db_dir}')
+
     def _ensure_db_dir(self, root):
         self._reject_blocked_backup_root(root)
+        self._reject_blocked_db_dir(root)
         os.makedirs(os.path.join(root, 'db'), exist_ok=True)
 
     # ------------------------------------------------------------ create
@@ -129,6 +135,7 @@ class Backups:
         self._ensure_db_dir(self.dir)
         name = f'to_{datetime.now():%Y%m%d_%H%M%S}_{kind}.db'
         dest = os.path.join(self.dir, 'db', name)
+        self._reject_blocked_db_dir(self.dir)
         tmp = dest + '.tmp'
         with self.store.lock:
             version = self.store.version()
@@ -166,6 +173,7 @@ class Backups:
         for extra in self.extra:
             try:
                 self._ensure_db_dir(extra)
+                self._reject_blocked_db_dir(extra)
                 shutil.copy2(dest, os.path.join(extra, 'db', name))
                 for copy in (auth_copy, journal_copy):
                     if copy:

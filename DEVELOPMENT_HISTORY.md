@@ -17,6 +17,8 @@
 
 **PR #34 round 5:** Inno calls **`ssInstall` once before copy**, so the `InstallStep` guard never ran ACL/task registration — moved to **`ssPostInstall`** with prerequisite checks in **`PrepareToInstall`**, **`RemoveBootTask`** on script failure, and **`SetupExitCode := 3`** (no claim of full rollback). `Backups.create` checks **`mirror_target_blocked`** on the backups root and each extra folder before writing `db\`; **`__init__`** no longer creates `backups\db` through a junction. `boot_task.task_registered` treats disabled or wrong-action tasks as missing.
 
+**PR #34 round 6:** Replaced invalid **`SetupExitCode`** with **`GetCustomSetupExitCode`**; expanded **`PrepareToInstall`**; CI **`installer-script`** job runs **`build_windows.py --compile-installer`** (ISCC smoke). `Backups` checks **`mirror_target_blocked`** on each **`db`** folder; `boot_task` validates **`schtasks /Query /XML`**.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

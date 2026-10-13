@@ -38,6 +38,21 @@ jobs:
           python -m pyflakes server tools tests
       - name: Installer files present (fails in seconds instead of at the end of a Windows build)
         run: python tools/build_windows.py --check
+
+  installer-script:
+    # compile hessa.iss on every PR (full windows-installer still runs only on main/tags)
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Inno Setup
+        run: choco upgrade innosetup -y --no-progress
+      - name: Compile installer script (ISCC smoke)
+        run: python tools/build_windows.py --compile-installer
       - name: Frontend startup and centre flows
         run: node --test tests/test_frontend.js
       - name: Gateway tests (Worker + D1 stand-in)
