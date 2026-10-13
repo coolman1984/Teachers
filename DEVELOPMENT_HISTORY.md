@@ -1,6 +1,12 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Seller tool: unique activation serials (sale-hardening task 6, 2026-10-13)
+
+**Why:** `tools/seller.py` used `int(datetime.now().timestamp())` as the code serial. Two centres issued in the same second (or a double menu click) shared a serial; the gateway rejects the duplicate (HTTP 409) and the PC cannot rank two codes with the same dates.
+**What:** `next_serial()` keeps a counter in `~/.hessa-seller/serial.next` (locked, seeded from `issued.csv`), still within the 32-bit field in the code. Regression in `tests/test_license.py` `test_h_two_issues_in_the_same_second_get_unique_serials`.
+**Lesson:** identity fields must never be derived from wall-clock seconds when duplicates are possible.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's
