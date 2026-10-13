@@ -14,6 +14,8 @@ What makes copying or cheating useless:
 - nobody can make a code without the seller's private key (Ed25519, the same signatures that protect the data);
 - moving the clock back does not bring days back: the program remembers the latest time it has seen - here and in the
   data's own signed history - and refuses a clock that runs more than 2 hours behind it;
+- leaving the Windows date stuck on the last paid day does not keep that month alive: the program adds up real runtime
+  on each wall-clock date and locks after more than 30 hours on the same date (a normal day crosses midnight in under that);
 - deleting license.json does not help: the trial start and the time high-water mark are also taken from the data.
 
 What happens at the end: from 7 days before the end a bar at the bottom of every screen says how many days are left;
@@ -30,6 +32,7 @@ import os
 import struct
 import sys
 import threading
+import time
 from datetime import date, datetime, timedelta
 
 import ed25519
@@ -40,6 +43,7 @@ TRIAL_DAYS = 7
 WARN_DAYS = 7
 GRACE_DAYS = 3
 CLOCK_SLACK = timedelta(hours=2)
+RUN_LIMIT = timedelta(hours=30)   # one frozen wall-clock date cannot keep a paid month past ~30h of real runtime
 KIND_ACTIVATE, KIND_RESET = 1, 2
 ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no 0/O, 1/I: codes are read out on the phone and typed by hand
 
@@ -166,13 +170,17 @@ def read_code(code, pub=None):
 
 # ---------------------------------------------------------------- this PC's subscription
 class License:
-    def __init__(self, home, data_time=None, required=True, now=None):
+    def __init__(self, home, data_time=None, required=True, now=None, elapsed=None, monotonic=None):
         """home: where license.json lives (the PC's data, never synced). data_time(): the latest and earliest time in the
-        signed history of the data, so a deleted license.json or a clock moved back is noticed."""
+        signed history of the data, so a deleted license.json or a clock moved back is noticed. elapsed(): seconds of real
+        runtime to add on each tick (tests only); otherwise monotonic() measures time between ticks."""
         self.path = os.path.join(home, 'license.json')
         self.data_time = data_time or (lambda: (None, None))
         self.required = required
         self.now = now or datetime.now
+        self._elapsed = elapsed
+        self.monotonic = monotonic or time.monotonic
+        self._mono_at = None
         self.lock = threading.Lock()
         self.machine = machine_hash()
         self.data = self._load()
@@ -207,6 +215,31 @@ class License:
             return None
         return hw
 
+    def _tick_runtime(self, t):
+        """Real runtime accumulated on t's calendar date (monotonic, not self.now). True when the frozen-date limit is hit."""
+        today = t.date().isoformat()
+        run_day = self.data.get('runDay')
+        run_sec = float(self.data.get('runSec') or 0)
+        if self._elapsed is not None:
+            delta = max(0.0, float(self._elapsed()))
+        else:
+            mono = self.monotonic()
+            delta = max(0.0, mono - self._mono_at) if self._mono_at is not None else 0.0
+            self._mono_at = mono
+        if run_day != today:
+            run_day, run_sec = today, 0.0
+        run_sec += delta
+        self.data['runDay'] = run_day
+        self.data['runSec'] = run_sec
+        try:
+            saved = self.data.get('_runSaved')
+            if saved != run_sec:
+                self.data['_runSaved'] = run_sec
+                self._save()
+        except OSError:
+            pass
+        return run_sec > RUN_LIMIT.total_seconds()
+
     def request(self):
         return request_code(KIND_ACTIVATE, self.machine, 0)
 
@@ -216,10 +249,13 @@ class License:
             t = self.now()
             today = t.date()
             behind = self._seen(t)
+            frozen = self._tick_runtime(t)
             out = {'request': self.request(), 'required': self.required, 'machineOk': True, 'centre': self.data.get('centre') or '',
                    'until': None, 'daysLeft': None, 'serial': self.data.get('serial'), 'history': (self.data.get('history') or [])[-12:]}
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
                 return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': behind[:16].replace('T', ' ')}
+            if frozen:
+                return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': t.replace(microsecond=0).strftime('%Y-%m-%d %H:%M')}
             code = self.data.get('code')
             info = None
             if code:
@@ -275,6 +311,8 @@ class License:
             t = self.now()
             behind = self._seen(t)
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
+                raise ValueError('clock')
+            if self._tick_runtime(t):
                 raise ValueError('clock')
             if info['until'] < t.date():
                 raise ValueError('expired')

@@ -107,6 +107,28 @@ class CodesTest(unittest.TestCase):
         self.assertIn(st['state'], ('trial', 'trialEnded'))
         self.assertNotEqual(copy.request(), self.lic.request())
 
+    def test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        chunks = iter([12 * 3600, 19 * 3600])
+
+        def elapsed():
+            return next(chunks, 0)
+
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=elapsed)
+        self.assertIn(lic.status()['state'], ('ok', 'warn'))
+        st = lic.status()
+        self.assertEqual(st['state'], 'clock')
+        self.assertTrue(lic.blocked())
+        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0)
+        self.assertEqual(again.status()['state'], 'clock')
+        with self.assertRaises(ValueError) as caught:
+            again.activate(self.code(date(2026, 12, 20), serial=2))
+        self.assertEqual(str(caught.exception), 'clock')
+        self.clock.t = datetime(2026, 11, 11, 10, 0)
+        fresh = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0)
+        self.assertEqual(fresh.status()['state'], 'ok')
+
     def test_e_moving_the_clock_back_stops_saving_instead_of_giving_days(self):
         self.lic.activate(self.code(date(2026, 11, 6)))
         self.clock.t = datetime(2026, 11, 20, 9, 0)                # time passes: ended

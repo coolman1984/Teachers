@@ -1,6 +1,16 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Frozen Windows date cannot keep a paid month (2026-10-13)
+
+**Why (sale-hardening plan task 3):** if the centre set the date to the last paid day and never let the program see a later
+day, the rollback check stayed quiet and saving kept working with no new code.
+**What:** `server/license.py` stores real runtime on each wall-clock date in `license.json` (`runDay` / `runSec`, monotonic
+between ticks). More than 30 hours on one date sets state `clock` and blocks saves, including across restarts; a new calendar
+day clears the counter. Regression in `tests/test_license.py` `test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month`;
+`test_e` unchanged.
+**Lesson:** limit cheating with the clock the PC reports and with real elapsed time — not only with the high-water mark.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's
