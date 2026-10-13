@@ -124,9 +124,9 @@ class CodesTest(unittest.TestCase):
 
     def test_online_hub_date_past_until_locks(self):
         self.lic.activate(self.code(date(2026, 11, 10)))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
-        self.lic.note_online('2026-11-20')
+        self.clock.t = datetime(2026, 11, 13, 10, 0)
+        self.assertEqual(self.lic.status()['state'], 'grace')
+        self.lic.note_online('2026-11-14')
         again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
         self.assertEqual(again.status()['state'], 'locked')
 
@@ -156,6 +156,45 @@ class CodesTest(unittest.TestCase):
         self.lic.activate(code)
         self.lic.note_online('2029-06-01')
         self.assertEqual(L.read_code(code)['until'], date(2026, 11, 10))
+        self.assertNotIn('trustedDate', L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).data)
+
+    def test_far_future_hub_date_is_ignored_and_sane_check_replaces_bricked_trust(self):
+        code = self.code(date(2026, 12, 31), serial=6)
+        self.lic.activate(code)
+        self.clock.t = datetime(2026, 11, 20, 9, 0)
+        path = os.path.join(self.home, 'license.json')
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+        data['trustedDate'] = '2099-01-01'
+        data['seen'] = '2099-01-01T12:00:00'
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        bricked = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertIn(bricked.status()['state'], ('ok', 'warn'))
+        self.assertEqual(bricked.data.get('trustedDate'), '2099-01-01')
+        bricked.note_online('2026-11-20T09:15:00')
+        healed = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertIn(healed.status()['state'], ('ok', 'warn'))
+        self.assertTrue(healed.data['trustedDate'].startswith('2026-11-20'))
+        healed.note_online('2099-01-01')
+        self.assertTrue(
+            L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).data['trustedDate'].startswith('2026-11-20'))
+
+    def test_hub_time_same_morning_before_slack_is_not_clock(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.lic.note_online('2026-11-20T06:30:00')
+        self.clock.t = datetime(2026, 11, 20, 9, 0)
+        st = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
+        self.assertEqual(st['state'], 'ok')
+
+    def test_slack_does_not_restore_grace_after_high_water_passed_midnight(self):
+        self.lic.activate(self.code(date(2026, 11, 13)))
+        self.clock.t = datetime(2026, 11, 17, 0, 30)
+        self.assertEqual(self.lic.status()['state'], 'locked')
+        self.clock.t = datetime(2026, 11, 16, 23, 0)
+        st = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
+        self.assertEqual(st['state'], 'locked')
+        self.assertTrue(self.lic.blocked())
 
     def test_f_a_reset_code_answers_one_request_once(self):
         req = self.lic.reset_request()

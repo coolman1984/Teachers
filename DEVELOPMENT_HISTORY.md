@@ -1,6 +1,16 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Licence hub date window + billing high-water (2026-10-13, PR #35 round-5)
+
+**Why:** round-5 review — a fake gateway `serverTime`/Date in 2099 could brick a valid month; trusted days at noon falsely
+locked honest mornings before 10:00; 2h clock slack could rewind past midnight and reopen grace.
+**What:** `note_online` accepts hub time only within ~2 days of the PC clock and not past signed `until`+1 day; insane stored
+`trustedDate`/`seen` are ignored for lock/billing until a sane online check replaces them; trusted hub moments are stored with
+real timestamps; `_billing_day` uses `max(local, trust, high-water)` so slack never buys another grace day. Tests in
+`tests/test_license.py`.
+**Lesson:** fail-open on bad network data means rejecting absurd hub dates, not trusting them.
+
 ## Simple subscription protection: rollback + online hub date (2026-10-13, PR #35)
 
 **Why (owner decision):** the 30-hour-per-day runtime counter was too complex and still gameable; centres need a small rule set.

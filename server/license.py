@@ -38,6 +38,7 @@ TRIAL_DAYS = 7
 WARN_DAYS = 7
 GRACE_DAYS = 3
 CLOCK_SLACK = timedelta(hours=2)
+HUB_AHEAD_SLACK = timedelta(days=2)
 KIND_ACTIVATE, KIND_RESET = 1, 2
 ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no 0/O, 1/I: codes are read out on the phone and typed by hand
 
@@ -66,7 +67,7 @@ def parse_server_moment(value):
         s = str(value)
         if 'T' in s:
             return datetime.fromisoformat(s[:19])
-        return datetime.combine(date.fromisoformat(s[:10]), dt_time(12, 0))
+        return datetime.combine(date.fromisoformat(s[:10]), dt_time(0, 0))
     except (ValueError, TypeError):
         return None
 
@@ -221,22 +222,80 @@ class License:
             json.dump(self.data, f, indent=1)
         os.replace(tmp, self.path)
 
-    def _trusted_day(self):
-        raw = self.data.get('trustedDate')
-        if not raw:
+    def _activation_until(self):
+        code = self.data.get('code')
+        if not code:
             return None
         try:
-            return date.fromisoformat(str(raw)[:10])
+            info = read_code(code)
+            if info['kind'] == KIND_ACTIVATE and self.machine in info['machines']:
+                return info['until']
         except ValueError:
+            pass
+        return None
+
+    def _trusted_moment(self):
+        return parse_server_moment(self.data.get('trustedDate'))
+
+    def _hub_moment_ok(self, when, until=None):
+        """Ignore absurd hub dates (bad gateway or Date header); allow hub ahead of a rolled-back PC."""
+        if when is None:
+            return False
+        if until is None:
+            until = self._activation_until()
+        local = self.now()
+        if until is not None and when.date() > until + timedelta(days=1) and when > local + HUB_AHEAD_SLACK:
+            return False
+        if when > local + timedelta(days=400):
+            return False
+        return True
+
+    def _trusted_day(self):
+        when = self._trusted_moment()
+        if when is None or not self._hub_moment_ok(when):
             return None
+        return when.date()
+
+    def _seen_for_hw(self, raw):
+        if not raw:
+            return ''
+        when = parse_server_moment(raw)
+        if when is None:
+            return str(raw)
+        if when > self.now() + timedelta(days=400):
+            return ''
+        return when.isoformat(timespec='seconds')
+
+    def _high_water_moment(self, behind=None):
+        marks = []
+        if behind:
+            try:
+                behind_dt = datetime.fromisoformat(str(behind)[:19])
+                if behind_dt <= self.now() + timedelta(days=400):
+                    marks.append(behind_dt)
+            except ValueError:
+                pass
+        seen = self._seen_for_hw(self.data.get('seen'))
+        if seen:
+            marks.append(datetime.fromisoformat(seen[:19]))
+        latest, _ = self.data_time()
+        if latest:
+            try:
+                marks.append(datetime.fromisoformat(str(latest)[:19]))
+            except ValueError:
+                pass
+        trust = self._trusted_moment()
+        if trust and self._hub_moment_ok(trust):
+            marks.append(trust)
+        return max(marks) if marks else None
 
     def _seen(self, t):
         """The latest time this PC has ever seen (the high-water mark), raised to now when the clock is honest."""
         latest, _ = self.data_time()
-        marks = [self.data.get('seen') or '', latest or '']
-        trust = self._trusted_day()
-        if trust:
-            marks.append(datetime.combine(trust, dt_time(12, 0)).isoformat(timespec='seconds'))
+        marks = [self._seen_for_hw(self.data.get('seen')), latest or '']
+        trust = self._trusted_moment()
+        if trust and self._hub_moment_ok(trust):
+            marks.append(trust.isoformat(timespec='seconds'))
         hw = max(marks)
         if t.isoformat(timespec='seconds') > hw:
             self.data['seen'] = t.isoformat(timespec='seconds')
@@ -255,12 +314,17 @@ class License:
         if when is None:
             return
         with self.lock:
-            day = when.date()
-            prev = self._trusted_day()
-            if prev is None or day > prev:
-                self.data['trustedDate'] = day.isoformat()
+            until = self._activation_until()
+            if not self._hub_moment_ok(when, until):
+                return
+            prev = self._trusted_moment()
+            prev_ok = prev is None or self._hub_moment_ok(prev, until)
+            if prev is None or when.date() > prev.date() or not prev_ok:
+                self.data['trustedDate'] = when.isoformat(timespec='seconds')
             mark = when.isoformat(timespec='seconds')
-            if mark > (self.data.get('seen') or ''):
+            prev_seen = parse_server_moment(self.data.get('seen'))
+            seen_ok = prev_seen is None or self._hub_moment_ok(prev_seen, until)
+            if mark > (self.data.get('seen') or '') or not seen_ok:
                 self.data['seen'] = mark
             self.data['onlineAt'] = self.now().isoformat(timespec='seconds')
             try:
@@ -274,13 +338,16 @@ class License:
         trust = self._trusted_day()
         return bool(trust and t.date() < trust)
 
-    def _billing_day(self, t):
-        """Calendar day used for until/grace: local, raised by a trusted server date when the PC is behind the hub."""
-        today = t.date()
+    def _billing_day(self, t, behind=None):
+        """Calendar day for until/grace: never below the honest high-water (slack does not buy another grace day)."""
+        days = [t.date()]
         trust = self._trusted_day()
-        if trust and today < trust:
-            return today
-        return max(today, trust) if trust else today
+        if trust:
+            days.append(trust)
+        hw = self._high_water_moment(behind)
+        if hw:
+            days.append(hw.date())
+        return max(days)
 
     def _state_for_until(self, until, billing_day):
         left = (until - billing_day).days + 1
@@ -336,7 +403,7 @@ class License:
                 left = (end - today).days + 1
                 state = 'trial' if left > 0 else 'trialEnded'
                 return {**out, 'state': state if self.required else 'off', 'until': end.isoformat(), 'daysLeft': max(0, left)}
-            billing = self._billing_day(t)
+            billing = self._billing_day(t, behind)
             state, left = self._state_for_until(info['until'], billing)
             return {**out, 'state': state if self.required else 'off', 'until': info['until'].isoformat(), 'daysLeft': left,
                     'graceLeft': max(0, left + GRACE_DAYS) if left <= 0 else None, 'issued': info['issued'].isoformat()}
