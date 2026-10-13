@@ -460,8 +460,13 @@ class GatewaySync:
         self.stat['cards'] = st.get('cards')
         self.stat['gatewayTime'] = st.get('serverTime')
         self.stat['owners'] = st.get('owners')
-        if self.on_online_time and st.get('serverTime'):
-            self.on_online_time(st.get('serverTime'))
+        if self.on_online_time:
+            moment = st.get('serverTime')
+            if not moment:
+                from license import probe_http_date
+                moment = probe_http_date(self.secrets.url)
+            if moment:
+                self.on_online_time(moment)
         if 'until' in st:
             self.stat['until'], self.stat['active'] = st.get('until'), st.get('active')
 

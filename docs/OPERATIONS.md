@@ -13,6 +13,7 @@ the portable/development version does the same with `python3 server/app.py` and 
 | Program | `C:\Program Files\Hessa\Hessa.exe` | replaced by updates; holds no data |
 | Settings of this PC | `%ProgramData%\Hessa\config.json` | port 8095, sync port 8463, second backup folder, remote work switch, `dev_login` (trial admin / 123 on a brand-new PC - set false before a sale), `app_window` (maximized / fullscreen / browser) |
 | Data | `%ProgramData%\Hessa\data\` | `center.db` (records), `journal.db` (signed history - the source of truth), `auth.db` (accounts), `uploads\` |
+| Subscription file | `data\license.json` | activation code, `seen` (local clock high-water), `trustedDate` (last hub date when online - rollback if the PC is earlier; ends the paid month by server time when online) |
 | Parent-link secrets | `data\gateway.json` | this PC only, never in the shared data; `gateway-cards.json` = hashes of cards to revoke |
 | AI question key (optional) | `data\ai.json` | this PC only (readable by this Windows account), never in the shared data, backups or logs; Settings -> AI questions |
 | Backups | `%ProgramData%\Hessa\backups\` + the second folder | every 6 hours and before every update, verified |
