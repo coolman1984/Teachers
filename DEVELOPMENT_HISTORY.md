@@ -1,6 +1,14 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Sold Hessa.exe no longer accepts admin / 123 (sale-hardening task 2, 2026-10-13)
+
+**Why:** the installed program copied `DEFAULT_CONFIG` with `dev_login: true`, so anyone at the desk could take the administrator
+account before the owner. Editing `config.json` could turn the trial path back on.
+**What:** `server/app.py` `dev_login_allowed()` ignores `dev_login` when `license._compiled()`; first-run config on the installed
+program writes `dev_login` false. `tests/test_center_safety.TrialLoginTest` adds compiled-marker cases; harness `Server.start(compiled=True)` uses `PYTHONSTARTUP` to set `license.__compiled__`. `docs/OPERATIONS.md` updated.
+**Lesson:** the trial sign-in stays on for `python3 server/app.py` only; sale hardening belongs in `_compiled()`, not in manual config edits.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

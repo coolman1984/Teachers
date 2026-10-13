@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import ADMIN, ApiError, Server, make_authority, wait_until  # noqa: E402
@@ -446,6 +447,28 @@ class TrialLoginTest(unittest.TestCase):
         with self.assertRaises(ApiError):
             s.client().login('admin', '123')
         s.client().login('admin', 'Centre-Owner-2026')
+
+    def test_f_installed_program_never_offers_admin_123(self):
+        """Sale hardening: Hessa.exe must not create the trial administrator or show the Try-it-now path."""
+        s = Server('trial-compiled', extra_cfg={'dev_login': True}).start(compiled=True)
+        self.addCleanup(s.cleanup)
+        c = s.client()
+        self.assertIsNone(c.get('/api/auth/status')['trial'])
+        with self.assertRaises(ApiError):
+            c.login('admin', '123')
+        self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+
+    def test_g_installed_first_run_writes_dev_login_false(self):
+        import app
+        import license as license_mod
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'config.json')
+            with patch.object(license_mod, '_compiled', return_value=True):
+                with patch.object(app, 'CONFIG_PATH', path):
+                    cfg = app.load_config()
+            self.assertFalse(cfg['dev_login'])
+            with open(path, encoding='utf-8') as f:
+                self.assertFalse(json.load(f)['dev_login'])
 
     def test_b_never_on_a_pc_with_accounts_or_when_switched_off(self):
         s = Server('trial-off', extra_cfg={'dev_login': True}).start()
