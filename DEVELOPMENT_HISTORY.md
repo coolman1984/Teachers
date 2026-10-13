@@ -7,6 +7,8 @@
 **What:** `installer/hessa.iss` registers scheduled task **Hessa** (`ONSTART`, `Hessa.exe --background`), deletes it on uninstall, removes the old Startup shortcut on upgrade, and `InitializeSetup` blocks when `DisplayVersion` in the uninstall registry is newer than this setup. `tests/test_ci.py` `InstallerTest` locks those strings; `docs/OPERATIONS.md` documents the task.
 **Lesson:** boot autostart belongs in a system task, not the Startup folder; version compare must run before any file is replaced.
 
+**PR #34 review (same day):** the downgrade check used `{{` in a `[Code]` string and never read `DisplayVersion`; fixed with `#define HessaUninstallRegKey` and a test on the exact key. The boot task no longer runs as **SYSTEM** (privilege escalation into world-writable ProgramData): `installer/register_boot_task.ps1` registers via XML as **LOCAL SERVICE** (`S-1-5-19`) with `PT0S` limit, battery allowed, restart on failure; `icacls` grants that SID modify on `%ProgramData%\Hessa` only.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

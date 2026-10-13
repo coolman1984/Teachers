@@ -12,6 +12,7 @@
 #ifndef AppCopyright
   #define AppCopyright "(c) 2026 Mohamed Fawzy"
 #endif
+#define HessaUninstallRegKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\{24B39F34-055F-4639-BD93-CF67B335C325}_is1"
 
 [Setup]
 AppId={{24B39F34-055F-4639-BD93-CF67B335C325}
@@ -66,6 +67,7 @@ Name: "{commonappdata}\Hessa"; Permissions: users-modify; Flags: uninsneverunins
 
 [Files]
 Source: "..\build\hs_main.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "register_boot_task.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall dontcopy
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\Hessa.exe"
@@ -75,8 +77,9 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Hessa.exe"; Tasks: desktopi
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden; StatusMsg: "{cm:Firewall}"
 ; only the centre's own (private or domain) network: a PC on a café or public Wi-Fi never lets strangers in
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow program=""{app}\Hessa.exe"" enable=yes profile=private,domain"; Flags: runhidden
-; start the server when Windows boots, even when nobody is signed in (phones and other desks use http://this-pc:8095)
-Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""Hessa"" /TR ""\""{app}\Hessa.exe\"" --background"" /SC ONSTART /RU SYSTEM /RL LIMITED /F"; Flags: runhidden
+; LOCAL SERVICE (not SYSTEM): limited account; %ProgramData%\Hessa ACL below lets it write centre data
+Filename: "{sys}\icacls.exe"; Parameters: """{commonappdata}\Hessa"" /grant *S-1-5-19:(OI)(CI)M /T /C"; Flags: runhidden
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\register_boot_task.ps1"" -ExePath ""{app}\Hessa.exe"""; Flags: runhidden
 Filename: "{app}\Hessa.exe"; Description: "{cm:OpenNow}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 Filename: "{app}\Hessa.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
@@ -91,7 +94,7 @@ english.FinishedLabel=The program is installed. Your data is kept in %ProgramDat
 
 [Code]
 const
-  UninstallRegKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{{24B39F34-055F-4639-BD93-CF67B335C325}_is1';
+  UninstallRegKey = '{#HessaUninstallRegKey}';
 
 function TryStrToInt(const S: String; var I: Longint): Boolean;
 begin

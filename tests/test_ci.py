@@ -71,13 +71,29 @@ class InstallerTest(unittest.TestCase):
 
     def test_boot_task_autostart_and_refuses_downgrade(self):
         iss = (ROOT / 'installer' / 'hessa.iss').read_bytes().decode('utf-8-sig')
-        self.assertIn('schtasks.exe', iss)
-        self.assertRegex(iss, r'/Create\s+/TN\s+""Hessa""')
-        self.assertIn('--background', iss)
-        self.assertIn('/SC ONSTART', iss)
+        ps1 = (ROOT / 'installer' / 'register_boot_task.ps1').read_text(encoding='utf-8')
+        expected_key = (
+            'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\'
+            '{24B39F34-055F-4639-BD93-CF67B335C325}_is1'
+        )
+        m = re.search(r'#define HessaUninstallRegKey "([^"]+)"', iss)
+        self.assertIsNotNone(m, 'downgrade check must use the Inno uninstall registry path')
+        self.assertEqual(m.group(1), expected_key)
+        self.assertIn("UninstallRegKey = '{#HessaUninstallRegKey}'", iss)
+        code = iss.split('[Code]', 1)[1]
+        self.assertNotIn('{{24B39F34', code, 'doubled { in [Code] breaks RegQueryStringValue for DisplayVersion')
+        self.assertNotRegex(code, r"UninstallRegKey\s*=\s*'[^']*\{\{")
+        self.assertIn('register_boot_task.ps1', iss)
         self.assertRegex(iss, r'/Delete\s+/TN\s+""Hessa""')
         self.assertNotRegex(iss, r'\{commonstartup\}.*--background')
-        self.assertIn('24B39F34-055F-4639-BD93-CF67B335C325', iss)
+        self.assertNotIn('/RU SYSTEM', iss)
+        self.assertIn('*S-1-5-19:(OI)(CI)M', iss, 'LOCAL SERVICE needs modify on ProgramData\\Hessa')
+        self.assertIn('S-1-5-19', ps1)
+        self.assertIn('<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>', ps1)
+        self.assertIn('<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>', ps1)
+        self.assertIn('<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>', ps1)
+        self.assertIn('<RestartOnFailure>', ps1)
+        self.assertIn('--background', ps1)
         self.assertIn('CompareDotVersions', iss)
         self.assertIn("CompareDotVersions('{#AppVersion}', Installed) < 0", iss)
         self.assertIn('InitializeSetup', iss)

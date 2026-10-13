@@ -11,7 +11,7 @@ the portable/development version does the same with `python3 server/app.py` and 
 | What | Installed | Notes |
 |---|---|---|
 | Program | `C:\Program Files\Hessa\Hessa.exe` | replaced by updates; holds no data |
-| Server at boot | Scheduled task **Hessa** (`Hessa.exe --background`) | runs at Windows startup, even when nobody is signed in; removed on uninstall; the desktop icon still opens the window |
+| Server at boot | Scheduled task **Hessa** (`Hessa.exe --background`) | runs at **LOCAL SERVICE** (not SYSTEM) at Windows startup, even when nobody is signed in; no 72-hour time limit, keeps running on battery, restarts on failure; installer grants LOCAL SERVICE modify on `%ProgramData%\Hessa` only; removed on uninstall; the desktop icon still opens the window as the signed-in user |
 | Settings of this PC | `%ProgramData%\Hessa\config.json` | port 8095, sync port 8463, second backup folder, remote work switch, `dev_login` (trial admin / 123 on a brand-new PC - set false before a sale), `app_window` (maximized / fullscreen / browser) |
 | Data | `%ProgramData%\Hessa\data\` | `center.db` (records), `journal.db` (signed history - the source of truth), `auth.db` (accounts), `uploads\` |
 | Parent-link secrets | `data\gateway.json` | this PC only, never in the shared data; `gateway-cards.json` = hashes of cards to revoke |
