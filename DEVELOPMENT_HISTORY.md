@@ -11,6 +11,8 @@
 
 **PR #34 re-review:** `register_boot_task.ps1` had `dontcopy` so it never ran — now shipped under `{app}`, invoked from `CurStepChanged` with `RunCmd`/`Abort` on failure; task XML adds `LogonType` **ServiceAccount** and verifies registration. `%ProgramData%\Hessa` drops Inno `users-modify` in favour of explicit **Administrators / LOCAL SERVICE / Users** ACLs (Users still need modify for interactive sessions). `backup.junction_dir` skips junctions when mirroring uploads.
 
+**PR #34 round 3:** `Abort` in `ssPostInstall` does not stop Inno — ACL + boot task moved to `[Run]` with **`waituntilterminated`** (non-zero exit aborts install). `backup.reparse_point` uses `st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT` for Python 3.11; `_mirror_uploads` skips reparse targets; regression test exercises `_mirror_uploads`.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

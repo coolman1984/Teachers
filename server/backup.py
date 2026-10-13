@@ -29,6 +29,7 @@ from datetime import datetime
 
 AUTO_KINDS = ('auto', 'startup')
 DRIVE_REMOTE = 4  # Windows GetDriveTypeW: a mapped network drive
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 
 def _drive_type(root):
@@ -36,16 +37,15 @@ def _drive_type(root):
     return ctypes.windll.kernel32.GetDriveTypeW(root)
 
 
-def junction_dir(path):
-    """True for a Windows directory junction/reparse point (do not walk or mirror into backups)."""
+def reparse_point(path):
+    """True for a Windows junction/symlink reparse point (Python 3.11: no os.path.isjunction)."""
     if os.name != 'nt':
         return False
-    if hasattr(os.path, 'isjunction'):
-        try:
-            return os.path.isjunction(path)
-        except OSError:
-            return False
-    return False
+    try:
+        attrs = getattr(os.lstat(path), 'st_file_attributes', 0)
+    except OSError:
+        return False
+    return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def network_folder(path, drive_type=None):
@@ -135,10 +135,14 @@ class Backups:
         return name
 
     def _mirror_uploads(self, target):
+        if reparse_point(target):
+            return
         for root, dirs, files in os.walk(self.uploads_dir):
-            dirs[:] = [d for d in dirs if not junction_dir(os.path.join(root, d))]
+            dirs[:] = [d for d in dirs if not reparse_point(os.path.join(root, d))]
             rel = os.path.relpath(root, self.uploads_dir)
             out = os.path.join(target, rel)
+            if reparse_point(out):
+                continue
             for f in files:
                 d = os.path.join(out, f)
                 if not os.path.exists(d):

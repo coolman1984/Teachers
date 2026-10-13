@@ -62,7 +62,7 @@ Name: "desktopicon"; Description: "{cm:DesktopIcon}"
 Type: files; Name: "{commonstartup}\{#MyAppName}.lnk"
 
 [Dirs]
-; ACLs are set in CurStepChanged (Administrators, LOCAL SERVICE, Users) — not users-modify on the whole tree
+; ACLs are set in [Run] via icacls (Administrators, LOCAL SERVICE, Users) — not users-modify on the whole tree
 Name: "{commonappdata}\Hessa"; Flags: uninsneveruninstall
 
 [Files]
@@ -77,6 +77,9 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\Hessa.exe"; Tasks: desktopi
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"""; Flags: runhidden; StatusMsg: "{cm:Firewall}"
 ; only the centre's own (private or domain) network: a PC on a café or public Wi-Fi never lets strangers in
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow program=""{app}\Hessa.exe"" enable=yes profile=private,domain"; Flags: runhidden
+; waituntilterminated: Inno aborts the install when the exit code is not zero (see [Run] in the Inno Setup help)
+Filename: "{sys}\icacls.exe"; Parameters: """{commonappdata}\Hessa"" /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-19:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)M /T /C"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\register_boot_task.ps1"" -ExePath ""{app}\Hessa.exe"""; Flags: runhidden waituntilterminated
 Filename: "{app}\Hessa.exe"; Description: "{cm:OpenNow}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 Filename: "{app}\Hessa.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
@@ -177,44 +180,6 @@ begin
       mbError, MB_OK);
     Result := False;
   end;
-end;
-
-function RunCmd(const FileName, Params, What: String): Boolean;
-var
-  Code: Integer;
-begin
-  if not Exec(FileName, Params, '', SW_HIDE, ewWaitUntilTerminated, Code) then
-  begin
-    MsgBox(What + #13#10#13#10 + 'Could not start the program.', mbError, MB_OK);
-    Result := False;
-    exit;
-  end;
-  if Code <> 0 then
-  begin
-    MsgBox(What + #13#10#13#10 + 'Error code: ' + IntToStr(Code), mbError, MB_OK);
-    Result := False;
-    exit;
-  end;
-  Result := True;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  DataDir, AppDir: String;
-begin
-  if CurStep <> ssPostInstall then
-    exit;
-  DataDir := ExpandConstant('{commonappdata}\Hessa');
-  AppDir := ExpandConstant('{app}');
-  { Administrators + LOCAL SERVICE (boot server) + Users (desk staff open Hessa as themselves) }
-  if not RunCmd(ExpandConstant('{sys}\icacls.exe'),
-    '"' + DataDir + '" /grant:r *S-1-5-32-544:(OI)(CI)F /grant:r *S-1-5-19:(OI)(CI)M /grant:r *S-1-5-32-545:(OI)(CI)M /T /C',
-    'Could not set folder permissions for Hessa.') then
-    Abort;
-  if not RunCmd(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -ExecutionPolicy Bypass -File "' + AppDir + '\register_boot_task.ps1" -ExePath "' + AppDir + '\Hessa.exe"',
-    'Could not register the Hessa boot task.') then
-    Abort;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

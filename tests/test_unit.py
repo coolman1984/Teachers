@@ -544,12 +544,47 @@ class Review231Test(unittest.TestCase):
         finally:
             shutil.rmtree(cl.root, ignore_errors=True)
 
-    def test_backup_mirror_skips_junction_dirs(self):
+    def test_backup_mirror_skips_reparse_dirs(self):
         import backup
-        with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os.path, 'isjunction', return_value=True, create=True):
-            self.assertTrue(backup.junction_dir('/fake/junction'))
-        with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os.path, 'isjunction', return_value=False, create=True):
-            self.assertFalse(backup.junction_dir('/fake/normal'))
+        import tempfile
+        real_lstat = os.lstat
+
+        def lstat(path):
+            st = real_lstat(path)
+            if os.path.basename(path) != 'trap':
+                return st
+            attrs = getattr(st, 'st_file_attributes', 0) | backup.FILE_ATTRIBUTE_REPARSE_POINT
+
+            class _Stat:
+                __slots__ = ('st_mode', 'st_ino', 'st_dev', 'st_nlink', 'st_uid', 'st_gid', 'st_size',
+                             'st_atime', 'st_mtime', 'st_ctime', 'st_file_attributes')
+
+                def __init__(self, base, file_attributes):
+                    for name in self.__slots__[:-1]:
+                        setattr(self, name, getattr(base, name))
+                    self.st_file_attributes = file_attributes
+
+            return _Stat(st, attrs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            uploads = os.path.join(tmp, 'uploads')
+            os.makedirs(os.path.join(uploads, 'good'))
+            os.makedirs(os.path.join(uploads, 'trap'))
+            with open(os.path.join(uploads, 'good', 'keep.txt'), 'w', encoding='utf-8') as f:
+                f.write('1')
+            with open(os.path.join(uploads, 'trap', 'skip.txt'), 'w', encoding='utf-8') as f:
+                f.write('2')
+            target = os.path.join(tmp, 'mirror')
+            b = backup.Backups(store=None, uploads_dir=uploads, backup_dir=os.path.join(tmp, 'bk'))
+            with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os, 'lstat', side_effect=lstat):
+                self.assertTrue(backup.reparse_point(os.path.join(uploads, 'trap')))
+                self.assertFalse(backup.reparse_point(os.path.join(uploads, 'good')))
+                b._mirror_uploads(target)
+            self.assertTrue(os.path.isfile(os.path.join(target, 'good', 'keep.txt')))
+            self.assertFalse(os.path.exists(os.path.join(target, 'trap')))
+            with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os, 'lstat', side_effect=lstat):
+                b._mirror_uploads(os.path.join(uploads, 'trap'))
+            self.assertFalse(os.path.exists(os.path.join(uploads, 'trap', 'good')))
 
     def test_network_folders_refused(self):
         import backup
