@@ -15,6 +15,8 @@
 
 **PR #34 round 4:** `[Run]` non-zero exit does **not** abort Inno (only waits) — ACL + `register_boot_task.ps1` run in **`CurStepChanged(ssInstall)`** pass 2 via **`RaiseException`**. `server/boot_task.py` warns once on first start and adds a Help self-check when the task is missing. Backups: `mirror_target_blocked`, skip file symlinks/reparse points, `follow_symlinks=False`.
 
+**PR #34 round 5:** Inno calls **`ssInstall` once before copy**, so the `InstallStep` guard never ran ACL/task registration — moved to **`ssPostInstall`** with prerequisite checks in **`PrepareToInstall`**, **`RemoveBootTask`** on script failure, and **`SetupExitCode := 3`** (no claim of full rollback). `Backups.create` checks **`mirror_target_blocked`** on the backups root and each extra folder before writing `db\`; **`__init__`** no longer creates `backups\db` through a junction. `boot_task.task_registered` treats disabled or wrong-action tasks as missing.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

@@ -112,10 +112,21 @@ class Backups:
         self.last_error = ''
         self.last_version = None
         self.last_time = 0
-        os.makedirs(os.path.join(self.dir, 'db'), exist_ok=True)
+
+    def _reject_blocked_backup_root(self, root):
+        if mirror_target_blocked(root, self.data_root):
+            raise OSError(f'Backup folder is a junction or symlink and cannot be used: {root}')
+
+    def _ensure_db_dir(self, root):
+        self._reject_blocked_backup_root(root)
+        os.makedirs(os.path.join(root, 'db'), exist_ok=True)
 
     # ------------------------------------------------------------ create
     def create(self, kind='manual'):
+        self._reject_blocked_backup_root(self.dir)
+        for extra in self.extra:
+            self._reject_blocked_backup_root(extra)
+        self._ensure_db_dir(self.dir)
         name = f'to_{datetime.now():%Y%m%d_%H%M%S}_{kind}.db'
         dest = os.path.join(self.dir, 'db', name)
         tmp = dest + '.tmp'
@@ -154,7 +165,7 @@ class Backups:
         errors = []
         for extra in self.extra:
             try:
-                os.makedirs(os.path.join(extra, 'db'), exist_ok=True)
+                self._ensure_db_dir(extra)
                 shutil.copy2(dest, os.path.join(extra, 'db', name))
                 for copy in (auth_copy, journal_copy):
                     if copy:
@@ -200,6 +211,8 @@ class Backups:
     def list(self):
         out = []
         folder = os.path.join(self.dir, 'db')
+        if not os.path.isdir(folder):
+            return out
         for n in os.listdir(folder):
             if NAME_RE.match(n):
                 st = os.stat(os.path.join(folder, n))

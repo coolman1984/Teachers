@@ -607,6 +607,56 @@ class Review231Test(unittest.TestCase):
                 boot_task.warn_once(tmp, lambda *_a, **_k: None, interactive=False)
             self.assertTrue(os.path.isfile(os.path.join(tmp, boot_task.MARKER)))
 
+    def test_boot_task_registered_requires_enabled_hessa_background(self):
+        import boot_task
+        good = 'Task To Run: C:\\Program Files\\Hessa\\Hessa.exe --background\n'
+        self.assertTrue(boot_task._task_action_ok(good))
+        self.assertFalse(boot_task._task_action_ok('Scheduled Task State: Disabled\n' + good))
+        self.assertFalse(boot_task._task_action_ok('Task To Run: C:\\Program Files\\Hessa\\Hessa.exe\n'))
+        self.assertFalse(boot_task._task_action_ok('Task To Run: C:\\Windows\\notepad.exe\n'))
+
+    def test_backup_create_refuses_junctioned_root(self):
+        import backup
+        from store import Store
+        d = tempfile.mkdtemp()
+        try:
+            data = os.path.join(d, 'data')
+            uploads = os.path.join(data, 'uploads')
+            backups = os.path.join(data, 'backups')
+            os.makedirs(uploads)
+            store = Store(data)
+            b = backup.Backups(store, uploads, backups)
+            with mock.patch.object(backup, 'mirror_target_blocked', return_value=True):
+                with self.assertRaises(OSError):
+                    b.create('manual')
+            self.assertFalse(os.path.exists(os.path.join(backups, 'db')))
+        finally:
+            shutil.rmtree(d)
+
+    def test_backup_create_refuses_symlinked_extra_folder(self):
+        import backup
+        from store import Store
+        d = tempfile.mkdtemp()
+        try:
+            data = os.path.join(d, 'data')
+            uploads = os.path.join(data, 'uploads')
+            backups = os.path.join(data, 'backups')
+            extra = os.path.join(d, 'extra-out')
+            os.makedirs(uploads)
+            os.makedirs(extra)
+            store = Store(data)
+            b = backup.Backups(store, uploads, backups, extra_dirs=[extra])
+
+            def blocked(path, root):
+                return os.path.normpath(path) == os.path.normpath(extra)
+
+            with mock.patch.object(backup, 'mirror_target_blocked', side_effect=blocked):
+                with self.assertRaises(OSError):
+                    b.create('manual')
+            self.assertFalse(os.path.exists(os.path.join(extra, 'db')))
+        finally:
+            shutil.rmtree(d)
+
     def test_network_folders_refused(self):
         import backup
         self.assertTrue(backup.network_folder('\\\\fileserver\\share'))
