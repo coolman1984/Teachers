@@ -1,6 +1,20 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Installer: server at boot and no downgrade (sale-hardening task 4, 2026-10-13)
+
+**Why:** the Startup-folder shortcut only ran after someone signed in, so phones and other desks could not reach the centre PC until then; installing an older `Hessa-Setup` over a newer one left data intact but `upgrade.py` refused to open it.
+**What:** `installer/hessa.iss` registers scheduled task **Hessa** (`ONSTART`, `Hessa.exe --background`), deletes it on uninstall, removes the old Startup shortcut on upgrade, and `InitializeSetup` blocks when `DisplayVersion` in the uninstall registry is newer than this setup. `tests/test_ci.py` `InstallerTest` locks those strings; `docs/OPERATIONS.md` documents the task.
+**Lesson:** boot autostart belongs in a system task, not the Startup folder; version compare must run before any file is replaced.
+
+**PR #34 review (same day):** the downgrade check used `{{` in a `[Code]` string and never read `DisplayVersion`; fixed with `#define HessaUninstallRegKey` and a test on the exact key. The boot task no longer runs as **SYSTEM** (privilege escalation into world-writable ProgramData): `installer/register_boot_task.ps1` registers via XML as **LOCAL SERVICE** (`S-1-5-19`) with `PT0S` limit, battery allowed, restart on failure; `icacls` grants that SID modify on `%ProgramData%\Hessa` only.
+
+**PR #34 re-review:** `register_boot_task.ps1` had `dontcopy` so it never ran — now shipped under `{app}`, invoked from `CurStepChanged` with `RunCmd`/`Abort` on failure; task XML adds `LogonType` **ServiceAccount** and verifies registration. `%ProgramData%\Hessa` drops Inno `users-modify` in favour of explicit **Administrators / LOCAL SERVICE / Users** ACLs (Users still need modify for interactive sessions). `backup.junction_dir` skips junctions when mirroring uploads.
+
+**PR #34 round 3:** `Abort` in `ssPostInstall` does not stop Inno — ACL + boot task moved to `[Run]` with **`waituntilterminated`** (non-zero exit aborts install). `backup.reparse_point` uses `st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT` for Python 3.11; `_mirror_uploads` skips reparse targets; regression test exercises `_mirror_uploads`.
+
+**PR #34 round 4:** `[Run]` non-zero exit does **not** abort Inno (only waits) — ACL + `register_boot_task.ps1` run in **`CurStepChanged(ssInstall)`** pass 2 via **`RaiseException`**. `server/boot_task.py` warns once on first start and adds a Help self-check when the task is missing. Backups: `mirror_target_blocked`, skip file symlinks/reparse points, `follow_symlinks=False`.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

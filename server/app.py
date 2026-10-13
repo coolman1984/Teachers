@@ -41,6 +41,7 @@ import center  # noqa: E402
 import formats  # noqa: E402
 import gateway_client as gwc  # noqa: E402
 import ai  # noqa: E402
+import boot_task  # noqa: E402
 import vendorlink  # noqa: E402
 import store as store_mod  # noqa: E402
 from store import BadRequest, Conflict, now  # noqa: E402
@@ -311,7 +312,8 @@ if INSTANCE:
         return {'lastBackup': backups[0]['time'] if backups else None, 'backupError': BACKUPS.last_error,
                 'diskFreeMb': vendorlink.disk_free_mb(DATA_DIR), 'licence': LICENSE.status().get('state'),
                 'sync': SYNC.summary().get('state'), 'errors': errs.get('total', len(errs['rows'])),
-                'errorSamples': [r.get('detail') or r.get('action') or '' for r in errs['rows']]}
+                'errorSamples': [r.get('detail') or r.get('action') or '' for r in errs['rows']],
+                'bootTaskOk': boot_task.task_registered() if boot_task.installed_program() else True}
 
     def support_integrity():
         res = check_now(SYSTEM)
@@ -1855,6 +1857,10 @@ def main(background=False):
             show(port)
         return
 
+    try:
+        boot_task.warn_once(DATA_DIR, say, interactive=not background)
+    except Exception as e:
+        say('Boot task check failed: ' + str(e))
     try:
         if STORE.counts().get('Students'):
             BACKUPS.create('startup')

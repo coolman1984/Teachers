@@ -29,11 +29,57 @@ from datetime import datetime
 
 AUTO_KINDS = ('auto', 'startup')
 DRIVE_REMOTE = 4  # Windows GetDriveTypeW: a mapped network drive
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 
 def _drive_type(root):
     import ctypes
     return ctypes.windll.kernel32.GetDriveTypeW(root)
+
+
+def reparse_point(path):
+    """True for a Windows directory junction/reparse point (Python 3.11: no os.path.isjunction)."""
+    if os.name != 'nt':
+        return False
+    try:
+        attrs = getattr(os.lstat(path), 'st_file_attributes', 0)
+    except OSError:
+        return False
+    return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _lstat(path):
+    try:
+        return os.lstat(path)
+    except OSError:
+        return None
+
+
+def file_symlink_or_reparse(path):
+    """True for a symlink or reparse-point file (do not follow when mirroring backups)."""
+    st = _lstat(path)
+    if st is None:
+        return False
+    if os.path.islink(path):
+        return True
+    if os.name == 'nt' and bool(getattr(st, 'st_file_attributes', 0) & FILE_ATTRIBUTE_REPARSE_POINT):
+        return True
+    return False
+
+
+def mirror_target_blocked(path, data_root):
+    """True when the mirror destination or a parent up to data_root (or drive root) is a reparse point."""
+    stop = os.path.normpath(os.path.abspath(data_root))
+    cur = os.path.normpath(os.path.abspath(path))
+    while True:
+        if reparse_point(cur):
+            return True
+        if cur == stop:
+            return False
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return False
+        cur = parent
 
 
 def network_folder(path, drive_type=None):
@@ -57,6 +103,7 @@ class Backups:
         self.auth = auth
         self.journal = None
         self.uploads_dir = uploads_dir
+        self.data_root = os.path.dirname(os.path.normpath(uploads_dir))
         self.dir = backup_dir
         self.extra = [d for d in extra_dirs if d]
         self.keep_auto = keep_auto
@@ -123,14 +170,22 @@ class Backups:
         return name
 
     def _mirror_uploads(self, target):
-        for root, _, files in os.walk(self.uploads_dir):
+        if mirror_target_blocked(target, self.data_root):
+            return
+        for root, dirs, files in os.walk(self.uploads_dir, followlinks=False):
+            dirs[:] = [d for d in dirs if not reparse_point(os.path.join(root, d))]
             rel = os.path.relpath(root, self.uploads_dir)
             out = os.path.join(target, rel)
+            if mirror_target_blocked(out, self.data_root):
+                continue
             for f in files:
-                d = os.path.join(out, f)
-                if not os.path.exists(d):
+                src = os.path.join(root, f)
+                dest = os.path.join(out, f)
+                if file_symlink_or_reparse(src) or file_symlink_or_reparse(dest):
+                    continue
+                if not os.path.exists(dest):
                     os.makedirs(out, exist_ok=True)
-                    shutil.copy2(os.path.join(root, f), d)
+                    shutil.copy2(src, dest, follow_symlinks=False)
 
     def _prune(self):
         autos = [b for b in self.list() if b['kind'] in AUTO_KINDS]

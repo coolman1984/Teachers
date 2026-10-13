@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 import engine_domain
 from cluster import Cluster, Peer  # noqa: F401 (sets sys.path, registers the engine test entities)
@@ -542,6 +543,69 @@ class Review231Test(unittest.TestCase):
             j.conn.close()
         finally:
             shutil.rmtree(cl.root, ignore_errors=True)
+
+    def test_backup_mirror_skips_reparse_dirs(self):
+        import backup
+        import tempfile
+        real_lstat = os.lstat
+
+        def lstat(path):
+            st = real_lstat(path)
+            if os.path.basename(path) != 'trap':
+                return st
+            attrs = getattr(st, 'st_file_attributes', 0) | backup.FILE_ATTRIBUTE_REPARSE_POINT
+
+            class _Stat:
+                __slots__ = ('st_mode', 'st_ino', 'st_dev', 'st_nlink', 'st_uid', 'st_gid', 'st_size',
+                             'st_atime', 'st_mtime', 'st_ctime', 'st_file_attributes')
+
+                def __init__(self, base, file_attributes):
+                    for name in self.__slots__[:-1]:
+                        setattr(self, name, getattr(base, name))
+                    self.st_file_attributes = file_attributes
+
+            return _Stat(st, attrs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            uploads = os.path.join(tmp, 'data', 'uploads')
+            os.makedirs(os.path.join(uploads, 'good'))
+            os.makedirs(os.path.join(uploads, 'trap'))
+            keep = os.path.join(uploads, 'good', 'keep.txt')
+            with open(keep, 'w', encoding='utf-8') as f:
+                f.write('1')
+            with open(os.path.join(uploads, 'trap', 'skip.txt'), 'w', encoding='utf-8') as f:
+                f.write('2')
+            link = os.path.join(uploads, 'good', 'alias.txt')
+            try:
+                os.symlink('keep.txt', link)
+            except OSError:
+                link = None
+            target = os.path.join(tmp, 'data', 'backups', 'uploads')
+            blocked = os.path.join(uploads, 'trap', 'mirror')
+            b = backup.Backups(store=None, uploads_dir=uploads, backup_dir=os.path.join(tmp, 'data', 'backups'))
+            with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os, 'lstat', side_effect=lstat):
+                self.assertTrue(backup.reparse_point(os.path.join(uploads, 'trap')))
+                self.assertFalse(backup.reparse_point(os.path.join(uploads, 'good')))
+                self.assertTrue(backup.mirror_target_blocked(blocked, b.data_root))
+                b._mirror_uploads(target)
+            self.assertTrue(os.path.isfile(os.path.join(target, 'good', 'keep.txt')))
+            self.assertFalse(os.path.exists(os.path.join(target, 'trap')))
+            if link:
+                self.assertFalse(os.path.exists(os.path.join(target, 'good', 'alias.txt')))
+            with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os, 'lstat', side_effect=lstat):
+                b._mirror_uploads(os.path.join(uploads, 'trap'))
+                b._mirror_uploads(blocked)
+            self.assertFalse(os.path.exists(os.path.join(blocked, 'good', 'keep.txt')))
+
+    def test_boot_task_warn_once_writes_marker(self):
+        import boot_task
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(boot_task.os, 'name', 'nt'), \
+                 mock.patch.object(boot_task, 'installed_program', return_value=True), \
+                 mock.patch.object(boot_task, 'task_registered', return_value=False):
+                boot_task.warn_once(tmp, lambda *_a, **_k: None, interactive=False)
+            self.assertTrue(os.path.isfile(os.path.join(tmp, boot_task.MARKER)))
 
     def test_network_folders_refused(self):
         import backup

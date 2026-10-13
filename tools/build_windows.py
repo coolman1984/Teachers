@@ -41,7 +41,7 @@ def compile_program(v4):
 
 # every file the installer or the release page ships; checked before the long compile so a missing one fails in a second
 SHIPPED = ('docs/GATEWAY_SETUP.md', 'docs/RELEASE_NOTES.md', 'docs/REMOTE_ACCESS.md', 'gateway/schema.sql', 'gateway/migrate-v1.sql', 'gateway/migrate-v2.sql', 'gateway/build.js', 'gateway/src/worker.js',
-           'installer/hessa.iss', 'server/hs_main.py', 'server/appwindow.py', 'server/license.py', 'server/license_key.py', 'tools/make_assets.py', 'tools/make_icon.py', 'tools/make_app_icons.py')
+           'installer/hessa.iss', 'installer/register_boot_task.ps1', 'server/hs_main.py', 'server/appwindow.py', 'server/license.py', 'server/license_key.py', 'tools/make_assets.py', 'tools/make_icon.py', 'tools/make_app_icons.py')
 
 
 def preflight():

@@ -3313,6 +3313,8 @@
     'sup.chk.sync.offline': 'Another PC of the centre cannot be reached',
     'sup.chk.sync.problem': 'Sharing between PCs needs the administrator',
     'sup.chk.errors': 'Program errors in the last 7 days: {n}',
+    'sup.chk.bootTask': 'Start at Windows boot',
+    'sup.chk.bootTask.missing': 'The Hessa boot task is missing — re-run the installer or see OPERATIONS.md',
     'sup.off': 'Contacting the seller from the program is not set up on this PC. Ask the administrator.',
     'sup.off.admin': 'Contacting the seller is not set up yet. Enter the Control Center address and this PC\'s install code below, on the centre PC itself.',
     'sup.ask': 'Ask for help',

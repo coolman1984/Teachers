@@ -94,6 +94,8 @@ def checks(facts, now=None):
     out.append({'id': 'sync', 'level': 'ok' if sync in ('single', 'ok') else 'bad' if sync == 'problem' else 'warn', 'vars': {}, 'state': sync})
     errors = int(facts.get('errors') or 0)
     out.append({'id': 'errors', 'level': 'ok' if not errors else 'warn', 'vars': {'n': errors}})
+    if facts.get('bootTaskOk') is False:
+        out.append({'id': 'bootTask', 'level': 'bad', 'vars': {}, 'state': 'missing'})
     return out
 
 
