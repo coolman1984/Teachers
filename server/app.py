@@ -240,6 +240,7 @@ if INSTANCE:
             r = JOURNAL.conn.execute("SELECT MAX(ts), MIN(ts) FROM audit WHERE kind='data'").fetchone()
         return (r[0], r[1]) if r else (None, None)
     LICENSE = license_mod.License(DATA_DIR, data_time, required=license_mod._compiled() or bool(CFG.get('license_required')))
+    LICENSE.start_timer()
 else:
     SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = None
 GATE = None

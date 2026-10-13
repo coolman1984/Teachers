@@ -16,6 +16,9 @@ bucket; persist `runSec` with `_runPersisted` throttled to five minutes unless t
 **Second follow-up:** per-serial `runPeak` / `runPeakEcho` and `runPeakSnap` in activation history (never reduced); honest
 calendar forward clears old peaks using `seen` before each tick; runtime from process start through first check; force persist
 when the wall date has not advanced; `License.flush_runtime()` on server shutdown; tests `test_m`–`test_q`.
+**Third follow-up (simplify):** peaks only in `license-runtime.json`; `status()` reads, `timer_tick()` + `start_timer()` accumulate;
+`license.json` no longer rewritten on poll (5-minute throttle on the side file when idle); peaks are never cleared by clock jumps,
+only after the wall date is two+ days in the past; tests `test_r`–`test_u`.
 **Lesson:** limit cheating with the clock the PC reports and with real elapsed time — not only with the high-water mark.
 
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
