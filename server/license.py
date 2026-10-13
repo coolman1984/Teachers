@@ -181,11 +181,13 @@ class License:
         self.now = now or datetime.now
         self._elapsed = elapsed
         self.monotonic = monotonic or time.monotonic
+        self._mono_start = self.monotonic()
         self._mono_at = None
         self._run_wall_day = None   # wall date the last monotonic slice was counted on (not persisted)
         self.lock = threading.Lock()
         self.machine = machine_hash()
         self.data = self._load()
+        self._reconcile_runtime()
 
     def _load(self):
         try:
@@ -223,47 +225,163 @@ class License:
             if not force and last and t - datetime.fromisoformat(last[:19]) < RUN_PERSIST:
                 return
             self.data['_runPersisted'] = t.isoformat(timespec='seconds')
+            self._snapshot_peak_in_history()
             self._save()
         except (OSError, ValueError):
             pass
 
-    def _tick_runtime(self, t):
-        """Real runtime accumulated on a wall-clock date (monotonic slices only while that date is current). True when frozen."""
+    def _peaks(self):
+        raw = self.data.get('runPeak')
+        return raw if isinstance(raw, dict) else {}
+
+    def _peak_echo(self, serial):
+        echo = self.data.get('runPeakEcho')
+        if not isinstance(echo, dict):
+            return 0.0
+        return float(echo.get(str(serial)) or 0)
+
+    def _peak_for_serial(self, serial):
+        by_day = self._peaks().get(str(serial))
+        return by_day if isinstance(by_day, dict) else {}
+
+    def _peak_max(self, serial):
+        if serial is None:
+            return float(self.data.get('runSec') or 0)
+        by_day = self._peak_for_serial(serial)
+        return max([self._peak_echo(serial)] + [float(v) for v in by_day.values()] or [0.0])
+
+    def _peak_bump(self, serial, day, sec):
+        if serial is None or not day:
+            return
+        key = str(serial)
+        peaks = self.data.setdefault('runPeak', {})
+        by_day = peaks.setdefault(key, {})
+        if not isinstance(by_day, dict):
+            by_day = {}
+            peaks[key] = by_day
+        by_day[day] = max(float(by_day.get(day) or 0), float(sec))
+        echo = self.data.setdefault('runPeakEcho', {})
+        echo[key] = max(float(echo.get(key) or 0), max(by_day.values()))
+
+    def _snapshot_peak_in_history(self):
+        serial = self.data.get('serial')
+        if serial is None:
+            return
+        snap = dict(self._peak_for_serial(serial))
+        if not snap:
+            return
+        hist = self.data.get('history') or []
+        if hist:
+            hist[-1]['runPeakSnap'] = snap
+            self.data['history'] = hist
+
+    def _reconcile_runtime(self):
+        peaks = self.data.setdefault('runPeak', {})
+        if not isinstance(peaks, dict):
+            peaks = {}
+            self.data['runPeak'] = peaks
+        for row in self.data.get('history') or []:
+            serial = row.get('serial')
+            snap = row.get('runPeakSnap')
+            if serial is None or not isinstance(snap, dict):
+                continue
+            for day, sec in snap.items():
+                self._peak_bump(serial, day, sec)
+        serial = self.data.get('serial')
+        if serial is None:
+            return
+        day = self.data.get('runDay')
+        sec = float(self.data.get('runSec') or 0)
+        if day:
+            self._peak_bump(serial, day, sec)
+            self.data['runSec'] = max(sec, float(self._peak_for_serial(serial).get(day) or 0))
+
+    def _mono_delta(self, t):
+        if self._elapsed is not None:
+            return max(0.0, float(self._elapsed()))
+        mono = self.monotonic()
+        wall = t.date().isoformat()
+        if self._mono_at is None:
+            delta = max(0.0, mono - self._mono_start)
+        elif self._run_wall_day == wall:
+            delta = max(0.0, mono - self._mono_at)
+        else:
+            delta = 0.0
+        self._mono_at = mono
+        self._run_wall_day = wall
+        return delta
+
+    def _runtime_frozen(self, serial):
+        limit = RUN_LIMIT.total_seconds()
+        if serial is None:
+            return float(self.data.get('runSec') or 0) > limit
+        return any(float(sec) > limit for sec in self._peak_for_serial(serial).values())
+
+    def _honest_calendar_forward(self, t, today, prior_seen=None):
+        """True when the wall clock really moved to a new day (not a quick jump forward then back)."""
+        latest = prior_seen or self.data.get('seen') or ''
+        if not latest:
+            return True
+        try:
+            seen = datetime.fromisoformat(latest[:19])
+        except ValueError:
+            return True
+        if latest[:10] >= today:
+            return False
+        return t - seen > timedelta(hours=20)
+
+    def _clear_peaks_before(self, serial, today):
+        by_day = self._peaks().get(str(serial))
+        if not isinstance(by_day, dict):
+            return
+        for day in list(by_day):
+            if day < today:
+                del by_day[day]
+        echo = self.data.setdefault('runPeakEcho', {})
+        echo[str(serial)] = max([0.0] + [float(v) for v in by_day.values()])
+
+    def _tick_runtime(self, t, prior_seen=None):
+        """Real runtime on a wall-clock date; per-serial peaks never go down. True when the frozen-date limit is hit."""
         today = t.date().isoformat()
         run_day = self.data.get('runDay') or today
         run_sec = float(self.data.get('runSec') or 0)
-        carry = self.data.setdefault('runCarry', {})
-        if not isinstance(carry, dict):
-            carry = {}
-            self.data['runCarry'] = carry
         day_forward = run_day < today
         if day_forward:
-            if run_sec > 0:
-                carry[run_day] = run_sec            # survive a quick jump forward then back to the paid day
+            serial = self.data.get('serial')
+            if serial is not None and run_sec > 0:
+                self._peak_bump(serial, run_day, run_sec)
+            if serial is not None and self._honest_calendar_forward(t, today, prior_seen):
+                self._clear_peaks_before(serial, today)
             run_day, run_sec = today, 0.0
         elif run_day > today:
-            if today in carry:                      # clock moved back to a day that still had runtime
-                run_day, run_sec = today, float(carry.pop(today))
+            pass                                     # clock moved back: peaks still remember the paid day
 
-        if self._elapsed is not None:
-            delta = max(0.0, float(self._elapsed()))
-        else:
-            mono = self.monotonic()
-            wall = t.date().isoformat()
-            if self._mono_at is not None and self._run_wall_day == wall:
-                delta = max(0.0, mono - self._mono_at)   # same wall date as last tick in this process
-            else:
-                delta = 0.0                              # new process or date changed: no idle gap
-            self._mono_at = mono
-            self._run_wall_day = wall
-
+        delta = self._mono_delta(t)
         run_sec += delta
         self.data['runDay'] = run_day
         self.data['runSec'] = run_sec
-        frozen = run_sec > RUN_LIMIT.total_seconds()
-        if frozen or day_forward or delta > 0:
-            self._persist_run(t, force=frozen or day_forward)
+        serial = self.data.get('serial')
+        if serial is not None:
+            self._peak_bump(serial, run_day, run_sec)
+        frozen = self._runtime_frozen(serial)
+        if delta > 0:
+            self._persist_run(t, force=not day_forward or frozen)
+        elif frozen:
+            self._persist_run(t, force=True)
         return frozen
+
+    def flush_runtime(self):
+        """Write runtime gathered since the last tick (nightly shutdown)."""
+        with self.lock:
+            t = self.now()
+            if self._tick_runtime(t):
+                pass
+            else:
+                try:
+                    self._snapshot_peak_in_history()
+                    self._save()
+                except OSError:
+                    pass
 
     def request(self):
         return request_code(KIND_ACTIVATE, self.machine, 0)
@@ -273,8 +391,9 @@ class License:
         with self.lock:
             t = self.now()
             today = t.date()
+            prior_seen = self.data.get('seen')
             behind = self._seen(t)
-            frozen = self._tick_runtime(t)
+            frozen = self._tick_runtime(t, prior_seen)
             out = {'request': self.request(), 'required': self.required, 'machineOk': True, 'centre': self.data.get('centre') or '',
                    'until': None, 'daysLeft': None, 'serial': self.data.get('serial'), 'history': (self.data.get('history') or [])[-12:]}
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
@@ -334,17 +453,23 @@ class License:
                     if str(e) == 'older':
                         raise
             t = self.now()
+            prior_seen = self.data.get('seen')
             behind = self._seen(t)
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
                 raise ValueError('clock')
-            if self._tick_runtime(t):
+            if self._tick_runtime(t, prior_seen):
                 raise ValueError('clock')
             if info['until'] < t.date():
                 raise ValueError('expired')
+            old_serial = self.data.get('serial')
             self.data.update(code=''.join(c for c in code.upper() if c.isalnum()), serial=info['serial'])
             hist = self.data.setdefault('history', [])
             hist.append({'at': t.isoformat(timespec='seconds'), 'by': who, 'until': info['until'].isoformat(), 'serial': info['serial']})
             self.data['history'] = hist[-50:]
+            if old_serial != info['serial']:
+                self.data['runDay'] = t.date().isoformat()
+                self.data['runSec'] = 0.0
+            self._reconcile_runtime()
             self._save()
         return {'until': info['until'].isoformat(), 'serial': info['serial']}
 

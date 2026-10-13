@@ -1887,6 +1887,8 @@ def main(background=False):
     except KeyboardInterrupt:
         pass
     finally:
+        if LICENSE is not None:
+            LICENSE.flush_runtime()
         GATE.stop()
         SYNC.shutdown()
         JOURNAL.flush_activity()

@@ -13,6 +13,9 @@ day clears the counter. Regression in `tests/test_license.py` `test_h_freezing_t
 new day); stash per-day seconds in `runCarry` when the calendar jumps forward so stepping back across midnight cannot zero the
 bucket; persist `runSec` with `_runPersisted` throttled to five minutes unless the day changes or the limit is hit; tests
 `test_i`–`test_l`.
+**Second follow-up:** per-serial `runPeak` / `runPeakEcho` and `runPeakSnap` in activation history (never reduced); honest
+calendar forward clears old peaks using `seen` before each tick; runtime from process start through first check; force persist
+when the wall date has not advanced; `License.flush_runtime()` on server shutdown; tests `test_m`–`test_q`.
 **Lesson:** limit cheating with the clock the PC reports and with real elapsed time — not only with the high-water mark.
 
 ## Learning progress belongs to the person, not to the PC (2026-10-11)

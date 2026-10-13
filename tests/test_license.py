@@ -171,6 +171,66 @@ class CodesTest(unittest.TestCase):
             L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0).status()
         self.assertEqual(os.path.getmtime(path), mtime)
 
+    def test_m_yesterday_use_then_clock_back_does_not_clear_frozen_lock(self):
+        """A normal day before plus a ~1h step back across midnight must not clear a frozen-date lock."""
+        serial = 7
+        self.lic.activate(self.code(date(2026, 11, 10), serial=serial))
+        self.clock.t = datetime(2026, 11, 9, 10, 0)
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 10 * 3600).status()
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 31 * 3600).status()
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+        self.clock.t = datetime(2026, 11, 11, 0, 30)
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+        self.clock.t = datetime(2026, 11, 10, 23, 30)
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+
+    def test_n_runtime_before_the_first_status_counts(self):
+        self.lic.activate(self.code(date(2026, 12, 6), serial=3))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        mono = FakeMono()
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono)
+        mono.advance(2 * 3600)
+        lic.status()
+        self.assertAlmostEqual(float(lic.data['runSec']), 2 * 3600, delta=1)
+
+    def test_o_nightly_shutdowns_accumulate_on_a_frozen_date(self):
+        self.lic.activate(self.code(date(2026, 11, 10), serial=4))
+        self.clock.t = datetime(2026, 11, 10, 18, 0)
+        for _ in range(4):
+            lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 8 * 3600)
+            lic.status()
+            lic.flush_runtime()
+        st = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
+        self.assertEqual(st['state'], 'clock')
+
+    def test_p_restoring_old_license_json_cannot_drop_runtime_peak(self):
+        serial = 8
+        self.lic.activate(self.code(date(2026, 11, 10), serial=serial))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 31 * 3600).status()
+        path = os.path.join(self.home, 'license.json')
+        with open(path, encoding='utf-8') as f:
+            good = json.load(f)
+        stale = {k: v for k, v in good.items() if k not in ('runDay', 'runSec', 'runPeak', 'runPeakEcho', 'runCarry')}
+        stale['runDay'] = '2026-11-10'
+        stale['runSec'] = 0
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(stale, f)
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+
+    def test_q_reentering_the_same_activation_code_keeps_runtime_peak(self):
+        serial = 9
+        code = self.code(date(2026, 11, 10), serial=serial)
+        self.lic.activate(code)
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 31 * 3600).status()
+        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        with self.assertRaises(ValueError) as caught:
+            again.activate(code)
+        self.assertEqual(str(caught.exception), 'clock')
+        self.assertEqual(again.status()['state'], 'clock')
+
     def test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month(self):
         self.lic.activate(self.code(date(2026, 12, 6)))
         self.clock.t = datetime(2026, 11, 10, 10, 0)
