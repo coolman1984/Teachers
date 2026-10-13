@@ -46,7 +46,8 @@ ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no 0/O, 1/I: codes are read ou
 
 def _compiled():
     """The installed Hessa.exe (Nuitka) - there, nothing outside the program may replace the key or switch checks off."""
-    return '__compiled__' in globals() or getattr(sys, 'frozen', False)
+    return ('__compiled__' in globals() or '__uncompiled__' in globals()
+            or getattr(sys, 'frozen', False))
 
 
 def public_key():

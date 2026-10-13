@@ -118,11 +118,14 @@ class Server:
             json.dump(cfg, f)
 
     def start(self, wait=True, compiled=False):
-        env = dict(os.environ, HS_CONFIG=self.cfg_path, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
+        """compiled: False for source runs; True or 'compiled' / 'uncompiled' to simulate Nuitka markers in Hessa.exe."""
+        env = dict(os.environ, HS_CONFIG=self.cfg_path, HS_HOME=self.root, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
         if compiled:
+            marker = 'uncompiled' if compiled == 'uncompiled' else 'compiled'
+            attr = '__uncompiled__' if marker == 'uncompiled' else '__compiled__'
             server_dir = os.path.join(ROOT, 'server')
             cmd = [sys.executable, '-c',
-                   f'import sys, runpy\nsys.path.insert(0, r"{server_dir}")\nimport license as _lic\n_lic.__compiled__ = True\n'
+                   f'import sys, runpy\nsys.path.insert(0, r"{server_dir}")\nimport license as _lic\n_lic.{attr} = True\n'
                    f'runpy.run_path(r"{APP}", run_name="__main__")']
         else:
             cmd = [sys.executable, APP]
