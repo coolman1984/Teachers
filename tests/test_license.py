@@ -30,6 +30,17 @@ class Clock:
         return self.t
 
 
+class FakeMono:
+    def __init__(self, t=0.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+    def advance(self, sec):
+        self.t += sec
+
+
 class CodesTest(unittest.TestCase):
     def setUp(self):
         os.environ['HS_LICENSE_PUB'] = PUB.hex()
@@ -106,6 +117,59 @@ class CodesTest(unittest.TestCase):
         self.assertFalse(st['machineOk'])
         self.assertIn(st['state'], ('trial', 'trialEnded'))
         self.assertNotEqual(copy.request(), self.lic.request())
+
+    def test_i_weekend_idle_does_not_charge_the_new_day(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 7, 18, 0)
+        mono = FakeMono()
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono)
+        lic.status()
+        mono.advance(4 * 3600)
+        lic.status()
+        self.clock.t = datetime(2026, 11, 10, 9, 0)
+        mono.advance(80 * 3600)
+        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono)
+        st = again.status()
+        self.assertIn(st['state'], ('ok', 'warn'))
+        self.assertLess(float(again.data['runSec']), L.RUN_LIMIT.total_seconds())
+
+    def test_j_stepping_the_clock_back_across_midnight_keeps_runtime(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 20 * 3600)
+        lic.status()
+        self.clock.t = datetime(2026, 11, 11, 1, 0)
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0).status()
+        self.clock.t = datetime(2026, 11, 10, 23, 0)
+        lic3 = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 11 * 3600)
+        st = lic3.status()
+        self.assertEqual(st['state'], 'clock')
+        self.assertTrue(lic3.blocked())
+
+    def test_k_runtime_persists_across_two_restarts(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        path = os.path.join(self.home, 'license.json')
+        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 15 * 3600).status()
+        with open(path, encoding='utf-8') as f:
+            saved = json.load(f)
+        self.assertAlmostEqual(float(saved['runSec']), 15 * 3600, delta=1)
+        mid = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 16 * 3600)
+        self.assertEqual(mid.status()['state'], 'clock')
+        end = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0)
+        self.assertEqual(end.status()['state'], 'clock')
+        self.assertTrue(end.blocked())
+
+    def test_l_status_polls_do_not_rewrite_license_json_every_tick(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        path = os.path.join(self.home, 'license.json')
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 3600)
+        lic.status()
+        mtime = os.path.getmtime(path)
+        for _ in range(8):
+            L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0).status()
+        self.assertEqual(os.path.getmtime(path), mtime)
 
     def test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month(self):
         self.lic.activate(self.code(date(2026, 12, 6)))

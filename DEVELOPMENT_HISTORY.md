@@ -9,6 +9,10 @@ day, the rollback check stayed quiet and saving kept working with no new code.
 between ticks). More than 30 hours on one date sets state `clock` and blocks saves, including across restarts; a new calendar
 day clears the counter. Regression in `tests/test_license.py` `test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month`;
 `test_e` unchanged.
+**Follow-up (PR #35 review):** count monotonic time only while the wall date is unchanged in-process (no weekend idle on the
+new day); stash per-day seconds in `runCarry` when the calendar jumps forward so stepping back across midnight cannot zero the
+bucket; persist `runSec` with `_runPersisted` throttled to five minutes unless the day changes or the limit is hit; tests
+`test_i`–`test_l`.
 **Lesson:** limit cheating with the clock the PC reports and with real elapsed time — not only with the high-water mark.
 
 ## Learning progress belongs to the person, not to the PC (2026-10-11)

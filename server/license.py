@@ -44,6 +44,7 @@ WARN_DAYS = 7
 GRACE_DAYS = 3
 CLOCK_SLACK = timedelta(hours=2)
 RUN_LIMIT = timedelta(hours=30)   # one frozen wall-clock date cannot keep a paid month past ~30h of real runtime
+RUN_PERSIST = timedelta(minutes=5)   # open screens poll /api/license often; do not rewrite license.json every tick
 KIND_ACTIVATE, KIND_RESET = 1, 2
 ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no 0/O, 1/I: codes are read out on the phone and typed by hand
 
@@ -181,6 +182,7 @@ class License:
         self._elapsed = elapsed
         self.monotonic = monotonic or time.monotonic
         self._mono_at = None
+        self._run_wall_day = None   # wall date the last monotonic slice was counted on (not persisted)
         self.lock = threading.Lock()
         self.machine = machine_hash()
         self.data = self._load()
@@ -215,30 +217,53 @@ class License:
             return None
         return hw
 
+    def _persist_run(self, t, force=False):
+        try:
+            last = self.data.get('_runPersisted')
+            if not force and last and t - datetime.fromisoformat(last[:19]) < RUN_PERSIST:
+                return
+            self.data['_runPersisted'] = t.isoformat(timespec='seconds')
+            self._save()
+        except (OSError, ValueError):
+            pass
+
     def _tick_runtime(self, t):
-        """Real runtime accumulated on t's calendar date (monotonic, not self.now). True when the frozen-date limit is hit."""
+        """Real runtime accumulated on a wall-clock date (monotonic slices only while that date is current). True when frozen."""
         today = t.date().isoformat()
-        run_day = self.data.get('runDay')
+        run_day = self.data.get('runDay') or today
         run_sec = float(self.data.get('runSec') or 0)
+        carry = self.data.setdefault('runCarry', {})
+        if not isinstance(carry, dict):
+            carry = {}
+            self.data['runCarry'] = carry
+        day_forward = run_day < today
+        if day_forward:
+            if run_sec > 0:
+                carry[run_day] = run_sec            # survive a quick jump forward then back to the paid day
+            run_day, run_sec = today, 0.0
+        elif run_day > today:
+            if today in carry:                      # clock moved back to a day that still had runtime
+                run_day, run_sec = today, float(carry.pop(today))
+
         if self._elapsed is not None:
             delta = max(0.0, float(self._elapsed()))
         else:
             mono = self.monotonic()
-            delta = max(0.0, mono - self._mono_at) if self._mono_at is not None else 0.0
+            wall = t.date().isoformat()
+            if self._mono_at is not None and self._run_wall_day == wall:
+                delta = max(0.0, mono - self._mono_at)   # same wall date as last tick in this process
+            else:
+                delta = 0.0                              # new process or date changed: no idle gap
             self._mono_at = mono
-        if run_day != today:
-            run_day, run_sec = today, 0.0
+            self._run_wall_day = wall
+
         run_sec += delta
         self.data['runDay'] = run_day
         self.data['runSec'] = run_sec
-        try:
-            saved = self.data.get('_runSaved')
-            if saved != run_sec:
-                self.data['_runSaved'] = run_sec
-                self._save()
-        except OSError:
-            pass
-        return run_sec > RUN_LIMIT.total_seconds()
+        frozen = run_sec > RUN_LIMIT.total_seconds()
+        if frozen or day_forward or delta > 0:
+            self._persist_run(t, force=frozen or day_forward)
+        return frozen
 
     def request(self):
         return request_code(KIND_ACTIVATE, self.machine, 0)
