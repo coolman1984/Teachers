@@ -1,6 +1,29 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## PR #39 round 4: atomic dual lock claim (2026-10-13)
+
+**What:** `claimTrialLocks` uses one D1 `batch()` for device + machine inserts (no interleaving gap). `anyLockOwnedByRequest` — partial lock by this `request_id` never triggers `already_used`; retry claim or return stored code. Tests: device-only pre-lock + concurrent approve; batch size 2.
+**Checks:** `cd licence-hub && npm test`.
+
+## PR #39 round 3: idempotent owner approve (2026-10-13)
+
+**What:** `approveRequest` treats “locks already owned by this request id” as success: skip `already_used` when the trial lock is ours, return stored code when a concurrent second approve races on `UPDATE`, keep `status=issued`. `recordCustomerOnce` avoids duplicate customer rows. Test: concurrent `Promise.all` double approve on one request.
+**Checks:** `cd licence-hub && npm test`.
+
+## PR #39 review fixes: trial clamp, atomic locks, prune tables (2026-10-13)
+
+**What:** Worker `trialDays()` clamps `TRIAL_DAYS` to ≤14; trial locks claimed with `INSERT … ON CONFLICT` before signing (export `claimTrialLocks`); concurrency test. Prune old `rate`, `login_attempts`, and expired `owner_sessions` on licence traffic and owner login. Security log translation `sec.d.licenceRequested`. Removed duplicate `runDay`/`runSec` frozen runtime from `license.py` (PR #35 owns that logic on rebase).
+**Checks:** `cd licence-hub && npm test`; `cd tests && python3 -m unittest test_license test_license_hub`.
+
+## Rework PR #39 — Yousef final licence design (owner 2026-10-13)
+
+**What:** One licence system in `server/license.py` + `server/license_hub_mixin.py` (removed parallel `server/licence.py`). Licence hub Worker is **trial-only** (`LICENCE_SIGNING_KEY`, kid `trial-hub`); paid/monthly on owner PC (`tools/seller.py`, Licence Studio). Subscription UI unified in `js/views/license.js`. `/api/licence*` administrator-only; `/api/license` hides device codes unless local admin session. Hub `/licence/ack` keeps issued codes; owner monthly confirm fixed. `tools/seller.py` counter serials (#36); frozen runtime in unified `license.py` (#35). Tests: `tests/test_license_hub.py`, hub npm tests (dates, ack, monthly refused).
+**Why:** Owner decision: final Yousef flow, not a raw parallel copy with paid signing on Cloudflare.
+**Mistake:** First pass used `LICENCE_PAID_SIGNING_KEY` on the Worker and dual `licence.py` / `license.py`.
+**Lesson:** Trial hub keys stay trial-only; merge into `license.py` before UI ships.
+**Checks:** `cd licence-hub && npm test`; `cd tests && python3 -m unittest test_license_hub test_licence_hub_signer test_license test_ci`.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

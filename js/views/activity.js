@@ -15,7 +15,7 @@
     'password-change-failed', 'password-reset', 'admin-reset', 'user-created', 'user-changed', 'user-disabled', 'user-deleted', 'profile-saved', 'profile-deleted',
     'link-created', 'link-removed', 'login-link', 'login-link-failed', 'access-denied', 'setup', 'node-enrolled', 'node-confirmed', 'node-revoked', 'pairing-code',
     'pairing-request', 'pairing-rejected', 'pc-adding-open', 'pc-adding-closed', 'authority-exported', 'authority-imported', 'backup-set', 'backup-removed',
-    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused', 'owner-phone', 'support'];
+    'backup-started', 'backup-ended', 'backup-key-sent', 'backup-restored', 'backup-folder', 'conflict-resolved', 'integrity-check', 'gateway-secret', 'remote-login', 'remote-refused', 'remote-switch', 'ai-key', 'license-activated', 'license-refused', 'licence', 'owner-phone', 'support'];
   var QUIET = { login: 1, logout: 1, 'session-expired': 1, 'login-link': 1 };     // their detail is only the browser's name
   var tab = 'changes';
   var filters = { changes: blank(), clicks: blank(), security: blank() };
@@ -49,6 +49,7 @@
     [/^Password recovered on the centre PC with the seller's reset code$/, 'recovered'],
     [/^Activation code refused: (\w+)$/, 'licRefused'],
     [/^Activated until (\S+)$/, 'licOk'],
+    [/^Licence requested from the seller$/, 'licenceRequested'],
     [/^Password reset code refused$/, 'resetRefused'],
     [/^Trial password refused away from the centre PC$/, 'trialRemote'],
     [/^Owner phone added: (.+)$/, 'ownerPhoneAdded'],

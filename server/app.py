@@ -35,6 +35,7 @@ import parent_report  # noqa: E402
 import wa_auto  # noqa: E402
 import watch  # noqa: E402
 import license as license_mod  # noqa: E402
+import assist_licence as assist_licence_mod  # noqa: E402
 import xlsx  # noqa: E402
 from auth import ADMIN_PERMS, ALL, DEV_PASSWORD, DEV_USER, PERMISSIONS, AuthError, Forbidden  # noqa: E402
 import center  # noqa: E402
@@ -239,9 +240,18 @@ if INSTANCE:
         with JOURNAL.lock:
             r = JOURNAL.conn.execute("SELECT MAX(ts), MIN(ts) FROM audit WHERE kind='data'").fetchone()
         return (r[0], r[1]) if r else (None, None)
-    LICENSE = license_mod.License(DATA_DIR, data_time, required=license_mod._compiled() or bool(CFG.get('license_required')))
+    AF_ASSIST = assist_licence_mod.Assist(DATA_DIR, CFG)
+
+    def site_shop_name():
+        try:
+            return str(center.settings(STORE).get('systemName') or '')
+        except Exception:  # noqa: BLE001
+            return ''
+
+    LICENSE = license_mod.License(DATA_DIR, data_time, required=license_mod._compiled() or bool(CFG.get('license_required')),
+                                  assist=AF_ASSIST, cfg=CFG, root=ROOT, shop_name=site_shop_name)
 else:
-    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = None
+    SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = AF_ASSIST = None
 GATE = None
 AI_BUSY = threading.Lock()
 formats.OFFICE_TMP = os.path.join(DATA_DIR, 'tmp')
@@ -844,10 +854,14 @@ class Handler(BaseHTTPRequestHandler):
                                    'trial': self.trial_hint(),
                                    'node': self.node_status(), 'about': {**ABOUT, **site_names()}})
         if p == '/api/license':
-            st = LICENSE.status()
             u = AUTH.session(self.token, self.ip, touch=False)
-            if not (u and is_admin(u)):
-                st = {k: v for k, v in st.items() if k not in ('history', 'serial', 'request')} if not (self.ip in LOCAL_IPS and not self.via_proxy) else {k: v for k, v in st.items() if k != 'history'}
+            admin = bool(u and is_admin(u))
+            st = LICENSE.status(admin=admin)
+            if not admin:
+                hidden = {'history', 'serial', 'afDevice', 'hubRequest'}
+                if not (self.ip in LOCAL_IPS and not self.via_proxy):
+                    hidden.add('request')
+                st = {k: v for k, v in st.items() if k not in hidden}
             return self.send(200, {**st, 'vendor': VENDOR_WHATSAPP})
         if p == '/api/join/status':
             if self.ip not in LOCAL_IPS or AUTH.has_users() and NODE.role != 'member':
@@ -855,6 +869,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {**SYNC.join_progress(), 'hasUsers': AUTH.has_users()})
 
         self.login_required(touch=p != '/api/version')
+        if p == '/api/licence':
+            self.need_admin()
+            st = LICENSE.status(admin=True)
+            return self.send(200, {**st, 'device': st.get('afDevice'), 'request': st.get('hubRequest')})
+        if p == '/api/licence/request':
+            self.need_admin()
+            return self.send(200, LICENSE.hub_public())
+        if p == '/api/licence/preview':
+            self.need_admin()
+            kind = qs.get('kind', 'trial')
+            if kind not in ('trial', 'monthly', 'permanent'):
+                kind = 'trial'
+            return self.send(200, LICENSE.hub_preview(kind, qs.get('ref', '')))
         if p == '/api/me':
             return self.send(200, self.me())
         if p == '/api/state':
@@ -1154,6 +1181,30 @@ class Handler(BaseHTTPRequestHandler):
         if p == '/api/license/activate':
             self.need_admin()
             return self.license_activate()
+        if p == '/api/licence/activate':
+            self.need_admin()
+            return self.license_activate()
+        if p == '/api/licence':
+            self.need_admin()
+            st = LICENSE.status(admin=True)
+            return self.send(200, {**st, 'device': st.get('afDevice'), 'request': st.get('hubRequest')})
+        if p in ('/api/licence/request', '/api/licence/request/retry', '/api/licence/request/clear'):
+            self.need_admin()
+            if p.endswith('/clear'):
+                return self.send(200, LICENSE.hub_clear())
+            if p.endswith('/retry'):
+                return self.send(200, LICENSE.hub_step(force=True))
+            d = self.json_body()
+            try:
+                LICENSE.hub_begin(d.get('kind'), str(d.get('ref') or ''), self.u['id'],
+                                  shop=d.get('shop') if d.get('shop') is not None else None)
+            except LookupError as e:
+                key = 'lic.paid_in_studio' if str(e) == 'paid_in_studio' else 'lic.hub_off'
+                msg = 'Paid months are issued on the owner PC (Licence Studio / seller tool), not online.' if key.endswith('studio') else \
+                    'This copy cannot ask the seller online. Send the device code and paste the code you receive.'
+                raise center.Problem(key, msg)
+            AUTH.log(self.u['display'], self.ip, 'licence', d.get('kind'), 'Licence requested from the seller')
+            return self.send(200, LICENSE.hub_step())
         if LICENSE.blocked() and p not in LICENSE_OPEN:
             # the subscription ended: everything can still be read, backed up and exported - nothing new is saved
             st = LICENSE.status()
@@ -1863,6 +1914,7 @@ def main(background=False):
     BACKUPS.start()
     SYNC.start()
     GATE.start()
+    LICENSE.hub_start()
     SUPPORT.start()
 
     print('=' * 64)
