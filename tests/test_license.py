@@ -22,6 +22,52 @@ OTHER = ed25519.generate()
 HERE_PC, OTHER_PC = 'synthetic-guid-centre', 'synthetic-guid-elsewhere'
 
 
+def _required_like_app(cfg_license_required=False):
+    """Same rule as server/app.py when it builds License(..., required=...)."""
+    return L._compiled() or bool(cfg_license_required)
+
+
+class CompiledTest(unittest.TestCase):
+    """Sale hardening: Nuitka may mark license.py with __uncompiled__ instead of __compiled__."""
+
+    def test_source_run_keeps_subscription_optional(self):
+        self.assertFalse(L._compiled())
+        self.assertFalse(_required_like_app(False))
+        self.assertTrue(_required_like_app(True))
+
+    def test_nuitka_markers_force_subscription_on(self):
+        for attr in ('__compiled__', '__uncompiled__'):
+            setattr(L, attr, True)
+            try:
+                self.assertTrue(L._compiled())
+                self.assertTrue(_required_like_app(False))
+            finally:
+                delattr(L, attr)
+
+    def test_pyinstaller_frozen_counts_as_installed(self):
+        old = getattr(sys, 'frozen', False)
+        sys.frozen = True
+        try:
+            self.assertTrue(L._compiled())
+            self.assertTrue(_required_like_app(False))
+        finally:
+            if old:
+                sys.frozen = old
+            else:
+                del sys.frozen
+
+    def test_pubkey_override_only_when_not_compiled(self):
+        os.environ['HS_LICENSE_PUB'] = PUB.hex()
+        self.addCleanup(os.environ.pop, 'HS_LICENSE_PUB', None)
+        self.assertEqual(L.public_key(), PUB)
+        L.__uncompiled__ = True
+        try:
+            from license_key import PUBLIC_KEY
+            self.assertEqual(L.public_key(), bytes.fromhex(PUBLIC_KEY))
+        finally:
+            del L.__uncompiled__
+
+
 class Clock:
     def __init__(self, t):
         self.t = t
