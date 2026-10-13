@@ -7,7 +7,6 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
-from unittest.mock import patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'server'))
