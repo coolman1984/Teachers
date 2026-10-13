@@ -144,13 +144,22 @@ function hubCalendarDay(env) {
 }
 
 async function locksOwnedByRequest(env, dkey, machineHash, requestId) {
-  const locks = [deviceLockKey(dkey)];
-  if (machineHash) locks.push(machineLockKey(machineHash));
+  const locks = trialLockIds(dkey, machineHash);
   for (const lock of locks) {
     const row = await trialLockRow(env, lock);
     if (!row || row.request_id !== requestId) return false;
   }
   return true;
+}
+
+/** True when this approval already holds at least one trial lock (mid-issue must not refuse). */
+export async function anyLockOwnedByRequest(env, dkey, machineHash, requestId) {
+  const locks = trialLockIds(dkey, machineHash);
+  for (const lock of locks) {
+    const row = await trialLockRow(env, lock);
+    if (row?.request_id === requestId) return true;
+  }
+  return false;
 }
 
 export async function handleLicence(request, env, url) {
@@ -301,13 +310,16 @@ function trialLockIds(dkey, machineHash) {
   return locks;
 }
 
-/** Atomic one-trial-per-machine: INSERT … ON CONFLICT only succeeds for the owning request_id. */
+/** Claim every lock in one D1 batch (no gap between device and machine rows). */
 export async function claimTrialLocks(env, locks, requestId, t) {
+  if (!locks.length) return true;
+  const stmts = locks.map((lock) =>
+    env.DB.prepare(
+      'INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?) ON CONFLICT(machine) DO NOTHING',
+    ).bind(lock, requestId, t),
+  );
+  await env.DB.batch(stmts);
   for (const lock of locks) {
-    const inserted = await env.DB.prepare(
-      'INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?) ON CONFLICT(machine) DO NOTHING RETURNING machine',
-    ).bind(lock, requestId, t).first();
-    if (inserted) continue;
     const row = await env.DB.prepare('SELECT request_id FROM machine_trials WHERE machine = ?').bind(lock).first();
     if (!row || row.request_id !== requestId) return false;
   }
@@ -379,16 +391,29 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
   let signed;
   try {
     if (force) await clearTrialLocks(env, dkey, machineHash);
-    const owned = await locksOwnedByRequest(env, dkey, machineHash, requestId);
-    if (!force && (await trialUsedOnline(env, dkey, machineHash)) && !owned) {
+    const ownedAny = await anyLockOwnedByRequest(env, dkey, machineHash, requestId);
+    if (!force && (await trialUsedOnline(env, dkey, machineHash)) && !ownedAny) {
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }
-    if (!(await claimTrialLocks(env, locks, requestId, t))) {
-      const again = await existingIssueForRequest(env, requestId, dkey, machineHash);
+    let claimed = await claimTrialLocks(env, locks, requestId, t);
+    if (!claimed) {
+      let again = await existingIssueForRequest(env, requestId, dkey, machineHash);
       if (again) return again;
-      await refuseRequest(env, requestId, 'already_used');
-      return null;
+      if (ownedAny || (await anyLockOwnedByRequest(env, dkey, machineHash, requestId))) {
+        claimed = await claimTrialLocks(env, locks, requestId, t);
+        if (!claimed) {
+          again = await existingIssueForRequest(env, requestId, dkey, machineHash);
+          if (again) return again;
+          if (await anyLockOwnedByRequest(env, dkey, machineHash, requestId)) {
+            claimed = await locksOwnedByRequest(env, dkey, machineHash, requestId);
+          }
+        }
+      }
+      if (!claimed) {
+        await refuseRequest(env, requestId, 'already_used');
+        return null;
+      }
     }
     const days = trialDays(env);
     signed = await issueTrialCode(privateKey, row.product, row.device, days, new Date(), tz);
@@ -396,6 +421,10 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
     if (!ok) {
       const again = await existingIssueForRequest(env, requestId, dkey, machineHash);
       if (again) return again;
+      if (await anyLockOwnedByRequest(env, dkey, machineHash, requestId)) {
+        const retry = await existingIssueForRequest(env, requestId, dkey, machineHash);
+        if (retry) return retry;
+      }
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }

@@ -1,6 +1,11 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## PR #39 round 4: atomic dual lock claim (2026-10-13)
+
+**What:** `claimTrialLocks` uses one D1 `batch()` for device + machine inserts (no interleaving gap). `anyLockOwnedByRequest` — partial lock by this `request_id` never triggers `already_used`; retry claim or return stored code. Tests: device-only pre-lock + concurrent approve; batch size 2.
+**Checks:** `cd licence-hub && npm test`.
+
 ## PR #39 round 3: idempotent owner approve (2026-10-13)
 
 **What:** `approveRequest` treats “locks already owned by this request id” as success: skip `already_used` when the trial lock is ours, return stored code when a concurrent second approve races on `UPDATE`, keep `status=issued`. `recordCustomerOnce` avoids duplicate customer rows. Test: concurrent `Promise.all` double approve on one request.

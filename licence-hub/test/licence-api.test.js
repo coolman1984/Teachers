@@ -4,7 +4,7 @@ import { createPrivateKey } from 'node:crypto';
 import { newD1 } from './d1-mock.js';
 import {
   handleLicence, approveRequest, refuseRequest, issueOfflineCustomer, derivePollToken, purgeStaleCodes,
-  deviceKey, deviceLockKey, trialDays, claimTrialLocks, REASON_PAID_IN_STUDIO,
+  deviceKey, deviceLockKey, machineLockKey, trialDays, claimTrialLocks, anyLockOwnedByRequest, REASON_PAID_IN_STUDIO,
 } from '../src/licence-api.js';
 import { importSigningKey } from '../src/afcodes.js';
 
@@ -262,6 +262,39 @@ test('approve retry returns the same code', async () => {
   const first = await approveRequest(e, data.id, key);
   const second = await approveRequest(e, data.id, key);
   assert.equal(first.code, second.code);
+});
+
+test('approve after device-only lock (interleaved claim) still issues, not refused', async () => {
+  const e = env();
+  const key = await importSigningKey(pemFromSeed(Buffer.alloc(32, 11)));
+  const device = '7KD2M-QX9TP';
+  const dkey = deviceKey(device);
+  const { data } = await postRequest(e, body({ nonce: 'interleave-locks', device, machine: MACHINE_A }));
+  await e.DB.prepare('INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?)')
+    .bind(deviceLockKey(dkey), data.id, 1).run();
+  assert.equal(await anyLockOwnedByRequest(e, dkey, MACHINE_A, data.id), true);
+  const [a, b] = await Promise.all([approveRequest(e, data.id, key), approveRequest(e, data.id, key)]);
+  assert.ok(a?.code, 'first approve must return a code');
+  assert.ok(b?.code, 'second approve must not lose to already_used');
+  assert.equal(a.code, b.code);
+  const row = await e.DB.prepare('SELECT status, reason, code FROM licence_requests WHERE id = ?').bind(data.id).first();
+  assert.equal(row.status, 'issued');
+  assert.equal(row.reason, '');
+  assert.ok(row.code);
+});
+
+test('claimTrialLocks inserts device and machine locks in one batch', async () => {
+  const e = env();
+  const dkey = deviceKey('7KD2M-QX9TP');
+  const locks = [deviceLockKey(dkey), machineLockKey(MACHINE_A)];
+  let batchSize = 0;
+  const realBatch = e.DB.batch.bind(e.DB);
+  e.DB.batch = async (stmts) => {
+    batchSize = stmts.length;
+    return realBatch(stmts);
+  };
+  assert.equal(await claimTrialLocks(e, locks, 'batch-req', 50), true);
+  assert.equal(batchSize, 2);
 });
 
 test('concurrent approve on the same request is idempotent (issued, not refused)', async () => {
