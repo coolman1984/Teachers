@@ -34,7 +34,7 @@ jobs:
           node-version: '^22.13.0'  # node:sqlite (gateway/relay D1 stand-in) needs 22.13+
       - name: Python lint
         run: |
-          python -m pip install pyflakes
+          python -m pip install pyflakes cryptography
           python -m pyflakes server tools tests
       - name: Installer files present (fails in seconds instead of at the end of a Windows build)
         run: python tools/build_windows.py --check
