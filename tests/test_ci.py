@@ -68,3 +68,16 @@ class InstallerTest(unittest.TestCase):
         for key in re.findall(r'\{cm:(\w+)\}', iss):
             self.assertIn('arabic.' + key + '=', iss)
             self.assertIn('english.' + key + '=', iss)
+
+    def test_boot_task_autostart_and_refuses_downgrade(self):
+        iss = (ROOT / 'installer' / 'hessa.iss').read_bytes().decode('utf-8-sig')
+        self.assertIn('schtasks.exe', iss)
+        self.assertRegex(iss, r'/Create\s+/TN\s+""Hessa""')
+        self.assertIn('--background', iss)
+        self.assertIn('/SC ONSTART', iss)
+        self.assertRegex(iss, r'/Delete\s+/TN\s+""Hessa""')
+        self.assertNotRegex(iss, r'\{commonstartup\}.*--background')
+        self.assertIn('24B39F34-055F-4639-BD93-CF67B335C325', iss)
+        self.assertIn('CompareDotVersions', iss)
+        self.assertIn("CompareDotVersions('{#AppVersion}', Installed) < 0", iss)
+        self.assertIn('InitializeSetup', iss)

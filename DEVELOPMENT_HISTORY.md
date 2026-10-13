@@ -1,6 +1,12 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Installer: server at boot and no downgrade (sale-hardening task 4, 2026-10-13)
+
+**Why:** the Startup-folder shortcut only ran after someone signed in, so phones and other desks could not reach the centre PC until then; installing an older `Hessa-Setup` over a newer one left data intact but `upgrade.py` refused to open it.
+**What:** `installer/hessa.iss` registers scheduled task **Hessa** (`ONSTART`, `Hessa.exe --background`), deletes it on uninstall, removes the old Startup shortcut on upgrade, and `InitializeSetup` blocks when `DisplayVersion` in the uninstall registry is newer than this setup. `tests/test_ci.py` `InstallerTest` locks those strings; `docs/OPERATIONS.md` documents the task.
+**Lesson:** boot autostart belongs in a system task, not the Startup folder; version compare must run before any file is replaced.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's
