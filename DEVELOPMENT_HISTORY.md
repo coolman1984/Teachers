@@ -10,6 +10,21 @@ program writes `dev_login` false. `tests/test_center_safety.TrialLoginTest` adds
 **Lesson:** the trial sign-in stays on for `python3 server/app.py` only; sale hardening belongs in `_compiled()`, not in manual config edits.
 **Follow-up (PR #38 review):** `license._compiled()` also treats Nuitka's `__uncompiled__` marker (task 1); tests simulate both markers. Harness sets `HS_HOME` to the temp server root so subprocess tests never touch the checkout `data/` folder.
 
+## Seller tool: unique activation serials (sale-hardening task 6, 2026-10-13)
+
+**Why:** `tools/seller.py` used `int(datetime.now().timestamp())` as the code serial. Two centres issued in the same second (or a double menu click) shared a serial; the gateway rejects the duplicate (HTTP 409) and the PC cannot rank two codes with the same dates.
+**What:** `next_serial()` keeps a counter in `~/.hessa-seller/serial.next` (locked, seeded from `issued.csv`), still within the 32-bit field in the code. Regression in `tests/test_license.py` `test_h_two_issues_in_the_same_second_get_unique_serials`.
+**Lesson:** identity fields must never be derived from wall-clock seconds when duplicates are possible.
+
+## Installed build must require a subscription (sale-hardening task 1, 2026-10-13)
+
+**Why:** Nuitka can ship `license.py` with `__uncompiled__` and no `__compiled__`, so `_compiled()` was false in sold
+`Hessa.exe` and `license_required: false` in `config.json` turned enforcement off. CI only checked pages, not `/api/license`.
+**What:** `server/license.py` treats `__uncompiled__` like `__compiled__`; the Windows workflow smoke step calls
+`/api/license` and requires `required` and `state == trial` on a fresh data folder; regression tests in `tests/test_license.py`
+and `tests/test_ci.py`.
+**Lesson:** match every marker Nuitka sets on shipped modules, not only `__compiled__` and PyInstaller's `sys.frozen`.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

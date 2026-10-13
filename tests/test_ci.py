@@ -37,6 +37,12 @@ class WorkflowTest(unittest.TestCase):
         installer = workflow.split('  windows-installer:', 1)[1]
         self.assertIn('needs: [test, browser, new-version]', installer, 'a release must also pass real screen checks')
 
+    def test_windows_smoke_checks_subscription_required(self):
+        workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
+        step = workflow.split('Check that the built program starts', 1)[1].split('uses: actions/upload-artifact', 1)[0]
+        self.assertIn('/api/license', step)
+        self.assertIn('$lic.required', step)
+
 
 class ShippedFilesTest(unittest.TestCase):
     """The installer copies GATEWAY_SETUP.md and the release uses RELEASE_NOTES.md: both were missing (review A06)."""

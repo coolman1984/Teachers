@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import ApiError, Server, make_authority  # noqa: E402
@@ -20,6 +21,52 @@ SEED = ed25519.generate()
 PUB = ed25519.public_key(SEED)
 OTHER = ed25519.generate()
 HERE_PC, OTHER_PC = 'synthetic-guid-centre', 'synthetic-guid-elsewhere'
+
+
+def _required_like_app(cfg_license_required=False):
+    """Same rule as server/app.py when it builds License(..., required=...)."""
+    return L._compiled() or bool(cfg_license_required)
+
+
+class CompiledTest(unittest.TestCase):
+    """Sale hardening: Nuitka may mark license.py with __uncompiled__ instead of __compiled__."""
+
+    def test_source_run_keeps_subscription_optional(self):
+        self.assertFalse(L._compiled())
+        self.assertFalse(_required_like_app(False))
+        self.assertTrue(_required_like_app(True))
+
+    def test_nuitka_markers_force_subscription_on(self):
+        for attr in ('__compiled__', '__uncompiled__'):
+            setattr(L, attr, True)
+            try:
+                self.assertTrue(L._compiled())
+                self.assertTrue(_required_like_app(False))
+            finally:
+                delattr(L, attr)
+
+    def test_pyinstaller_frozen_counts_as_installed(self):
+        old = getattr(sys, 'frozen', False)
+        sys.frozen = True
+        try:
+            self.assertTrue(L._compiled())
+            self.assertTrue(_required_like_app(False))
+        finally:
+            if old:
+                sys.frozen = old
+            else:
+                del sys.frozen
+
+    def test_pubkey_override_only_when_not_compiled(self):
+        os.environ['HS_LICENSE_PUB'] = PUB.hex()
+        self.addCleanup(os.environ.pop, 'HS_LICENSE_PUB', None)
+        self.assertEqual(L.public_key(), PUB)
+        L.__uncompiled__ = True
+        try:
+            from license_key import PUBLIC_KEY
+            self.assertEqual(L.public_key(), bytes.fromhex(PUBLIC_KEY))
+        finally:
+            del L.__uncompiled__
 
 
 class Clock:
@@ -149,6 +196,51 @@ class CodesTest(unittest.TestCase):
         self.assertIn('Synthetic Centre', open(os.path.join(home, 'issued.csv'), encoding='utf-8-sig').read())
         with open(os.path.join(home, 'hessa-seller.key'), 'w') as f:
             f.write(OTHER.hex())
+        out = subprocess.run([sys.executable, tool, 'issue', self.lic.request()], capture_output=True, text=True, env=env)
+        self.assertNotEqual(out.returncode, 0)
+
+    def test_h_two_issues_in_the_same_second_get_unique_serials(self):
+        import importlib
+        import subprocess
+        tools_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools')
+        home = tempfile.mkdtemp(prefix='hs-seller-')
+        self.addCleanup(shutil.rmtree, home, True)
+        with open(os.path.join(home, 'hessa-seller.key'), 'w') as f:
+            f.write(SEED.hex())
+        os.environ['HESSA_SELLER_HOME'] = home
+        self.addCleanup(os.environ.pop, 'HESSA_SELLER_HOME', None)
+        sys.path.insert(0, tools_dir)
+        import seller as seller_tool  # noqa: E402
+        importlib.reload(seller_tool)
+
+        lic_b_home = tempfile.mkdtemp(prefix='hs-lic-b-')
+        self.addCleanup(shutil.rmtree, lic_b_home, True)
+        lic_b = L.License(lic_b_home, lambda: (None, None), required=True, now=self.clock)
+        env = dict(os.environ, HESSA_SELLER_HOME=home)
+        os.environ['HS_MACHINE_ID'] = OTHER_PC
+        req_b = lic_b.request()
+        os.environ['HS_MACHINE_ID'] = HERE_PC
+        frozen = datetime(2026, 10, 7, 12, 0, 0)
+        fake_dt = mock.Mock()
+        fake_dt.now.return_value = frozen
+        with mock.patch.object(seller_tool, 'datetime', fake_dt):
+            code_a, _ = seller_tool.issue([self.lic.request()], 31, 'Centre A')
+            code_b, _ = seller_tool.issue([req_b], 31, 'Centre B')
+        info_a = L.read_code(code_a, PUB)
+        info_b = L.read_code(code_b, PUB)
+        self.assertNotEqual(info_a['serial'], info_b['serial'])
+        self.assertEqual(self.lic.activate(code_a)['until'], (date.today() + timedelta(days=30)).isoformat())
+        os.environ['HS_MACHINE_ID'] = OTHER_PC
+        self.assertEqual(lic_b.activate(code_b)['until'], (date.today() + timedelta(days=30)).isoformat())
+        os.environ['HS_MACHINE_ID'] = HERE_PC
+        older = L.make_code(SEED, L.KIND_ACTIVATE, [L.machine_hash(HERE_PC)],
+                            until=date.today() + timedelta(days=5), issued=date.today(), serial=info_a['serial'] + 100)
+        with self.assertRaises(ValueError) as caught:
+            self.lic.activate(older)
+        self.assertEqual(str(caught.exception), 'older')
+        with open(os.path.join(home, 'hessa-seller.key'), 'w') as f:
+            f.write(OTHER.hex())
+        tool = os.path.join(tools_dir, 'seller.py')
         out = subprocess.run([sys.executable, tool, 'issue', self.lic.request()], capture_output=True, text=True, env=env)
         self.assertNotEqual(out.returncode, 0)
 
