@@ -92,12 +92,19 @@ TYPES = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf
          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
 
 
+def dev_login_allowed():
+    """Trial sign-in admin / 123: only in a source run with dev_login on — never in the installed Hessa.exe."""
+    return bool(CFG.get('dev_login')) and not license_mod._compiled()
+
+
 def load_config():
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, encoding='utf-8') as f:
             cfg.update(json.load(f))
     else:
+        if license_mod._compiled():
+            cfg['dev_login'] = False
         with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, indent=2)
     return cfg
@@ -803,7 +810,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def trial_hint(self):
         """The sign-in screen shows "admin / 123" only on this PC, while the trial sign-in can still be used."""
-        if self.ip not in LOCAL_IPS or self.via_proxy or not CFG.get('dev_login'):
+        if self.ip not in LOCAL_IPS or self.via_proxy or not dev_login_allowed():
             return None
         if AUTH.has_users() and not AUTH.dev_default():
             return None
@@ -1036,7 +1043,7 @@ class Handler(BaseHTTPRequestHandler):
             d = self.json_body()
             if too_many_failures(self.ip):
                 raise AuthError('Too many wrong attempts from this computer. Wait a minute and try again.')
-            if CFG.get('dev_login') and self.ip in LOCAL_IPS and not self.via_proxy and AUTH.trial_setup(d.get('username'), d.get('password'), self.ip):
+            if dev_login_allowed() and self.ip in LOCAL_IPS and not self.via_proxy and AUTH.trial_setup(d.get('username'), d.get('password'), self.ip):
                 say('Trial administrator created (admin / 123) - change the password before real use')
             try:
                 token, u = AUTH.login(d.get('username'), d.get('password'), self.ip, self.headers.get('User-Agent', ''))

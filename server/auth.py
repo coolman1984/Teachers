@@ -148,7 +148,7 @@ COMMON = {'password', 'password1', 'password123', '12345678', '123456789', '1234
           'company1', 'company123', 'changeme', 'p@ssw0rd', 'passw0rd', '87654321', '12341234', 'aa123456'}
 
 
-# Trial sign-in for the owner's first look (config "dev_login", on in the shipped config.json): on a brand-new PC,
+# Trial sign-in for the owner's first look (config "dev_login", on in a source-run config.json only; off in Hessa.exe): on a brand-new PC,
 # signing in as admin / 123 creates the administrator with that password. The strength rules are skipped only here; the
 # screens keep asking to change it (dev_default) until the password is changed. Switch "dev_login" off before a real sale.
 DEV_USER, DEV_PASSWORD, DEV_NAME = 'admin', '123', 'Administrator'

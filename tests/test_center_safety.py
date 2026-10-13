@@ -447,6 +447,36 @@ class TrialLoginTest(unittest.TestCase):
             s.client().login('admin', '123')
         s.client().login('admin', 'Centre-Owner-2026')
 
+    def test_f_installed_program_never_offers_admin_123(self):
+        """Sale hardening: Hessa.exe must not create the trial administrator or show the Try-it-now path."""
+        for marker in ('compiled', 'uncompiled'):
+            with self.subTest(nuitka_marker=marker):
+                s = Server(f'trial-{marker}', extra_cfg={'dev_login': True})
+                s.start(compiled=marker)
+                self.addCleanup(s.cleanup)
+                c = s.client()
+                self.assertIsNone(c.get('/api/auth/status')['trial'])
+                with self.assertRaises(ApiError):
+                    c.login('admin', '123')
+                self.assertFalse(c.get('/api/auth/status')['hasUsers'])
+
+    def test_g_installed_first_run_writes_dev_login_false(self):
+        """First config on the installed program is written with dev_login false (both Nuitka markers)."""
+        import subprocess
+        server_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server')
+        for marker in ('compiled', 'uncompiled'):
+            with self.subTest(nuitka_marker=marker):
+                root = tempfile.mkdtemp(prefix=f'hessa-first-run-{marker}-')
+                self.addCleanup(lambda r=root: shutil.rmtree(r, ignore_errors=True))
+                cfg_path = os.path.join(root, 'config.json')
+                attr = '__uncompiled__' if marker == 'uncompiled' else '__compiled__'
+                env = dict(os.environ, HS_HOME=root, HS_CONFIG=cfg_path, HS_NO_DIALOG='1')
+                subprocess.run([sys.executable, '-c',
+                                f'import sys\nsys.path.insert(0, r"{server_dir}")\nimport license as _lic\n_lic.{attr} = True\nimport app\n'],
+                               env=env, check=True, timeout=60)
+                with open(cfg_path, encoding='utf-8') as f:
+                    self.assertFalse(json.load(f)['dev_login'])
+
     def test_b_never_on_a_pc_with_accounts_or_when_switched_off(self):
         s = Server('trial-off', extra_cfg={'dev_login': True}).start()
         self.addCleanup(s.cleanup)

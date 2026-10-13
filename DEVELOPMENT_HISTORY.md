@@ -1,6 +1,15 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Sold Hessa.exe no longer accepts admin / 123 (sale-hardening task 2, 2026-10-13)
+
+**Why:** the installed program copied `DEFAULT_CONFIG` with `dev_login: true`, so anyone at the desk could take the administrator
+account before the owner. Editing `config.json` could turn the trial path back on.
+**What:** `server/app.py` `dev_login_allowed()` ignores `dev_login` when `license._compiled()`; first-run config on the installed
+program writes `dev_login` false. `tests/test_center_safety.TrialLoginTest` adds compiled-marker cases; harness `Server.start(compiled='compiled'|'uncompiled')` sets `license.__compiled__` or `license.__uncompiled__` then starts `app.py` through `runpy`. `docs/OPERATIONS.md` updated.
+**Lesson:** the trial sign-in stays on for `python3 server/app.py` only; sale hardening belongs in `_compiled()`, not in manual config edits.
+**Follow-up (PR #38 review):** `license._compiled()` also treats Nuitka's `__uncompiled__` marker (task 1); tests simulate both markers. Harness sets `HS_HOME` to the temp server's `data/` folder (config one level up) so subprocess tests never touch the checkout `data/` folder and a fake USB at `<root>/usb` stays outside program data.
+
 ## Seller tool: unique activation serials (sale-hardening task 6, 2026-10-13)
 
 **Why:** `tools/seller.py` used `int(datetime.now().timestamp())` as the code serial. Two centres issued in the same second (or a double menu click) shared a serial; the gateway rejects the duplicate (HTTP 409) and the PC cannot rank two codes with the same dates.

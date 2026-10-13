@@ -117,9 +117,21 @@ class Server:
         with open(self.cfg_path, 'w') as f:
             json.dump(cfg, f)
 
-    def start(self, wait=True):
-        env = dict(os.environ, HS_CONFIG=self.cfg_path, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
-        self.proc = subprocess.Popen([sys.executable, APP], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    def start(self, wait=True, compiled=False):
+        """compiled: False for source runs; True or 'compiled' / 'uncompiled' to simulate Nuitka markers in Hessa.exe."""
+        # HS_HOME = the data folder (like …\Hessa\data): config.json stays one level up so a fake USB at
+        # <server-root>/usb is outside program data and passes set_backup_folder's guard.
+        env = dict(os.environ, HS_CONFIG=self.cfg_path, HS_HOME=self.data_dir, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
+        if compiled:
+            marker = 'uncompiled' if compiled == 'uncompiled' else 'compiled'
+            attr = '__uncompiled__' if marker == 'uncompiled' else '__compiled__'
+            server_dir = os.path.join(ROOT, 'server')
+            cmd = [sys.executable, '-c',
+                   f'import sys, runpy\nsys.path.insert(0, r"{server_dir}")\nimport license as _lic\n_lic.{attr} = True\n'
+                   f'runpy.run_path(r"{APP}", run_name="__main__")']
+        else:
+            cmd = [sys.executable, APP]
+        self.proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         threading.Thread(target=self._drain, args=(self.proc,), daemon=True).start()
         if wait:
             wait_until(lambda: self.status(), 60, what=f'{self.name} to start: ' + ''.join(self.out[-20:]))
