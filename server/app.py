@@ -298,7 +298,7 @@ def parent_link(st):
 
 if INSTANCE:
     GATE = gwc.GatewaySync(STORE, JOURNAL, NODE.id, SECRETS, store_bytes, log_fn=say, owner_fn=owner_picture,
-                           licence_fn=lambda: LICENSE.data.get('code') or '')
+                           licence_fn=lambda: LICENSE.data.get('code') or '', on_online_time=LICENSE.note_online)
     # one sender per centre: the administrator PC; it writes each message in the follow-up history as "Hessa online (automatic)"
     GATE.wa = wa_auto.Sender(STORE, DATA_DIR, lambda: center.Ctx(STORE, JOURNAL, NODE.id, wa_auto.WHO, '', 'system', None, ['followup.log']),
                              parent_link, is_sender=lambda: NODE.is_authority and not LICENSE.blocked())

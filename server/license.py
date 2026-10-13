@@ -7,30 +7,28 @@ How it works, without the internet:
    on the seller's own PC, never in the program or the repository) and sends back the ACTIVATION CODE.
 3. The PC checks the code with the PUBLIC key built into the program (license_key.py): the signature, that it was made
    for THIS PC, and the date. A code copied to another PC, changed by one letter, or older than the last one is refused.
+   The last paid day (`until`) is fixed inside the signed code; nothing in the program extends it.
 
-What makes copying or cheating useless:
-- every code names the PCs it is for (a hash of their MachineGuid): the same .exe or the same data folder on another PC
-  shows a new request code and needs its own activation;
-- nobody can make a code without the seller's private key (Ed25519, the same signatures that protect the data);
-- moving the clock back does not bring days back: the program remembers the latest time it has seen - here and in the
-  data's own signed history - and refuses a clock that runs more than 2 hours behind it;
-- deleting license.json does not help: the trial start and the time high-water mark are also taken from the data.
+What makes copying or cheating harder:
+- every code names the PCs it is for (a hash of their MachineGuid);
+- nobody can make a code without the seller's private key (Ed25519);
+- moving the clock back does not bring days back: the program remembers the latest time it has seen - here, in the data's
+  signed history, and (when online) the last trusted server date from the licence hub;
+- when the centre is online, the hub's clock can end the paid month even if the PC date is wrong; when offline, the
+  program does not lock just because the network is down.
 
 What happens at the end: from 7 days before the end a bar at the bottom of every screen says how many days are left;
-after the end there are 3 days of grace (red bar), then the program is LOCKED: people can still sign in, look at
-everything, make a backup and export their data (their data is never held hostage), but nothing new can be saved
-until a new code is entered. A brand-new installation has a 7-day trial so it can be set up and shown.
-
-Password recovery for an administrator who forgot it uses the same keys: the PC shows a one-time request, the seller
-signs a reset code for exactly that request, and the new password is set on the centre PC itself.
+after the end there are 3 days of grace (red bar), then the program is LOCKED until a new code is entered.
 """
+import email.utils
 import hashlib
 import json
 import os
 import struct
 import sys
 import threading
-from datetime import date, datetime, timedelta
+import urllib.request
+from datetime import date, datetime, time as dt_time, timedelta
 
 import ed25519
 import node as node_mod
@@ -56,6 +54,38 @@ def public_key():
         return bytes.fromhex(override)
     from license_key import PUBLIC_KEY
     return bytes.fromhex(PUBLIC_KEY)
+
+
+def parse_server_moment(value):
+    """A calendar moment from the licence hub (ISO date or date-time). None when unknown."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        s = str(value)
+        if 'T' in s:
+            return datetime.fromisoformat(s[:19])
+        return datetime.combine(date.fromisoformat(s[:10]), dt_time(12, 0))
+    except (ValueError, TypeError):
+        return None
+
+
+def probe_http_date(url, timeout=10, opener=None):
+    """Lightweight online check: HTTPS Date header from the hub (fail-open: None on any error)."""
+    url = (url or '').rstrip('/')
+    if not url:
+        return None
+    try:
+        req = urllib.request.Request(url + '/', method='HEAD')
+        open_ = opener or urllib.request.urlopen
+        with open_(req, timeout=timeout) as resp:
+            raw = resp.headers.get('Date')
+        if not raw:
+            return None
+        return email.utils.parsedate_to_datetime(raw).astimezone().replace(tzinfo=None)
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------- codes people can read and type
@@ -191,10 +221,22 @@ class License:
             json.dump(self.data, f, indent=1)
         os.replace(tmp, self.path)
 
+    def _trusted_day(self):
+        raw = self.data.get('trustedDate')
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            return None
+
     def _seen(self, t):
         """The latest time this PC has ever seen (the high-water mark), raised to now when the clock is honest."""
         latest, _ = self.data_time()
         marks = [self.data.get('seen') or '', latest or '']
+        trust = self._trusted_day()
+        if trust:
+            marks.append(datetime.combine(trust, dt_time(12, 0)).isoformat(timespec='seconds'))
         hw = max(marks)
         if t.isoformat(timespec='seconds') > hw:
             self.data['seen'] = t.isoformat(timespec='seconds')
@@ -207,6 +249,49 @@ class License:
             return None
         return hw
 
+    def note_online(self, server_moment):
+        """Trusted hub time (polling or HTTPS Date). Fail-open: None does nothing; never locks because the network failed."""
+        when = parse_server_moment(server_moment)
+        if when is None:
+            return
+        with self.lock:
+            day = when.date()
+            prev = self._trusted_day()
+            if prev is None or day > prev:
+                self.data['trustedDate'] = day.isoformat()
+            mark = when.isoformat(timespec='seconds')
+            if mark > (self.data.get('seen') or ''):
+                self.data['seen'] = mark
+            self.data['onlineAt'] = self.now().isoformat(timespec='seconds')
+            try:
+                self._save()
+            except OSError:
+                pass
+
+    def _clock_bad(self, t, behind):
+        if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
+            return True
+        trust = self._trusted_day()
+        return bool(trust and t.date() < trust)
+
+    def _billing_day(self, t):
+        """Calendar day used for until/grace: local, raised by a trusted server date when the PC is behind the hub."""
+        today = t.date()
+        trust = self._trusted_day()
+        if trust and today < trust:
+            return today
+        return max(today, trust) if trust else today
+
+    def _state_for_until(self, until, billing_day):
+        left = (until - billing_day).days + 1
+        if left > WARN_DAYS:
+            return 'ok', left
+        if left > 0:
+            return 'warn', left
+        if left > -GRACE_DAYS:
+            return 'grace', left
+        return 'locked', left
+
     def request(self):
         return request_code(KIND_ACTIVATE, self.machine, 0)
 
@@ -218,8 +303,6 @@ class License:
             behind = self._seen(t)
             out = {'request': self.request(), 'required': self.required, 'machineOk': True, 'centre': self.data.get('centre') or '',
                    'until': None, 'daysLeft': None, 'serial': self.data.get('serial'), 'history': (self.data.get('history') or [])[-12:]}
-            if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
-                return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': behind[:16].replace('T', ' ')}
             code = self.data.get('code')
             info = None
             if code:
@@ -230,6 +313,16 @@ class License:
                         info = None
                 except ValueError:
                     info = None
+            trust = self._trusted_day()
+            if trust and today < trust and info:
+                state, left = self._state_for_until(info['until'], trust)
+                if state == 'locked':
+                    return {**out, 'state': 'locked' if self.required else 'off', 'until': info['until'].isoformat(),
+                            'daysLeft': left, 'graceLeft': max(0, left + GRACE_DAYS) if left <= 0 else None,
+                            'issued': info['issued'].isoformat()}
+            if self._clock_bad(t, behind):
+                seen = behind or (self.data.get('trustedDate') or '')[:16]
+                return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': str(seen)[:16].replace('T', ' ')}
             if not info:
                 _, earliest = self.data_time()
                 start = min(d for d in (self.data.get('trialStart'), (earliest or '')[:10] or None, today.isoformat()) if d)
@@ -243,8 +336,8 @@ class License:
                 left = (end - today).days + 1
                 state = 'trial' if left > 0 else 'trialEnded'
                 return {**out, 'state': state if self.required else 'off', 'until': end.isoformat(), 'daysLeft': max(0, left)}
-            left = (info['until'] - today).days + 1
-            state = 'ok' if left > WARN_DAYS else 'warn' if left > 0 else 'grace' if left > -GRACE_DAYS else 'locked'
+            billing = self._billing_day(t)
+            state, left = self._state_for_until(info['until'], billing)
             return {**out, 'state': state if self.required else 'off', 'until': info['until'].isoformat(), 'daysLeft': left,
                     'graceLeft': max(0, left + GRACE_DAYS) if left <= 0 else None, 'issued': info['issued'].isoformat()}
 
@@ -274,7 +367,7 @@ class License:
                         raise
             t = self.now()
             behind = self._seen(t)
-            if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
+            if self._clock_bad(t, behind):
                 raise ValueError('clock')
             if info['until'] < t.date():
                 raise ValueError('expired')

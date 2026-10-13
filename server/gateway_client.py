@@ -280,10 +280,11 @@ HEARTBEAT = 180        # seconds: the owner's phone says "PC off" after twice th
 
 
 class GatewaySync:
-    def __init__(self, store, journal, node_id, secrets, save_file, log_fn=None, owner_fn=None, licence_fn=None):
+    def __init__(self, store, journal, node_id, secrets, save_file, log_fn=None, owner_fn=None, licence_fn=None, on_online_time=None):
         self.store, self.journal, self.node_id, self.secrets, self.save_file = store, journal, node_id, secrets, save_file
         self.owner_fn = owner_fn            # () -> (state or None, [phone token hashes]) - the owner's live picture
         self.licence_fn = licence_fn        # () -> this PC's subscription code, sent again when it is renewed
+        self.on_online_time = on_online_time   # (serverTime str) -> None; subscription clock from the hub
         self._owner_sig, self._owner_at, self._phones_sig = None, 0, None
         self.wa = None                      # server/wa_auto.Sender - automatic WhatsApp through the seller's service
         self.say = log_fn or (lambda *a: None)
@@ -459,6 +460,13 @@ class GatewaySync:
         self.stat['cards'] = st.get('cards')
         self.stat['gatewayTime'] = st.get('serverTime')
         self.stat['owners'] = st.get('owners')
+        if self.on_online_time:
+            moment = st.get('serverTime')
+            if not moment:
+                from license import probe_http_date
+                moment = probe_http_date(self.secrets.url)
+            if moment:
+                self.on_online_time(moment)
         if 'until' in st:
             self.stat['until'], self.stat['active'] = st.get('until'), st.get('active')
 

@@ -122,6 +122,41 @@ class CodesTest(unittest.TestCase):
         self.clock.t = datetime(2026, 11, 21, 9, 0)                # the clock put right: the trial does not start again either
         self.assertEqual(again.status()['state'], 'trialEnded')     # it started with the oldest data, 2026-10-01
 
+    def test_online_hub_date_past_until_locks(self):
+        self.lic.activate(self.code(date(2026, 11, 10)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+        self.lic.note_online('2026-11-20')
+        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertEqual(again.status()['state'], 'locked')
+
+    def test_offline_failure_does_not_add_a_hub_lock(self):
+        self.lic.activate(self.code(date(2026, 11, 10)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.lic.note_online(None)
+        self.assertIsNone(L.probe_http_date('https://invalid.invalid', timeout=1))
+        self.assertNotIn('trustedDate', L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).data)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+
+    def test_weekend_without_internet_stays_ok(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 7, 18, 0)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+        self.clock.t = datetime(2026, 11, 10, 9, 0)
+        self.assertIn(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], ('ok', 'warn'))
+
+    def test_hub_trusted_date_blocks_local_rollback(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.lic.note_online('2026-11-15')
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+
+    def test_until_in_the_signed_code_is_not_extended_online(self):
+        code = self.code(date(2026, 11, 10), serial=5)
+        self.lic.activate(code)
+        self.lic.note_online('2029-06-01')
+        self.assertEqual(L.read_code(code)['until'], date(2026, 11, 10))
+
     def test_f_a_reset_code_answers_one_request_once(self):
         req = self.lic.reset_request()
         kind, machine, nonce = L.read_request(req)

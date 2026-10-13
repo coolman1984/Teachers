@@ -1,6 +1,16 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Simple subscription protection: rollback + online hub date (2026-10-13, PR #35)
+
+**Why (owner decision):** the 30-hour-per-day runtime counter was too complex and still gameable; centres need a small rule set.
+**What:** removed `license-runtime.json`, runtime timers, and `runPeak` / `runDay` / `runSec`. Protection is now: (1) local
+clock rollback via `_seen` and `CLOCK_SLACK` (`test_e`); (2) the paid last day stays only inside the signed activation code
+(`until` is never extended in code); (3) when online, the licence hub's `serverTime` (gateway poll) or `probe_http_date()` updates
+`trustedDate` in `license.json` — a local date before that is rollback; a hub date past `until`+grace locks even if the PC date
+lies; offline / failed network checks do nothing (fail-open). Tests in `tests/test_license.py`; `docs/OPERATIONS.md` row added.
+**Lesson:** offline-first centres keep working without internet; online checks tighten dates, they do not grant extra days.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's
