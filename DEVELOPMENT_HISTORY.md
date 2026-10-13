@@ -13,6 +13,8 @@
 
 **PR #34 round 3:** `Abort` in `ssPostInstall` does not stop Inno — ACL + boot task moved to `[Run]` with **`waituntilterminated`** (non-zero exit aborts install). `backup.reparse_point` uses `st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT` for Python 3.11; `_mirror_uploads` skips reparse targets; regression test exercises `_mirror_uploads`.
 
+**PR #34 round 4:** `[Run]` non-zero exit does **not** abort Inno (only waits) — ACL + `register_boot_task.ps1` run in **`CurStepChanged(ssInstall)`** pass 2 via **`RaiseException`**. `server/boot_task.py` warns once on first start and adds a Help self-check when the task is missing. Backups: `mirror_target_blocked`, skip file symlinks/reparse points, `follow_symlinks=False`.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

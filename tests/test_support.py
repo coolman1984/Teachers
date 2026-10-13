@@ -219,6 +219,9 @@ class RulesTest(unittest.TestCase):
                          ('ok', 'bad', 'bad', 'warn', 'warn'))
         self.assertEqual(vendorlink.checks({}, now)[0]['state'], 'none')
         self.assertEqual(vendorlink.checks({'lastBackup': (now - timedelta(days=3)).isoformat()}, now)[0]['level'], 'bad')
+        missing = {x['id']: x for x in vendorlink.checks({'lastBackup': now.isoformat(), 'bootTaskOk': False, 'diskFreeMb': 5000,
+                                                           'licence': 'ok', 'sync': 'single', 'errors': 0}, now)}
+        self.assertEqual(missing['bootTask']['level'], 'bad')
 
     def test_heartbeat_body_has_only_listed_fields(self):
         link = vendorlink.Link(os.getcwd(), '9.9.9', dict, {})
