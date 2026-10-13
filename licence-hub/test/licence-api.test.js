@@ -4,7 +4,7 @@ import { createPrivateKey } from 'node:crypto';
 import { newD1 } from './d1-mock.js';
 import {
   handleLicence, approveRequest, refuseRequest, issueOfflineCustomer, derivePollToken, purgeStaleCodes,
-  deviceKey, deviceLockKey, REASON_PAID_IN_STUDIO,
+  deviceKey, deviceLockKey, trialDays, claimTrialLocks, REASON_PAID_IN_STUDIO,
 } from '../src/licence-api.js';
 import { importSigningKey } from '../src/afcodes.js';
 
@@ -84,6 +84,31 @@ test('nonce replay returns the same poll token', async () => {
   assert.equal(second.data.replay, true);
   assert.equal(second.data.poll_token, first.data.poll_token);
   assert.equal(second.data.id, first.data.id);
+});
+
+test('TRIAL_DAYS above 14 is clamped when issuing', async () => {
+  assert.equal(trialDays({ TRIAL_DAYS: '99' }), 14);
+  const e = env();
+  e.TRIAL_DAYS = '99';
+  const key = await importSigningKey(pemFromSeed(Buffer.alloc(32, 8)));
+  const { data } = await postRequest(e, body({ nonce: 'clamp-trial' }));
+  const signed = await approveRequest(e, data.id, key);
+  const first = Date.parse(signed.first_day + 'T12:00:00Z');
+  const last = Date.parse(signed.last_day + 'T12:00:00Z');
+  assert.equal(Math.round((last - first) / 86400000) + 1, 14);
+});
+
+test('concurrent claimTrialLocks: only one request_id owns the device lock', async () => {
+  const e = env();
+  const dkey = deviceKey('7KD2M-QX9TP');
+  const lock = deviceLockKey(dkey);
+  const t = 100;
+  const results = await Promise.all(
+    Array.from({ length: 12 }, (_, i) => claimTrialLocks(e, [lock], `req-${i}`, t + i)),
+  );
+  assert.equal(results.filter(Boolean).length, 1);
+  const row = await e.DB.prepare('SELECT request_id FROM machine_trials WHERE machine = ?').bind(lock).first();
+  assert.ok(row?.request_id?.startsWith('req-'));
 });
 
 test('only one trial wins on concurrent approval for the same device', async () => {

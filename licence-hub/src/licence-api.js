@@ -14,6 +14,16 @@ const MAX_MACHINE = 128;
 const MAX_NONCE = 80;
 const MAX_PENDING_PER_IP = 8;
 const DEFAULT_PENDING_TTL_SEC = 900;
+const MAX_TRIAL_DAYS = 14;
+const RATE_WINDOWS_KEEP = 48;
+const LOGIN_WINDOWS_KEEP = 48;
+
+/** Trial length from env, never more than 14 calendar days (trial-hub signing policy). */
+export function trialDays(env) {
+  const n = Number(env.TRIAL_DAYS ?? 14);
+  if (!Number.isFinite(n)) return MAX_TRIAL_DAYS;
+  return Math.min(MAX_TRIAL_DAYS, Math.max(1, Math.floor(n)));
+}
 
 async function sha256Hex(data) {
   const buf = typeof data === 'string' ? enc.encode(data) : data;
@@ -30,6 +40,15 @@ export async function derivePollToken(sessionSecret, nonce) {
   if (!sessionSecret) throw new Error('no_session_secret');
   const digest = await hmacHex(sessionSecret, `licence-poll/v1|${nonce}`);
   return `lp_${digest.slice(0, 48)}`;
+}
+
+export async function pruneBoundedTables(env) {
+  const t = now();
+  const rateCutoff = Math.floor(t / WINDOW) - RATE_WINDOWS_KEEP;
+  await env.DB.prepare('DELETE FROM rate WHERE window < ?').bind(rateCutoff).run();
+  const loginCutoff = Math.floor(t / 3600) - LOGIN_WINDOWS_KEEP;
+  await env.DB.prepare('DELETE FROM login_attempts WHERE window < ?').bind(loginCutoff).run();
+  await env.DB.prepare('DELETE FROM owner_sessions WHERE expires_at < ?').bind(t).run();
 }
 
 async function limited(env, key, max) {
@@ -136,8 +155,10 @@ async function locksOwnedByRequest(env, dkey, machineHash, requestId) {
 
 export async function handleLicence(request, env, url) {
   const ip = request.headers.get('CF-Connecting-IP') || 'local';
-  if (await limited(env, 'lic:ip:' + ip, 120)) return json({ error: 'rate' }, 429);
   if (!env.SESSION_SECRET) return json({ error: 'config' }, 503);
+
+  await pruneBoundedTables(env);
+  if (await limited(env, 'lic:ip:' + ip, 120)) return json({ error: 'rate' }, 429);
 
   await expireStalePending(env);
 
@@ -274,30 +295,30 @@ async function clearTrialLocks(env, dkey, machineHash) {
   await env.DB.prepare('DELETE FROM machine_trials WHERE machine = ?').bind(dkey).run();
 }
 
-async function claimAndIssue(env, requestId, dkey, machineHash, signed, t, force) {
-  if (force) await clearTrialLocks(env, dkey, machineHash);
-
+function trialLockIds(dkey, machineHash) {
   const locks = [deviceLockKey(dkey)];
   if (machineHash) locks.push(machineLockKey(machineHash));
+  return locks;
+}
 
-  const stmts = locks.map((lock) =>
-    env.DB.prepare('INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?) ON CONFLICT(machine) DO NOTHING').bind(lock, requestId, t),
-  );
-  stmts.push(
-    env.DB.prepare(
-      'UPDATE licence_requests SET status = ?, stage = ?, code = ?, updated_at = ? WHERE id = ? AND code IS NULL AND status NOT IN (?, ?)',
-    ).bind('issued', 'approved', signed.code, t, requestId, 'refused', 'delivered'),
-  );
-  await env.DB.batch(stmts);
-
-  if (!(await locksOwnedByRequest(env, dkey, machineHash, requestId))) {
-    await env.DB.prepare(
-      'UPDATE licence_requests SET code = NULL, status = ?, reason = ?, updated_at = ? WHERE id = ?',
-    ).bind('refused', 'already_used', t, requestId).run();
-    return false;
+/** Atomic one-trial-per-machine: INSERT … ON CONFLICT only succeeds for the owning request_id. */
+export async function claimTrialLocks(env, locks, requestId, t) {
+  for (const lock of locks) {
+    const inserted = await env.DB.prepare(
+      'INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?) ON CONFLICT(machine) DO NOTHING RETURNING machine',
+    ).bind(lock, requestId, t).first();
+    if (inserted) continue;
+    const row = await env.DB.prepare('SELECT request_id FROM machine_trials WHERE machine = ?').bind(lock).first();
+    if (!row || row.request_id !== requestId) return false;
   }
-  const after = await env.DB.prepare('SELECT code, status FROM licence_requests WHERE id = ?').bind(requestId).first();
-  return Boolean(after?.code && after.status === 'issued');
+  return true;
+}
+
+async function issueRowCode(env, requestId, signed, t) {
+  const upd = await env.DB.prepare(
+    'UPDATE licence_requests SET status = ?, stage = ?, code = ?, updated_at = ? WHERE id = ? AND code IS NULL AND status NOT IN (?, ?)',
+  ).bind('issued', 'approved', signed.code, t, requestId, 'refused', 'delivered').run();
+  return upd.meta.changes === 1;
 }
 
 export async function approveRequest(env, requestId, privateKey, options = {}) {
@@ -330,16 +351,25 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
 
   const t = now();
   const tz = env.LICENCE_CALENDAR_TZ || 'Africa/Cairo';
+  const locks = trialLockIds(dkey, machineHash);
   let signed;
   try {
+    if (force) await clearTrialLocks(env, dkey, machineHash);
     if (!force && (await trialUsedOnline(env, dkey, machineHash))) {
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }
-    const days = Number(env.TRIAL_DAYS || 14);
+    if (!(await claimTrialLocks(env, locks, requestId, t))) {
+      await refuseRequest(env, requestId, 'already_used');
+      return null;
+    }
+    const days = trialDays(env);
     signed = await issueTrialCode(privateKey, row.product, row.device, days, new Date(), tz);
-    const ok = await claimAndIssue(env, requestId, dkey, machineHash, signed, t, force);
-    if (!ok) return null;
+    const ok = await issueRowCode(env, requestId, signed, t);
+    if (!ok) {
+      await refuseRequest(env, requestId, 'already_used');
+      return null;
+    }
   } catch (e) {
     if (e?.message === 'bad_device_code') {
       await refuseRequest(env, requestId, 'bad_device');
@@ -364,21 +394,19 @@ export async function issueOfflineCustomer(env, privateKey, device, shop, produc
   if (!force && (await trialUsedForDevice(env, dkey))) {
     throw new Error('already_used');
   }
-  const days = Number(env.TRIAL_DAYS || 14);
+  const days = trialDays(env);
   const tz = env.LICENCE_CALENDAR_TZ || 'Africa/Cairo';
-  const signed = await issueTrialCode(privateKey, productId, device, days, new Date(), tz);
   const t = now();
   const requestId = 'offline:' + crypto.randomUUID();
   const lock = deviceLockKey(dkey);
   if (force) await clearTrialLocks(env, dkey, null);
-
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO machine_trials(machine, request_id, at) VALUES(?, ?, ?) ON CONFLICT(machine) DO NOTHING').bind(lock, requestId, t),
-  ]);
-  const claim = await trialLockRow(env, lock);
-  if (!claim || claim.request_id !== requestId) {
+  if (!force && (await trialUsedForDevice(env, dkey))) {
     throw new Error('already_used');
   }
+  if (!(await claimTrialLocks(env, [lock], requestId, t))) {
+    throw new Error('already_used');
+  }
+  const signed = await issueTrialCode(privateKey, productId, device, days, new Date(), tz);
   await env.DB.prepare(
     'INSERT INTO customers(id, shop, device, kind, serial, first_day, last_day, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
   ).bind(crypto.randomUUID(), shop.slice(0, 60) || '—', signed.device, 'trial', signed.serial, signed.first_day, signed.last_day, t).run();
@@ -387,8 +415,9 @@ export async function issueOfflineCustomer(env, privateKey, device, shop, produc
 
 /** Drop activation codes from delivered rows older than TRIAL_DAYS (scheduled). */
 export async function purgeStaleCodes(env) {
-  const days = Number(env.TRIAL_DAYS || 14);
+  const days = trialDays(env);
   const cutoff = now() - days * 86400;
+  await pruneBoundedTables(env);
   await expireStalePending(env);
   await env.DB.prepare(
     "UPDATE licence_requests SET code = NULL WHERE code IS NOT NULL AND updated_at < ? AND status IN ('delivered', 'issued')",

@@ -8,7 +8,6 @@ import os
 import struct
 import sys
 import threading
-import time
 from datetime import date, datetime, timedelta
 
 import ed25519
@@ -21,7 +20,6 @@ TRIAL_DAYS = 7
 WARN_DAYS = 7
 GRACE_DAYS = 3
 CLOCK_SLACK = timedelta(hours=2)
-RUN_LIMIT = timedelta(hours=30)
 KIND_ACTIVATE, KIND_RESET = 1, 2
 ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -137,15 +135,11 @@ def read_code(code, pub=None):
 
 
 class License(LicenseHubMixin):
-    def __init__(self, home, data_time=None, required=True, now=None, elapsed=None, monotonic=None,
-                 assist=None, cfg=None, root=None, shop_name=lambda: ''):
+    def __init__(self, home, data_time=None, required=True, now=None, assist=None, cfg=None, root=None, shop_name=lambda: ''):
         self.path = os.path.join(home, 'license.json')
         self.data_time = data_time or (lambda: (None, None))
         self.required = required
         self.now = now or datetime.now
-        self._elapsed = elapsed
-        self.monotonic = monotonic or time.monotonic
-        self._mono_at = None
         self.lock = threading.Lock()
         self.machine = machine_hash()
         self.data = self._load()
@@ -181,29 +175,6 @@ class License(LicenseHubMixin):
             return None
         return hw
 
-    def _tick_runtime(self, t):
-        today = t.date().isoformat()
-        run_day = self.data.get('runDay')
-        run_sec = float(self.data.get('runSec') or 0)
-        if self._elapsed is not None:
-            delta = max(0.0, float(self._elapsed()))
-        else:
-            mono = self.monotonic()
-            delta = max(0.0, mono - self._mono_at) if self._mono_at is not None else 0.0
-            self._mono_at = mono
-        if run_day != today:
-            run_day, run_sec = today, 0.0
-        run_sec += delta
-        self.data['runDay'] = run_day
-        self.data['runSec'] = run_sec
-        try:
-            if self.data.get('_runSaved') != run_sec:
-                self.data['_runSaved'] = run_sec
-                self._save()
-        except OSError:
-            pass
-        return run_sec > RUN_LIMIT.total_seconds()
-
     def request(self):
         return request_code(KIND_ACTIVATE, self.machine, 0)
 
@@ -212,7 +183,6 @@ class License(LicenseHubMixin):
             t = self.now()
             today = t.date()
             behind = self._seen(t)
-            frozen = self._tick_runtime(t)
             out = {'request': self.request(), 'required': self.required, 'machineOk': True, 'centre': self.data.get('centre') or '',
                    'until': None, 'daysLeft': None, 'serial': self.data.get('serial'), 'history': (self.data.get('history') or [])[-12:],
                    'hub': self.hub_enabled if getattr(self, 'a', None) else False}
@@ -221,8 +191,6 @@ class License(LicenseHubMixin):
                 out['hubRequest'] = self.hub_public()
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
                 return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': behind[:16].replace('T', ' ')}
-            if frozen:
-                return {**out, 'state': 'clock' if self.required else 'off', 'clockSeen': t.replace(microsecond=0).strftime('%Y-%m-%d %H:%M')}
             code = self.data.get('code')
             info = None
             if code:
@@ -283,8 +251,6 @@ class License(LicenseHubMixin):
             t = self.now()
             behind = self._seen(t)
             if behind and t + CLOCK_SLACK < datetime.fromisoformat(behind[:19]):
-                raise ValueError('clock')
-            if self._tick_runtime(t):
                 raise ValueError('clock')
             if info['until'] < t.date():
                 raise ValueError('expired')

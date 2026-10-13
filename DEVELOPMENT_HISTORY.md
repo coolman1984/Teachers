@@ -1,6 +1,11 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## PR #39 review fixes: trial clamp, atomic locks, prune tables (2026-10-13)
+
+**What:** Worker `trialDays()` clamps `TRIAL_DAYS` to ≤14; trial locks claimed with `INSERT … ON CONFLICT` before signing (export `claimTrialLocks`); concurrency test. Prune old `rate`, `login_attempts`, and expired `owner_sessions` on licence traffic and owner login. Security log translation `sec.d.licenceRequested`. Removed duplicate `runDay`/`runSec` frozen runtime from `license.py` (PR #35 owns that logic on rebase).
+**Checks:** `cd licence-hub && npm test`; `cd tests && python3 -m unittest test_license test_license_hub`.
+
 ## Rework PR #39 — Yousef final licence design (owner 2026-10-13)
 
 **What:** One licence system in `server/license.py` + `server/license_hub_mixin.py` (removed parallel `server/licence.py`). Licence hub Worker is **trial-only** (`LICENCE_SIGNING_KEY`, kid `trial-hub`); paid/monthly on owner PC (`tools/seller.py`, Licence Studio). Subscription UI unified in `js/views/license.js`. `/api/licence*` administrator-only; `/api/license` hides device codes unless local admin session. Hub `/licence/ack` keeps issued codes; owner monthly confirm fixed. `tools/seller.py` counter serials (#36); frozen runtime in unified `license.py` (#35). Tests: `tests/test_license_hub.py`, hub npm tests (dates, ack, monthly refused).

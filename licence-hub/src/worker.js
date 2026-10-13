@@ -1,4 +1,4 @@
-import { handleLicence, approveRequest, refuseRequest, issueOfflineCustomer, purgeStaleCodes, REASON_PAID_IN_STUDIO } from './licence-api.js';
+import { handleLicence, approveRequest, refuseRequest, issueOfflineCustomer, purgeStaleCodes, pruneBoundedTables, REASON_PAID_IN_STUDIO } from './licence-api.js';
 import { importSigningKey } from './afcodes.js';
 import {
   SESSION_COOKIE, CSRF_COOKIE, verifyPassword, parseCookies, cookieHeader, loadSession, createSession,
@@ -114,6 +114,7 @@ async function ownerPages(request, env, url) {
   if (!sessionSecret) return html('<p>SESSION_SECRET missing</p>', 503);
 
   if (url.pathname === '/owner/login' && request.method === 'POST') {
+    await pruneBoundedTables(env);
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
     if (await loginLimited(env, ip)) return html('<p>Too many attempts</p>', 429);
     const form = await request.formData();

@@ -178,8 +178,6 @@ class LicenseHubMixin:
             behind = self._seen(t)
             if behind and t + self._clock_slack() < datetime.fromisoformat(behind[:19]):
                 raise ValueError('clock')
-            if getattr(self, '_tick_runtime', lambda _t: False)(t):
-                raise ValueError('clock')
             self.data.update(code=grouped, serial=terms.get('serial'), codeKind='af', afEdition=terms.get('edition'))
             hist = self.data.setdefault('history', [])
             hist.append({'at': t.isoformat(timespec='seconds'), 'by': who, 'until': terms.get('last_day'),
