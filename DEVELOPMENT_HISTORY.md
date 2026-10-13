@@ -9,6 +9,8 @@
 
 **PR #34 review (same day):** the downgrade check used `{{` in a `[Code]` string and never read `DisplayVersion`; fixed with `#define HessaUninstallRegKey` and a test on the exact key. The boot task no longer runs as **SYSTEM** (privilege escalation into world-writable ProgramData): `installer/register_boot_task.ps1` registers via XML as **LOCAL SERVICE** (`S-1-5-19`) with `PT0S` limit, battery allowed, restart on failure; `icacls` grants that SID modify on `%ProgramData%\Hessa` only.
 
+**PR #34 re-review:** `register_boot_task.ps1` had `dontcopy` so it never ran — now shipped under `{app}`, invoked from `CurStepChanged` with `RunCmd`/`Abort` on failure; task XML adds `LogonType` **ServiceAccount** and verifies registration. `%ProgramData%\Hessa` drops Inno `users-modify` in favour of explicit **Administrators / LOCAL SERVICE / Users** ACLs (Users still need modify for interactive sessions). `backup.junction_dir` skips junctions when mirroring uploads.
+
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 
 **Why (review of the same engine in Trip Orders):** the chosen course and the finished lessons were saved in the PC's

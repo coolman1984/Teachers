@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 import engine_domain
 from cluster import Cluster, Peer  # noqa: F401 (sets sys.path, registers the engine test entities)
@@ -542,6 +543,13 @@ class Review231Test(unittest.TestCase):
             j.conn.close()
         finally:
             shutil.rmtree(cl.root, ignore_errors=True)
+
+    def test_backup_mirror_skips_junction_dirs(self):
+        import backup
+        with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os.path, 'isjunction', return_value=True, create=True):
+            self.assertTrue(backup.junction_dir('/fake/junction'))
+        with mock.patch.object(backup.os, 'name', 'nt'), mock.patch.object(backup.os.path, 'isjunction', return_value=False, create=True):
+            self.assertFalse(backup.junction_dir('/fake/normal'))
 
     def test_network_folders_refused(self):
         import backup

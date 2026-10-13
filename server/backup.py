@@ -36,6 +36,18 @@ def _drive_type(root):
     return ctypes.windll.kernel32.GetDriveTypeW(root)
 
 
+def junction_dir(path):
+    """True for a Windows directory junction/reparse point (do not walk or mirror into backups)."""
+    if os.name != 'nt':
+        return False
+    if hasattr(os.path, 'isjunction'):
+        try:
+            return os.path.isjunction(path)
+        except OSError:
+            return False
+    return False
+
+
 def network_folder(path, drive_type=None):
     """True for a network folder: \\\\server\\share or a mapped network drive such as Z:. Backups contain the password
     hashes and the history, so they are only copied to disks of this PC (USB drive, second disk)."""
@@ -123,7 +135,8 @@ class Backups:
         return name
 
     def _mirror_uploads(self, target):
-        for root, _, files in os.walk(self.uploads_dir):
+        for root, dirs, files in os.walk(self.uploads_dir):
+            dirs[:] = [d for d in dirs if not junction_dir(os.path.join(root, d))]
             rel = os.path.relpath(root, self.uploads_dir)
             out = os.path.join(target, rel)
             for f in files:

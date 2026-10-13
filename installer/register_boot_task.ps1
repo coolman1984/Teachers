@@ -30,6 +30,7 @@ $xml = @"
   <Principals>
     <Principal id="Author">
       <UserId>S-1-5-19</UserId>
+      <LogonType>ServiceAccount</LogonType>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
@@ -74,3 +75,12 @@ if ($existing) {
 }
 Register-ScheduledTask -TaskName $taskName -Xml (Get-Content -LiteralPath $xmlPath -Raw) -Force | Out-Null
 Remove-Item -LiteralPath $xmlPath -Force -ErrorAction SilentlyContinue
+
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+if (-not $task -or $task.State -eq 'Disabled') {
+    throw "Scheduled task $taskName was not registered."
+}
+$principal = $task.Principal
+if ($principal.LogonType -ne 'ServiceAccount' -or $principal.UserId -notmatch 'S-1-5-19|LOCAL SERVICE') {
+    throw "Scheduled task $taskName has the wrong run-as account."
+}
