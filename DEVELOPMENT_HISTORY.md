@@ -8,7 +8,7 @@ account before the owner. Editing `config.json` could turn the trial path back o
 **What:** `server/app.py` `dev_login_allowed()` ignores `dev_login` when `license._compiled()`; first-run config on the installed
 program writes `dev_login` false. `tests/test_center_safety.TrialLoginTest` adds compiled-marker cases; harness `Server.start(compiled='compiled'|'uncompiled')` sets `license.__compiled__` or `license.__uncompiled__` then starts `app.py` through `runpy`. `docs/OPERATIONS.md` updated.
 **Lesson:** the trial sign-in stays on for `python3 server/app.py` only; sale hardening belongs in `_compiled()`, not in manual config edits.
-**Follow-up (PR #38 review):** `license._compiled()` also treats Nuitka's `__uncompiled__` marker (task 1); tests simulate both markers. Harness sets `HS_HOME` to the temp server root so subprocess tests never touch the checkout `data/` folder.
+**Follow-up (PR #38 review):** `license._compiled()` also treats Nuitka's `__uncompiled__` marker (task 1); tests simulate both markers. Harness sets `HS_HOME` to the temp server's `data/` folder (config one level up) so subprocess tests never touch the checkout `data/` folder and a fake USB at `<root>/usb` stays outside program data.
 
 ## Seller tool: unique activation serials (sale-hardening task 6, 2026-10-13)
 
