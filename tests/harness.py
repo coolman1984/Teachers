@@ -119,7 +119,9 @@ class Server:
 
     def start(self, wait=True, compiled=False):
         """compiled: False for source runs; True or 'compiled' / 'uncompiled' to simulate Nuitka markers in Hessa.exe."""
-        env = dict(os.environ, HS_CONFIG=self.cfg_path, HS_HOME=self.root, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
+        # HS_HOME = the data folder (like …\Hessa\data): config.json stays one level up so a fake USB at
+        # <server-root>/usb is outside program data and passes set_backup_folder's guard.
+        env = dict(os.environ, HS_CONFIG=self.cfg_path, HS_HOME=self.data_dir, PYTHONUNBUFFERED='1', HS_NO_DIALOG='1')
         if compiled:
             marker = 'uncompiled' if compiled == 'uncompiled' else 'compiled'
             attr = '__uncompiled__' if marker == 'uncompiled' else '__compiled__'
