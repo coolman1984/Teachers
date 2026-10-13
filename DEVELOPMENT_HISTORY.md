@@ -1,25 +1,15 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
-## Frozen Windows date cannot keep a paid month (2026-10-13)
+## Simple subscription protection: rollback + online hub date (2026-10-13, PR #35)
 
-**Why (sale-hardening plan task 3):** if the centre set the date to the last paid day and never let the program see a later
-day, the rollback check stayed quiet and saving kept working with no new code.
-**What:** `server/license.py` stores real runtime on each wall-clock date in `license.json` (`runDay` / `runSec`, monotonic
-between ticks). More than 30 hours on one date sets state `clock` and blocks saves, including across restarts; a new calendar
-day clears the counter. Regression in `tests/test_license.py` `test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month`;
-`test_e` unchanged.
-**Follow-up (PR #35 review):** count monotonic time only while the wall date is unchanged in-process (no weekend idle on the
-new day); stash per-day seconds in `runCarry` when the calendar jumps forward so stepping back across midnight cannot zero the
-bucket; persist `runSec` with `_runPersisted` throttled to five minutes unless the day changes or the limit is hit; tests
-`test_i`–`test_l`.
-**Second follow-up:** per-serial `runPeak` / `runPeakEcho` and `runPeakSnap` in activation history (never reduced); honest
-calendar forward clears old peaks using `seen` before each tick; runtime from process start through first check; force persist
-when the wall date has not advanced; `License.flush_runtime()` on server shutdown; tests `test_m`–`test_q`.
-**Third follow-up (simplify):** peaks only in `license-runtime.json`; `status()` reads, `timer_tick()` + `start_timer()` accumulate;
-`license.json` no longer rewritten on poll (5-minute throttle on the side file when idle); peaks are never cleared by clock jumps,
-only after the wall date is two+ days in the past; tests `test_r`–`test_u`.
-**Lesson:** limit cheating with the clock the PC reports and with real elapsed time — not only with the high-water mark.
+**Why (owner decision):** the 30-hour-per-day runtime counter was too complex and still gameable; centres need a small rule set.
+**What:** removed `license-runtime.json`, runtime timers, and `runPeak` / `runDay` / `runSec`. Protection is now: (1) local
+clock rollback via `_seen` and `CLOCK_SLACK` (`test_e`); (2) the paid last day stays only inside the signed activation code
+(`until` is never extended in code); (3) when online, the licence hub's `serverTime` (gateway poll) or `probe_http_date()` updates
+`trustedDate` in `license.json` — a local date before that is rollback; a hub date past `until`+grace locks even if the PC date
+lies; offline / failed network checks do nothing (fail-open). Tests in `tests/test_license.py`; `docs/OPERATIONS.md` row added.
+**Lesson:** offline-first centres keep working without internet; online checks tighten dates, they do not grant extra days.
 
 ## Learning progress belongs to the person, not to the PC (2026-10-11)
 

@@ -30,26 +30,7 @@ class Clock:
         return self.t
 
 
-class FakeMono:
-    def __init__(self, t=0.0):
-        self.t = t
-
-    def __call__(self):
-        return self.t
-
-    def advance(self, sec):
-        self.t += sec
-
-
 class CodesTest(unittest.TestCase):
-    def runtime_tick(self, elapsed=0):
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 0).timer_tick()
-        if elapsed:
-            lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: elapsed)
-            lic.timer_tick()
-            return lic
-        return L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
-
     def setUp(self):
         os.environ['HS_LICENSE_PUB'] = PUB.hex()
         os.environ['HS_MACHINE_ID'] = HERE_PC
@@ -126,118 +107,6 @@ class CodesTest(unittest.TestCase):
         self.assertIn(st['state'], ('trial', 'trialEnded'))
         self.assertNotEqual(copy.request(), self.lic.request())
 
-    def test_r_license_json_is_not_rewritten_every_poll_on_a_normal_day(self):
-        """(a) Open screens poll status; license.json must stay quiet (side store may update)."""
-        self.lic.activate(self.code(date(2026, 12, 6)))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        path = os.path.join(self.home, 'license.json')
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
-        mtime = os.path.getmtime(path)
-        for _ in range(10):
-            L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
-        self.assertEqual(os.path.getmtime(path), mtime)
-
-    def test_s_side_store_survives_license_json_restore_and_reactivation(self):
-        """(b) Peaks in license-runtime.json beat a rolled-back license.json and a fresh code paste."""
-        serial = 8
-        code = self.code(date(2026, 11, 10), serial=serial)
-        self.lic.activate(code)
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.runtime_tick(31 * 3600)
-        lic_path = os.path.join(self.home, 'license.json')
-        with open(lic_path, encoding='utf-8') as f:
-            good = json.load(f)
-        stale = {k: v for k, v in good.items() if k not in ('runDay', 'runSec', 'runPeak', 'runPeakEcho', 'runCarry')}
-        stale['runSec'] = 0
-        with open(lic_path, 'w', encoding='utf-8') as f:
-            json.dump(stale, f)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-        os.remove(lic_path)
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).activate(code)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-
-    def test_t_quick_forward_and_back_cannot_wipe_peaks(self):
-        """(c) Jump forward one day then back ~1h may be repeated; peaks must not drop below the limit."""
-        serial = 7
-        self.lic.activate(self.code(date(2026, 11, 10), serial=serial))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.runtime_tick(31 * 3600)
-        for _ in range(3):
-            self.clock.t = datetime(2026, 11, 11, 0, 30)
-            L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).timer_tick()
-            self.clock.t = datetime(2026, 11, 10, 23, 30)
-            L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).timer_tick()
-        side = json.load(open(os.path.join(self.home, L.RUN_SIDE), encoding='utf-8'))
-        self.assertGreater(float(side['peaks'][str(serial)]['2026-11-10']), L.RUN_LIMIT.total_seconds())
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-
-    def test_u_background_timer_splits_runtime_across_wall_dates_without_status(self):
-        """(d) Long uptime without /api/license must not put 40h on one paid day when the clock is honest."""
-        self.lic.activate(self.code(date(2026, 12, 6), serial=3))
-        mono = FakeMono()
-        self.clock.t = datetime(2026, 11, 10, 8, 0)
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono).timer_tick()
-        mono.advance(12 * 3600)
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono).timer_tick()
-        self.clock.t = datetime(2026, 11, 11, 8, 0)
-        mono.advance(12 * 3600)
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, monotonic=mono).timer_tick()
-        self.assertIn(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], ('ok', 'warn'))
-        self.clock.t = datetime(2026, 11, 12, 8, 0)
-        self.runtime_tick(0)
-        self.runtime_tick(41 * 3600)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-
-    def test_j_stepping_the_clock_back_across_midnight_keeps_runtime(self):
-        self.lic.activate(self.code(date(2026, 12, 6)))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.runtime_tick(20 * 3600)
-        self.clock.t = datetime(2026, 11, 11, 1, 0)
-        L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).timer_tick()
-        self.clock.t = datetime(2026, 11, 10, 23, 0)
-        self.runtime_tick(11 * 3600)
-        self.runtime_tick(12 * 3600)
-        st = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()
-        self.assertEqual(st['state'], 'clock')
-        self.assertTrue(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).blocked())
-
-    def test_k_runtime_persists_across_two_restarts(self):
-        self.lic.activate(self.code(date(2026, 12, 6)))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.runtime_tick(0)
-        self.runtime_tick(15 * 3600)
-        side = json.load(open(os.path.join(self.home, L.RUN_SIDE), encoding='utf-8'))
-        self.assertAlmostEqual(float(side['peaks']['1']['2026-11-10']), 15 * 3600, delta=1)
-        self.runtime_tick(16 * 3600)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-
-    def test_o_nightly_shutdowns_accumulate_on_a_frozen_date(self):
-        self.lic.activate(self.code(date(2026, 11, 10), serial=4))
-        self.clock.t = datetime(2026, 11, 10, 18, 0)
-        for _ in range(4):
-            lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock, elapsed=lambda: 8 * 3600)
-            lic.timer_tick()
-            lic.flush_runtime()
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-
-    def test_h_freezing_the_wall_clock_date_cannot_keep_a_paid_month(self):
-        self.lic.activate(self.code(date(2026, 12, 6)))
-        self.clock.t = datetime(2026, 11, 10, 10, 0)
-        self.runtime_tick(0)
-        self.runtime_tick(12 * 3600)
-        self.assertIn(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], ('ok', 'warn'))
-        self.runtime_tick(19 * 3600)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
-        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
-        self.assertEqual(again.status()['state'], 'clock')
-        with self.assertRaises(ValueError) as caught:
-            again.activate(self.code(date(2026, 12, 20), serial=2))
-        self.assertEqual(str(caught.exception), 'clock')
-        self.clock.t = datetime(2026, 11, 15, 10, 0)
-        self.runtime_tick(3600)
-        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'ok')
-
     def test_e_moving_the_clock_back_stops_saving_instead_of_giving_days(self):
         self.lic.activate(self.code(date(2026, 11, 6)))
         self.clock.t = datetime(2026, 11, 20, 9, 0)                # time passes: ended
@@ -252,6 +121,41 @@ class CodesTest(unittest.TestCase):
         self.assertEqual(again.status()['state'], 'clock')
         self.clock.t = datetime(2026, 11, 21, 9, 0)                # the clock put right: the trial does not start again either
         self.assertEqual(again.status()['state'], 'trialEnded')     # it started with the oldest data, 2026-10-01
+
+    def test_online_hub_date_past_until_locks(self):
+        self.lic.activate(self.code(date(2026, 11, 10)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+        self.lic.note_online('2026-11-20')
+        again = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertEqual(again.status()['state'], 'locked')
+
+    def test_offline_failure_does_not_add_a_hub_lock(self):
+        self.lic.activate(self.code(date(2026, 11, 10)))
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.lic.note_online(None)
+        self.assertIsNone(L.probe_http_date('https://invalid.invalid', timeout=1))
+        self.assertNotIn('trustedDate', L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).data)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+
+    def test_weekend_without_internet_stays_ok(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.clock.t = datetime(2026, 11, 7, 18, 0)
+        self.assertIn(self.lic.status()['state'], ('ok', 'warn'))
+        self.clock.t = datetime(2026, 11, 10, 9, 0)
+        self.assertIn(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], ('ok', 'warn'))
+
+    def test_hub_trusted_date_blocks_local_rollback(self):
+        self.lic.activate(self.code(date(2026, 12, 6)))
+        self.lic.note_online('2026-11-15')
+        self.clock.t = datetime(2026, 11, 10, 10, 0)
+        self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+
+    def test_until_in_the_signed_code_is_not_extended_online(self):
+        code = self.code(date(2026, 11, 10), serial=5)
+        self.lic.activate(code)
+        self.lic.note_online('2029-06-01')
+        self.assertEqual(L.read_code(code)['until'], date(2026, 11, 10))
 
     def test_f_a_reset_code_answers_one_request_once(self):
         req = self.lic.reset_request()

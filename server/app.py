@@ -240,7 +240,6 @@ if INSTANCE:
             r = JOURNAL.conn.execute("SELECT MAX(ts), MIN(ts) FROM audit WHERE kind='data'").fetchone()
         return (r[0], r[1]) if r else (None, None)
     LICENSE = license_mod.License(DATA_DIR, data_time, required=license_mod._compiled() or bool(CFG.get('license_required')))
-    LICENSE.start_timer()
 else:
     SYSTEM = STORE = AUTH = BACKUPS = JOURNAL = NODE = SYNC = SECRETS = AI_KEY = LICENSE = None
 GATE = None
@@ -299,7 +298,7 @@ def parent_link(st):
 
 if INSTANCE:
     GATE = gwc.GatewaySync(STORE, JOURNAL, NODE.id, SECRETS, store_bytes, log_fn=say, owner_fn=owner_picture,
-                           licence_fn=lambda: LICENSE.data.get('code') or '')
+                           licence_fn=lambda: LICENSE.data.get('code') or '', on_online_time=LICENSE.note_online)
     # one sender per centre: the administrator PC; it writes each message in the follow-up history as "Hessa online (automatic)"
     GATE.wa = wa_auto.Sender(STORE, DATA_DIR, lambda: center.Ctx(STORE, JOURNAL, NODE.id, wa_auto.WHO, '', 'system', None, ['followup.log']),
                              parent_link, is_sender=lambda: NODE.is_authority and not LICENSE.blocked())
@@ -1888,8 +1887,6 @@ def main(background=False):
     except KeyboardInterrupt:
         pass
     finally:
-        if LICENSE is not None:
-            LICENSE.flush_runtime()
         GATE.stop()
         SYNC.shutdown()
         JOURNAL.flush_activity()
