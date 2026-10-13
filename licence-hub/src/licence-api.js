@@ -321,6 +321,27 @@ async function issueRowCode(env, requestId, signed, t) {
   return upd.meta.changes === 1;
 }
 
+/** Same request re-approved (double tab / retry): return stored code when this request still owns the locks. */
+async function existingIssueForRequest(env, requestId, dkey, machineHash) {
+  const row = await env.DB.prepare('SELECT * FROM licence_requests WHERE id = ?').bind(requestId).first();
+  if (!row?.code || row.status === 'refused' || row.status === 'delivered') return null;
+  if (!(await locksOwnedByRequest(env, dkey, machineHash, requestId))) return null;
+  if (row.status !== 'issued') {
+    await env.DB.prepare(
+      'UPDATE licence_requests SET status = ?, stage = ?, updated_at = ? WHERE id = ?',
+    ).bind('issued', 'approved', now(), requestId).run();
+  }
+  return signedFromRow(row);
+}
+
+async function recordCustomerOnce(env, row, signed, t) {
+  const prior = await env.DB.prepare('SELECT id FROM customers WHERE device = ? LIMIT 1').bind(signed.device).first();
+  if (prior) return;
+  await env.DB.prepare(
+    'INSERT INTO customers(id, shop, device, kind, serial, first_day, last_day, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
+  ).bind(crypto.randomUUID(), row.shop || '—', signed.device, signed.edition === 'standard' ? 'monthly' : row.kind, signed.serial, signed.first_day, signed.last_day, t).run();
+}
+
 export async function approveRequest(env, requestId, privateKey, options = {}) {
   const force = options.force === true;
   const row = await env.DB.prepare('SELECT * FROM licence_requests WHERE id = ?').bind(requestId).first();
@@ -340,6 +361,9 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
   }
   const machineHash = normalizeMachineHash(row.machine);
 
+  const early = await existingIssueForRequest(env, requestId, dkey, machineHash);
+  if (early) return early;
+
   if (row.status === 'issued' && row.code) {
     if (row.kind === 'trial' && !(await locksOwnedByRequest(env, dkey, machineHash, requestId))) {
       await env.DB.prepare('UPDATE licence_requests SET code = NULL, status = ?, updated_at = ? WHERE id = ?')
@@ -355,11 +379,14 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
   let signed;
   try {
     if (force) await clearTrialLocks(env, dkey, machineHash);
-    if (!force && (await trialUsedOnline(env, dkey, machineHash))) {
+    const owned = await locksOwnedByRequest(env, dkey, machineHash, requestId);
+    if (!force && (await trialUsedOnline(env, dkey, machineHash)) && !owned) {
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }
     if (!(await claimTrialLocks(env, locks, requestId, t))) {
+      const again = await existingIssueForRequest(env, requestId, dkey, machineHash);
+      if (again) return again;
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }
@@ -367,6 +394,8 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
     signed = await issueTrialCode(privateKey, row.product, row.device, days, new Date(), tz);
     const ok = await issueRowCode(env, requestId, signed, t);
     if (!ok) {
+      const again = await existingIssueForRequest(env, requestId, dkey, machineHash);
+      if (again) return again;
       await refuseRequest(env, requestId, 'already_used');
       return null;
     }
@@ -377,9 +406,7 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
     throw e;
   }
 
-  await env.DB.prepare(
-    'INSERT INTO customers(id, shop, device, kind, serial, first_day, last_day, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)',
-  ).bind(crypto.randomUUID(), row.shop || '—', signed.device, signed.edition === 'standard' ? 'monthly' : row.kind, signed.serial, signed.first_day, signed.last_day, t).run();
+  await recordCustomerOnce(env, row, signed, t);
   return signed;
 }
 

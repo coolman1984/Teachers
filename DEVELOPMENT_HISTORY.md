@@ -1,6 +1,11 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## PR #39 round 3: idempotent owner approve (2026-10-13)
+
+**What:** `approveRequest` treats “locks already owned by this request id” as success: skip `already_used` when the trial lock is ours, return stored code when a concurrent second approve races on `UPDATE`, keep `status=issued`. `recordCustomerOnce` avoids duplicate customer rows. Test: concurrent `Promise.all` double approve on one request.
+**Checks:** `cd licence-hub && npm test`.
+
 ## PR #39 review fixes: trial clamp, atomic locks, prune tables (2026-10-13)
 
 **What:** Worker `trialDays()` clamps `TRIAL_DAYS` to ≤14; trial locks claimed with `INSERT … ON CONFLICT` before signing (export `claimTrialLocks`); concurrency test. Prune old `rate`, `login_attempts`, and expired `owner_sessions` on licence traffic and owner login. Security log translation `sec.d.licenceRequested`. Removed duplicate `runDay`/`runSec` frozen runtime from `license.py` (PR #35 owns that logic on rebase).

@@ -264,6 +264,20 @@ test('approve retry returns the same code', async () => {
   assert.equal(first.code, second.code);
 });
 
+test('concurrent approve on the same request is idempotent (issued, not refused)', async () => {
+  const e = env();
+  const key = await importSigningKey(pemFromSeed(Buffer.alloc(32, 10)));
+  const { data } = await postRequest(e, body({ nonce: 'double-approve-same' }));
+  const [a, b] = await Promise.all([approveRequest(e, data.id, key), approveRequest(e, data.id, key)]);
+  assert.ok(a?.code, 'first tab must get a code');
+  assert.ok(b?.code, 'second tab must get the same code, not already_used');
+  assert.equal(a.code, b.code);
+  const row = await e.DB.prepare('SELECT status, reason, code FROM licence_requests WHERE id = ?').bind(data.id).first();
+  assert.equal(row.status, 'issued');
+  assert.equal(row.reason, '');
+  assert.equal(row.code, a.code);
+});
+
 test('monthly request is refused at submit (paid in Licence Studio)', async () => {
   const e = env();
   const { data, res } = await postRequest(e, body({ kind: 'monthly', nonce: 'monthly-submit-1' }));
