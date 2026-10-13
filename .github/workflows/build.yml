@@ -5,7 +5,7 @@ name: Test and build
 
 on:
   push:
-    branches: [main, 'claude/**']
+    branches: [main, 'claude/**', 'cursor/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -89,7 +89,7 @@ jobs:
 
   windows-installer:
     needs: [test, browser, new-version]
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.new-version.outputs.new == 'true' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'cursor/'))
     permissions:
       contents: write  # gh release create / upload
     runs-on: windows-latest

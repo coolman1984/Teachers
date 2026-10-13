@@ -1,6 +1,15 @@
 <!-- first-sale-contract: 2026-10-06 -->
 > **Owner decision — 6 October 2026:** Read [the first-sale contract](LAUNCH_SCOPE.md) before using this document. The limited pilot core and its launch gates take priority; extra features belong to later releases or separately accepted add-ons. Existing implementation/history below is preserved and is not a claim of first-sale acceptance.
 
+## Hub time capped at 36h ahead of PC (2026-10-13, PR #35 round-6)
+
+**Why:** round-6 — `_hub_moment_ok` still accepted any stamp up to signed `until`+1 day (e.g. 2027-01-01 while the PC was in
+November), which locked renewal until that moment; honest hub time did not replace it downward.
+**What:** hub moments must be ≤ PC clock + 36h; sane `note_online` always rewrites `trustedDate` and can clear a bad `seen`;
+hub lies far ahead of the journal are dropped from high-water. `cursor/**` pushes run the main build workflow. Test in
+`tests/test_license.py`.
+**Lesson:** unsigned hub JSON needs a tight forward cap; rollback stays on local `seen`/journal.
+
 ## Licence hub date window + billing high-water (2026-10-13, PR #35 round-5)
 
 **Why:** round-5 review — a fake gateway `serverTime`/Date in 2099 could brick a valid month; trusted days at noon falsely

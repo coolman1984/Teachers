@@ -38,7 +38,7 @@ TRIAL_DAYS = 7
 WARN_DAYS = 7
 GRACE_DAYS = 3
 CLOCK_SLACK = timedelta(hours=2)
-HUB_AHEAD_SLACK = timedelta(days=2)
+HUB_AHEAD_SLACK = timedelta(hours=36)
 KIND_ACTIVATE, KIND_RESET = 1, 2
 ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no 0/O, 1/I: codes are read out on the phone and typed by hand
 
@@ -238,21 +238,39 @@ class License:
         return parse_server_moment(self.data.get('trustedDate'))
 
     def _hub_moment_ok(self, when, until=None):
-        """Ignore absurd hub dates (bad gateway or Date header); allow hub ahead of a rolled-back PC."""
+        """Hub JSON/Date is unsigned — accept only a short margin ahead of the PC clock."""
         if when is None:
             return False
-        if until is None:
-            until = self._activation_until()
+        return when <= self.now() + HUB_AHEAD_SLACK
+
+    def _data_latest_moment(self):
+        latest, _ = self.data_time()
+        if not latest:
+            return None
+        try:
+            return datetime.fromisoformat(str(latest)[:19])
+        except ValueError:
+            return None
+
+    def _hub_far_ahead(self, when):
         local = self.now()
-        if until is not None and when.date() > until + timedelta(days=1) and when > local + HUB_AHEAD_SLACK:
+        return when > local + HUB_AHEAD_SLACK and (when - local).days > 14
+
+    def _stored_moment_ok(self, when):
+        """Keep a stored stamp for rollback unless it is a far-ahead hub lie with no journal support."""
+        if when is None:
             return False
-        if when > local + timedelta(days=400):
-            return False
-        return True
+        if not self._hub_far_ahead(when):
+            return True
+        latest = self._data_latest_moment()
+        return latest is not None and when <= latest + HUB_AHEAD_SLACK
+
+    def _moment_for_hw(self, when):
+        return when if self._stored_moment_ok(when) else None
 
     def _trusted_day(self):
         when = self._trusted_moment()
-        if when is None or not self._hub_moment_ok(when):
+        if when is None or not self._stored_moment_ok(when):
             return None
         return when.date()
 
@@ -262,7 +280,8 @@ class License:
         when = parse_server_moment(raw)
         if when is None:
             return str(raw)
-        if when > self.now() + timedelta(days=400):
+        when = self._moment_for_hw(when)
+        if when is None:
             return ''
         return when.isoformat(timespec='seconds')
 
@@ -270,8 +289,8 @@ class License:
         marks = []
         if behind:
             try:
-                behind_dt = datetime.fromisoformat(str(behind)[:19])
-                if behind_dt <= self.now() + timedelta(days=400):
+                behind_dt = self._moment_for_hw(datetime.fromisoformat(str(behind)[:19]))
+                if behind_dt is not None:
                     marks.append(behind_dt)
             except ValueError:
                 pass
@@ -285,7 +304,7 @@ class License:
             except ValueError:
                 pass
         trust = self._trusted_moment()
-        if trust and self._hub_moment_ok(trust):
+        if trust and self._stored_moment_ok(trust):
             marks.append(trust)
         return max(marks) if marks else None
 
@@ -294,7 +313,7 @@ class License:
         latest, _ = self.data_time()
         marks = [self._seen_for_hw(self.data.get('seen')), latest or '']
         trust = self._trusted_moment()
-        if trust and self._hub_moment_ok(trust):
+        if trust and self._stored_moment_ok(trust):
             marks.append(trust.isoformat(timespec='seconds'))
         hw = max(marks)
         if t.isoformat(timespec='seconds') > hw:
@@ -317,14 +336,11 @@ class License:
             until = self._activation_until()
             if not self._hub_moment_ok(when, until):
                 return
-            prev = self._trusted_moment()
-            prev_ok = prev is None or self._hub_moment_ok(prev, until)
-            if prev is None or when.date() > prev.date() or not prev_ok:
-                self.data['trustedDate'] = when.isoformat(timespec='seconds')
+            self.data['trustedDate'] = when.isoformat(timespec='seconds')
             mark = when.isoformat(timespec='seconds')
             prev_seen = parse_server_moment(self.data.get('seen'))
-            seen_ok = prev_seen is None or self._hub_moment_ok(prev_seen, until)
-            if mark > (self.data.get('seen') or '') or not seen_ok:
+            seen_ok = prev_seen is None or self._stored_moment_ok(prev_seen)
+            if not seen_ok or mark > (self.data.get('seen') or ''):
                 self.data['seen'] = mark
             self.data['onlineAt'] = self.now().isoformat(timespec='seconds')
             try:

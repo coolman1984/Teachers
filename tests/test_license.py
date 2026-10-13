@@ -110,6 +110,7 @@ class CodesTest(unittest.TestCase):
     def test_e_moving_the_clock_back_stops_saving_instead_of_giving_days(self):
         self.lic.activate(self.code(date(2026, 11, 6)))
         self.clock.t = datetime(2026, 11, 20, 9, 0)                # time passes: ended
+        self.data = ['2026-11-20T09:00:00', '2026-10-01T08:00:00']
         self.assertTrue(self.lic.blocked())
         self.clock.t = datetime(2026, 10, 20, 9, 0)                # the clock is moved back a month
         st = self.lic.status()
@@ -147,9 +148,34 @@ class CodesTest(unittest.TestCase):
 
     def test_hub_trusted_date_blocks_local_rollback(self):
         self.lic.activate(self.code(date(2026, 12, 6)))
-        self.lic.note_online('2026-11-15')
+        self.clock.t = datetime(2026, 11, 15, 10, 0)
+        self.lic.note_online('2026-11-15T10:00:00')
         self.clock.t = datetime(2026, 11, 10, 10, 0)
         self.assertEqual(L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock).status()['state'], 'clock')
+
+    def test_hub_lie_just_inside_old_window_does_not_brick_or_block_renewal(self):
+        self.lic.activate(self.code(date(2026, 12, 31), serial=6))
+        self.clock.t = datetime(2026, 11, 20, 9, 0)
+        self.lic.note_online('2027-01-01T23:59:59')
+        lic = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertIn(lic.status()['state'], ('ok', 'warn'))
+        self.assertFalse(lic.blocked())
+        self.assertNotIn('trustedDate', lic.data)
+        lic.activate(self.code(date(2027, 6, 30), serial=7, issued=date(2026, 11, 20)))
+        path = os.path.join(self.home, 'license.json')
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+        data['trustedDate'] = '2027-01-01T23:59:59'
+        data['seen'] = '2027-01-01T23:59:59'
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        bricked = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertIn(bricked.status()['state'], ('ok', 'warn'))
+        bricked.note_online('2026-11-20T09:10:00')
+        healed = L.License(self.home, lambda: tuple(self.data), required=True, now=self.clock)
+        self.assertIn(healed.status()['state'], ('ok', 'warn'))
+        self.assertTrue(healed.data['trustedDate'].startswith('2026-11-20T09:10'))
+        healed.activate(self.code(date(2027, 12, 31), serial=8, issued=date(2026, 11, 20)))
 
     def test_until_in_the_signed_code_is_not_extended_online(self):
         code = self.code(date(2026, 11, 10), serial=5)
