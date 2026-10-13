@@ -10,7 +10,8 @@ customer's PC. Whoever has that file can make codes: keep a copy on a USB stick 
     python tools/seller.py reset CODE            a one-time password-reset code for a request shown on a centre PC
     python tools/seller.py show CODE             what a code says (to check before sending)
 
-Every code made is written to ~/.hessa-seller/issued.csv (date, centre, PCs, until) - your own record of who paid.
+Every code made is written to ~/.hessa-seller/issued.csv (date, centre, PCs, until, serial) - your own record of who paid.
+Activation serials come from serial.next (next unused number, seeded from issued.csv), not from the clock.
 """
 import argparse
 import csv
@@ -26,6 +27,8 @@ import license as L  # noqa: E402
 HOME = os.environ.get('HESSA_SELLER_HOME') or os.path.join(os.path.expanduser('~'), '.hessa-seller')
 KEY = os.path.join(HOME, 'hessa-seller.key')
 LOG = os.path.join(HOME, 'issued.csv')
+COUNTER = os.path.join(HOME, 'serial.next')
+SERIAL_MAX = 0xFFFFFFFF
 
 
 def load_seed():
@@ -37,6 +40,49 @@ def load_seed():
     if ed25519.public_key(seed) != L.public_key():
         sys.exit('This private key does not match the public key built into the program (server/license_key.py).')
     return seed
+
+
+def _max_serial_in_log():
+    if not os.path.exists(LOG):
+        return 0
+    mx = 0
+    with open(LOG, newline='', encoding='utf-8-sig') as f:
+        for row in csv.DictReader(f):
+            if row.get('kind') != 'activate':
+                continue
+            try:
+                mx = max(mx, int(row['serial']))
+            except (KeyError, ValueError):
+                pass
+    return mx
+
+
+def _lock_file(f):
+    if os.name == 'nt':
+        import msvcrt
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+
+def next_serial():
+    """The next activation serial (32-bit). Stored in serial.next beside the key; seeded from issued.csv."""
+    os.makedirs(HOME, exist_ok=True)
+    with open(COUNTER, 'a+', encoding='ascii') as f:
+        _lock_file(f)
+        f.seek(0)
+        raw = f.read().strip()
+        floor = max(_max_serial_in_log() + 1, 1)
+        n = max(int(raw), floor) if raw else floor
+        if n > SERIAL_MAX:
+            sys.exit('Activation serial counter is full — contact the developer.')
+        f.seek(0)
+        f.truncate()
+        f.write(str(n + 1))
+        f.flush()
+        return n
 
 
 def record(kind, centre, requests, until, serial):
@@ -60,7 +106,7 @@ def issue(requests, days, centre='', start=None):
             machines.append(machine)
     start = start or date.today()
     until = start + timedelta(days=days - 1)
-    serial = int(datetime.now().timestamp())
+    serial = next_serial()
     code = L.make_code(seed, L.KIND_ACTIVATE, machines, until=until, serial=serial)
     record('activate', centre, requests, until.isoformat(), serial)
     return code, until

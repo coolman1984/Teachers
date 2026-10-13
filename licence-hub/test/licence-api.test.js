@@ -66,14 +66,14 @@ async function getStatus(e, id, poll) {
   return { res, data: await res.json() };
 }
 
-test('permanent requests are refused at submit; monthly becomes pending', async () => {
+test('permanent and monthly requests are refused at submit (paid in Licence Studio)', async () => {
   const e = env();
   const perm = await postRequest(e, body({ kind: 'permanent' }));
   assert.equal(perm.data.status, 'refused');
   assert.equal(perm.data.reason, REASON_PAID_IN_STUDIO);
   const mon = await postRequest(e, body({ kind: 'monthly', nonce: 'monthly-nonce-1' }));
-  assert.equal(mon.data.status, 'pending');
-  assert.ok(mon.data.poll_token);
+  assert.equal(mon.data.status, 'refused');
+  assert.equal(mon.data.reason, REASON_PAID_IN_STUDIO);
 });
 
 test('nonce replay returns the same poll token', async () => {
@@ -171,11 +171,11 @@ test('status returns calendar_day as YYYY-MM-DD string', async () => {
   assert.match(st.data.calendar_day, /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test('ack clears stored activation code', async () => {
+test('ack marks delivered but keeps code for owner audit', async () => {
   const e = env();
   const key = await importSigningKey(pemFromSeed(Buffer.alloc(32, 2)));
   const { data } = await postRequest(e, body());
-  await approveRequest(e, data.id, key);
+  const signed = await approveRequest(e, data.id, key);
   const poll = data.poll_token;
   const ackReq = new Request('https://hub.test/licence/ack', {
     method: 'POST',
@@ -184,7 +184,7 @@ test('ack clears stored activation code', async () => {
   });
   await handleLicence(ackReq, e, new URL(ackReq.url));
   const row = await e.DB.prepare('SELECT code, status FROM licence_requests WHERE id = ?').bind(data.id).first();
-  assert.equal(row.code, null);
+  assert.equal(row.code, signed.code);
   assert.equal(row.status, 'delivered');
 });
 
@@ -239,25 +239,30 @@ test('approve retry returns the same code', async () => {
   assert.equal(first.code, second.code);
 });
 
-test('monthly approval issues standard edition when paid key is set', async () => {
+test('monthly request is refused at submit (paid in Licence Studio)', async () => {
   const e = env();
-  const trialKey = await importSigningKey(pemFromSeed(Buffer.alloc(32, 5)));
-  e.LICENCE_PAID_SIGNING_KEY = pemFromSeed(Buffer.alloc(32, 7));
-  const { data } = await postRequest(e, body({ kind: 'monthly', nonce: 'monthly-approve-1' }));
-  const signed = await approveRequest(e, data.id, trialKey);
-  assert.ok(signed.code);
-  assert.equal(signed.edition, 'standard');
+  const { data, res } = await postRequest(e, body({ kind: 'monthly', nonce: 'monthly-submit-1' }));
+  assert.equal(res.status, 200);
+  assert.equal(data.status, 'refused');
+  assert.equal(data.reason, REASON_PAID_IN_STUDIO);
 });
 
-test('monthly approval without paid key is refused', async () => {
+test('monthly approval is refused (trial-only Worker key)', async () => {
   const e = env();
   const key = await importSigningKey(pemFromSeed(Buffer.alloc(32, 5)));
   await e.DB.prepare(
     'INSERT INTO licence_requests(id, poll_token_hash, product, kind, device, device_key, machine, nonce, shop, ref, version, status, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).bind('id1', 'hash', 'teachers', 'monthly', '7KD2M-QX9TP', '7KD2MQX9TP', 'm1', 'n-old', '', '', '', 'pending', 1, 1).run();
+  ).bind('id1', 'hash', 'teachers', 'monthly', '7KD2M-QX9TP', '7KD2MQX9TP', MACHINE_A, 'n-old', '', '', '', 'pending', 1, 1).run();
   const out = await approveRequest(e, 'id1', key);
   assert.equal(out.refused, true);
-  assert.equal(out.reason, 'paid_key_not_configured');
+  assert.equal(out.reason, REASON_PAID_IN_STUDIO);
+});
+
+test('trial request without machine hash is rejected', async () => {
+  const e = env();
+  const { data, res } = await postRequest(e, body({ machine: 'not-a-hash', nonce: 'bad-machine' }));
+  assert.equal(res.status, 400);
+  assert.equal(data.field, 'machine');
 });
 
 test('derivePollToken is stable for a nonce', async () => {

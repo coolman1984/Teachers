@@ -248,7 +248,7 @@
         (tab === 'appearance' ? '<div class="grid two-col"><section class="card">' + appearance() + '</section>' + preview() + '</div>'
           : tab === 'access' ? HS.accessTab.render()
           : tab === 'data' ? HS.dataTab.render()
-          : tab === 'license' ? (HS.afLicenceTab ? HS.afLicenceTab.render() : HS.licenseTab.render())
+          : tab === 'license' ? HS.licenseTab.render()
           : tab === 'gateway' ? HS.mailboxTab.render()
           : tab === 'remote' ? remote.render()
           : tab === 'ai' ? aiTab.render()
@@ -260,7 +260,7 @@
       if (shown === 'centre') mountExtras(root);
       if (shown === 'lists') HS.lists.mount(root);
       if (shown === 'data') HS.dataTab.mount(root);
-      if (shown === 'license') (HS.afLicenceTab ? HS.afLicenceTab : HS.licenseTab).mount(root);
+      if (shown === 'license') HS.licenseTab.mount(root);
       if (shown === 'gateway') HS.mailboxTab.mount(root);
       if (shown === 'remote') remote.mount(root);
       if (shown === 'ai') aiTab.mount(root);

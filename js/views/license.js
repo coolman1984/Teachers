@@ -23,7 +23,23 @@
     function fallback() { var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); done(); } catch (e) { /* the code is on screen */ } t.remove(); }
     if (btn) btn.blur();
   }
-  function codeBox(code) { return '<div class="lic-code" dir="ltr"><code data-req>' + HS.esc(code || '') + '</code></div>'; }
+  function codeBox(code, attr) { return '<div class="lic-code" dir="ltr"><code ' + (attr || 'data-req') + '>' + HS.esc(code || '') + '</code></div>'; }
+  function hubReason(r) { return HS.has('lic.refused.' + r) ? HS.t('lic.refused.' + r) : HS.t('lic.refused.other'); }
+  function hubLine(q) {
+    if (!q || !q.available) return '';
+    var wait = q.status === 'sending' || q.status === 'waiting' || (q.status === 'failed' && /^(offline|http_|busy|token|relay_off)/.test(q.error || ''));
+    var text = '';
+    if (q.status === 'sending') text = HS.t('lic.req.sending');
+    else if (q.status === 'waiting' && !q.error) text = HS.t(q.stage === 'approved' ? 'lic.req.approved' : 'lic.req.sentWaiting');
+    else if (wait) text = HS.t('lic.req.offline', { when: q.next_try || '' });
+    else if (q.status === 'failed') text = HS.t('lic.req.codeBad');
+    else if (q.status === 'refused') text = hubReason(q.reason);
+    else if (q.status === 'closed' && q.reason === 'manual') text = HS.t('lic.req.closedManual');
+    else if (q.status === 'closed') text = HS.t('lic.req.closed');
+    else if (q.status === 'activated') text = HS.t('lic.req.activated');
+    if (!text) return '';
+    return '<div class="lic-line ' + (wait ? 'warn' : q.status === 'refused' ? 'bad' : 'busy') + '" role="status">' + HS.icon(wait ? 'alert' : 'clock') + '<span>' + HS.esc(text) + '</span></div>';
+  }
 
   /* ---------- the bar at the bottom ---------- */
   function paintBar(st) {
@@ -66,6 +82,12 @@
         '<h3 class="sec">1. ' + HS.esc(HS.t('lic.step1')) + '</h3><p class="muted">' + HS.esc(HS.t('lic.step1.b')) + '</p>' + codeBox(st.request) +
         '<div class="row wrap"><button class="btn" data-copy-req>' + HS.icon('copy', 'sm') + HS.esc(HS.t('lic.copy')) + '</button>' +
           (st.vendor ? '<a class="btn" target="_blank" rel="noopener" href="' + HS.esc(waLink(st, HS.t('lic.waText', { code: st.request }))) + '">' + HS.icon('chat', 'sm') + HS.esc(HS.t('lic.wa')) + '</a>' : '') + '</div>' +
+        (st.hub && st.afDevice ? '<h3 class="sec">' + HS.esc(HS.t('lic.device')) + '</h3><p class="muted">' + HS.esc(HS.t('lic.sendDeviceCode')) + '</p>' + codeBox(st.afDevice, 'data-af-dev') +
+          '<div class="row wrap"><button class="btn" data-copy-af>' + HS.icon('copy', 'sm') + HS.esc(HS.t('lic.copy')) + '</button></div>' +
+          hubLine(st.hubRequest) +
+          (st.hubRequest && st.hubRequest.status === 'none' ? '<button class="btn" data-hub-trial>' + HS.esc(HS.t('lic.req.trial')) + '</button>' : '') +
+          (st.hubRequest && ['refused', 'closed', 'activated', 'failed'].indexOf(st.hubRequest.status) >= 0 ? '<button class="btn" data-hub-again>' + HS.esc(HS.t('lic.req.again')) + '</button>' : '') +
+          (st.hubRequest && (st.hubRequest.status === 'sending' || st.hubRequest.status === 'waiting' || st.hubRequest.status === 'failed') ? '<button class="btn" data-hub-retry>' + HS.esc(HS.t('lic.req.retry')) + '</button>' : '') : '') +
         '<h3 class="sec">2. ' + HS.esc(HS.t('lic.step2')) + '</h3><p class="muted">' + HS.esc(HS.t('lic.step2.b')) + '</p>' +
         '<form class="stack" data-lic-form autocomplete="off"><textarea class="input lic-input" name="code" rows="4" dir="ltr" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-…" aria-label="' + HS.esc(HS.t('lic.code')) + '"></textarea>' +
           '<div class="tip bad" data-lic-err hidden role="alert"></div>' +
@@ -93,10 +115,27 @@
       return '<div data-lic><div class="skeleton" style="height:16rem"></div></div>';
     },
     mount: function (root) {
-      var box = root.querySelector('[data-lic]'); if (!box) return;
-      function load() { HS.get('/api/license').then(function (st) { box.innerHTML = tabBody(st); paintBar(st); }, function (e) { box.innerHTML = U.empty('alert', U.errorText(e)); }); }
+      var box = root.querySelector('[data-lic]'), hubTimer = null;
+      if (!box) return;
+      function stopHub() { if (hubTimer) { clearInterval(hubTimer); hubTimer = null; } }
+      function load() {
+        return HS.get('/api/license').then(function (st) {
+          box.innerHTML = tabBody(st); paintBar(st);
+          stopHub();
+          var q = st.hubRequest;
+          if (q && (q.status === 'sending' || q.status === 'waiting' || (q.status === 'failed' && /^(offline|http_|busy|token|relay_off)/.test(q.error || '')))) {
+            hubTimer = setInterval(function () { if (!box.isConnected) { stopHub(); return; } load(); }, 8000);
+          }
+        }, function (e) { box.innerHTML = U.empty('alert', U.errorText(e)); });
+      }
       load();
-      box.addEventListener('click', function (e) { var b = e.target.closest('[data-copy-req]'); if (b) copy(box.querySelector('[data-req]').textContent, b); });
+      box.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-copy-req]'); if (b) copy(box.querySelector('[data-req]').textContent, b);
+        b = e.target.closest('[data-copy-af]'); if (b) { var c = box.querySelector('[data-af-dev]'); if (c) copy(c.textContent, b); }
+        b = e.target.closest('[data-hub-trial]'); if (b) HS.post('/api/licence/request', { kind: 'trial' }).then(load);
+        b = e.target.closest('[data-hub-retry]'); if (b) HS.post('/api/licence/request/retry', {}).then(load);
+        b = e.target.closest('[data-hub-again]'); if (b) HS.post('/api/licence/request/clear', {}).then(load);
+      });
       box.addEventListener('submit', function (e) { e.preventDefault(); activate(e.target, function () { load(); }); });
     }
   };

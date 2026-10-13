@@ -40,11 +40,12 @@ export async function loadPending(host) {
     const ok = document.createElement('button');
     ok.className = 'btn primary';
     ok.type = 'button';
-    ok.textContent = item.kind === 'monthly' ? 'موافق — شهر مدفوع' : 'موافق — تجربة';
-    ok.disabled = item.kind === 'permanent';
+    const paidInStudio = item.kind === 'monthly' || item.kind === 'permanent';
+    ok.textContent = item.kind === 'trial' ? 'موافق — تجربة' : 'موافق';
+    ok.disabled = paidInStudio;
     ok.addEventListener('click', async () => {
       ok.disabled = true;
-      const force = item.has_customer && confirm('إعادة إصدار تجربة لهذا الجهاز؟ (فقدان الكود فقط)');
+      const force = item.kind === 'trial' && item.has_customer && confirm('إعادة إصدار تجربة لهذا الجهاز؟ (فقدان الكود فقط)');
       const res = await api('/approve', { method: 'POST', headers: headers(), body: JSON.stringify({ id: item.id, csrf, force }) });
       if (res && res.error === 'paid_in_licence_studio') {
         alert('هذا الطلب اشتراك مدفوع — استخدم Licence Studio على جهاز المكتب.');

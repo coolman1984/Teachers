@@ -37,9 +37,9 @@ openssl pkey -in trial-hub.pem -pubout -outform DER | tail -c 32 | base64 -w0
 1. Deploy **licence hub** with `npx wrangler secret put LICENCE_SIGNING_KEY` ← PKCS#8 PEM of **trial-hub.pem** only.
 2. In customer `licence_keys.txt`, add **only** the trial public key with kid `trial-hub`, for example:  
    `trial-hub:AbCdEfGh...` (43-character unpadded base64url raw public key).
-3. Keep the Licence Studio **paid** private key off Cloudflare for **permanent** licences. Set `LICENCE_PAID_SIGNING_KEY` (PKCS#8 PEM) on the Worker for **monthly** online approvals (31 calendar days, standard edition). The trial key (`LICENCE_SIGNING_KEY`) must only mint **trial** codes (at most **14 days**). The centre PC refuses codes from the `trial-hub` kid unless they are trial edition.
+3. Keep the Licence Studio **paid** private key off Cloudflare entirely. The Worker holds **only** `LICENCE_SIGNING_KEY` (kid `trial-hub`) and must mint **trial** codes only (at most **14 days**). Monthly and permanent codes are signed on the owner's PC (`tools/seller.py` for Hessa legacy monthly codes, Licence Studio for AF device codes).
 
-The program enforces that rule in `server/afcodes.py` / `server/licence.py`, so a leaked Worker secret cannot mint monthly or perpetual licences customers will accept.
+The program enforces that rule in `server/afcodes.py` / `server/license.py`, so a leaked Worker secret cannot mint monthly or perpetual licences customers will accept.
 
 ## Register the product (owner's PC / hub, once)
 1. **Licence hub** (`licence-hub/`): deploy the Worker with `LICENCE_PRODUCTS` including `teachers` (`wrangler.toml` vars). Set `LICENCE_SIGNING_KEY` as above. Owner login secrets (`SESSION_SECRET`, `OWNER_PASSWORD_HASH`) and optional Telegram vars.
@@ -54,7 +54,7 @@ Two paths use the **same** signed codes and rules; nothing new is invented.
 | Path | What the administrator does |
 |---|---|
 | **Online (hub configured)** | Settings → **Licence** → enter the organisation name if needed → press **Activate**. The program sends a **trial** request to the hub (`/licence/request`), shows *waiting for company approval*, keeps the **device code** visible, and polls until the signed code arrives and activates automatically. |
-| **Manual (offline, no hub, or hub failed)** | On the same screen: copy the **short device code**, send it to the company (WhatsApp, phone, …), paste the **activation code** from Licence Studio, press **Activate** (`/api/licence/activate`). |
+| **Manual (offline, no hub, or hub failed)** | On the same screen: copy the **PC request code** (seller tool) or **short device code** (Licence Studio), send it to the company, paste the **activation code** you receive, press **Activate** (`/api/license/activate`, administrator only). |
 
 **Owner one-time setup** (not done from this repository; do not deploy from a customer PC):
 

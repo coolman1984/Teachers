@@ -32,7 +32,7 @@ def new_install_id():
 
 
 class Assist:
-    """Minimal Assist surface used by server/licence.py (hub URL + kv)."""
+    """Minimal Assist surface used by server/license.py hub mixin (hub URL + kv)."""
 
     def __init__(self, data_dir, cfg, practice=False):
         self.data_dir = data_dir

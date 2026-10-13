@@ -8,8 +8,8 @@ This worker is **not** the factory telemetry relay (`/ingest`). Deploy it on its
 
 ## What it does / ماذا يفعل
 
-- نفس بروتوكول البرنامج: `POST /licence/request`, `GET /licence/status`, `POST /licence/ack` (حقول `server/licence.py`, اختبار `tests/test_assist.py`).
-- Same protocol as the office app (`server/licence.py`, exercised by `tests/test_assist.py`).
+- نفس بروتوكول البرنامج: `POST /licence/request`, `GET /licence/status`, `POST /licence/ack` (حقول `server/license_hub_mixin.py` / `server/license.py`, اختبارات `tests/test_license_hub.py`).
+- Same protocol as the office app (`server/license_hub_mixin.py` mixed into `server/license.py`, exercised by `tests/test_license_hub.py`).
 - لوحة المالك على `/owner` (عربي، RTL): موافقة على الطلبات (يُعرض الكود بعد الموافقة)، تفعيل يدوي برقم الجهاز، قائمة العملاء.
 - Owner dashboard at `/owner` (Arabic, RTL): pending requests (issued code shown on approve), offline device entry, customer list.
 - توقيع **تجربة فقط** 14 يومًا (منتج `teachers`) بـ Ed25519 في Worker — متوافق مع `server/afcodes.py`. الطلبات الشهرية/الدائمة تُرفض هنا؛ الإصدار المدفوع من Licence Studio.

@@ -1,4 +1,4 @@
-import { issueTrialCode, issueMonthlyCode, importSigningKey, normalize } from './afcodes.js';
+import { issueTrialCode, importSigningKey, normalize } from './afcodes.js';
 import { hex } from './auth.js';
 import { calendarDateInTz } from './calendar.js';
 
@@ -174,11 +174,15 @@ export async function handleLicence(request, env, url) {
     const id = crypto.randomUUID();
     const t = now();
 
-    if (body.kind === 'permanent') {
+    if (body.kind === 'permanent' || body.kind === 'monthly') {
       await env.DB.prepare(
         'INSERT INTO licence_requests(id, poll_token_hash, product, kind, device, device_key, machine, nonce, shop, ref, version, status, reason, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).bind(id, pollHash, body.product, body.kind, body.device, dkey, body.machine, body.nonce, body.shop.slice(0, 60), body.ref.slice(0, 60), body.version.slice(0, 40), 'refused', REASON_PAID_IN_STUDIO, t, t).run();
       return json({ id, poll_token: poll, status: 'refused', reason: REASON_PAID_IN_STUDIO });
+    }
+
+    if (!machineHash) {
+      return json({ field: 'machine' }, 400);
     }
 
     if (body.kind === 'trial' && await trialUsedOnline(env, dkey, machineHash)) {
@@ -229,8 +233,8 @@ export async function handleLicence(request, env, url) {
     if (!id || !token) return json({}, 401);
     const pollHash = await sha256Hex(token);
     await env.DB.prepare(
-      'UPDATE licence_requests SET status = ?, code = NULL, updated_at = ? WHERE id = ? AND poll_token_hash = ?',
-    ).bind('delivered', now(), id, pollHash).run();
+      'UPDATE licence_requests SET status = ?, updated_at = ? WHERE id = ? AND poll_token_hash = ? AND status = ?',
+    ).bind('delivered', now(), id, pollHash, 'issued').run();
     return json({ ok: true });
   }
 
@@ -270,14 +274,6 @@ async function clearTrialLocks(env, dkey, machineHash) {
   await env.DB.prepare('DELETE FROM machine_trials WHERE machine = ?').bind(dkey).run();
 }
 
-async function claimAndIssuePaid(env, requestId, signed, t) {
-  await env.DB.prepare(
-    'UPDATE licence_requests SET status = ?, stage = ?, code = ?, updated_at = ? WHERE id = ? AND code IS NULL AND status NOT IN (?, ?)',
-  ).bind('issued', 'approved', signed.code, t, requestId, 'refused', 'delivered').run();
-  const after = await env.DB.prepare('SELECT code, status FROM licence_requests WHERE id = ?').bind(requestId).first();
-  return Boolean(after?.code && after.status === 'issued');
-}
-
 async function claimAndIssue(env, requestId, dkey, machineHash, signed, t, force) {
   if (force) await clearTrialLocks(env, dkey, machineHash);
 
@@ -309,7 +305,7 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
   const row = await env.DB.prepare('SELECT * FROM licence_requests WHERE id = ?').bind(requestId).first();
   if (!row || row.status === 'refused' || row.status === 'delivered') return null;
 
-  if (row.kind === 'permanent') {
+  if (row.kind === 'permanent' || row.kind === 'monthly') {
     await refuseRequest(env, requestId, REASON_PAID_IN_STUDIO);
     return { refused: true, reason: REASON_PAID_IN_STUDIO };
   }
@@ -336,27 +332,14 @@ export async function approveRequest(env, requestId, privateKey, options = {}) {
   const tz = env.LICENCE_CALENDAR_TZ || 'Africa/Cairo';
   let signed;
   try {
-    if (row.kind === 'monthly') {
-      const paidPem = env.LICENCE_PAID_SIGNING_KEY;
-      if (!paidPem) {
-        await refuseRequest(env, requestId, 'paid_key_not_configured');
-        return { refused: true, reason: 'paid_key_not_configured' };
-      }
-      const paidKey = await importSigningKey(paidPem);
-      const days = Number(env.MONTHLY_DAYS || 31);
-      signed = await issueMonthlyCode(paidKey, row.product, row.device, days, new Date(), tz);
-      const ok = await claimAndIssuePaid(env, requestId, signed, t);
-      if (!ok) return null;
-    } else {
-      if (!force && (await trialUsedOnline(env, dkey, machineHash))) {
-        await refuseRequest(env, requestId, 'already_used');
-        return null;
-      }
-      const days = Number(env.TRIAL_DAYS || 14);
-      signed = await issueTrialCode(privateKey, row.product, row.device, days, new Date(), tz);
-      const ok = await claimAndIssue(env, requestId, dkey, machineHash, signed, t, force);
-      if (!ok) return null;
+    if (!force && (await trialUsedOnline(env, dkey, machineHash))) {
+      await refuseRequest(env, requestId, 'already_used');
+      return null;
     }
+    const days = Number(env.TRIAL_DAYS || 14);
+    signed = await issueTrialCode(privateKey, row.product, row.device, days, new Date(), tz);
+    const ok = await claimAndIssue(env, requestId, dkey, machineHash, signed, t, force);
+    if (!ok) return null;
   } catch (e) {
     if (e?.message === 'bad_device_code') {
       await refuseRequest(env, requestId, 'bad_device');

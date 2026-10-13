@@ -159,19 +159,48 @@ class CodesTest(unittest.TestCase):
         self.assertEqual(str(caught.exception), 'used')
 
     def test_g_the_sellers_tool_makes_codes_only_with_the_matching_key(self):
+        import importlib
         import subprocess
-        tool = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools', 'seller.py')
+        from unittest import mock
+
+        tools_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools')
+        tool = os.path.join(tools_dir, 'seller.py')
         home = tempfile.mkdtemp(prefix='hs-seller-')
         self.addCleanup(shutil.rmtree, home, True)
         with open(os.path.join(home, 'hessa-seller.key'), 'w') as f:
             f.write(SEED.hex())
+        os.environ['HESSA_SELLER_HOME'] = home
+        self.addCleanup(os.environ.pop, 'HESSA_SELLER_HOME', None)
+        sys.path.insert(0, tools_dir)
+        import seller as seller_tool  # noqa: E402
+        importlib.reload(seller_tool)
+
+        lic_b_home = tempfile.mkdtemp(prefix='hs-lic-b-')
+        self.addCleanup(shutil.rmtree, lic_b_home, True)
+        lic_b = L.License(lic_b_home, lambda: (None, None), required=True, now=self.clock)
         env = dict(os.environ, HESSA_SELLER_HOME=home)
-        out = subprocess.run([sys.executable, tool, 'issue', self.lic.request(), '--days', '31', '--centre', 'Synthetic Centre'],
-                             capture_output=True, text=True, env=env)
-        self.assertEqual(out.returncode, 0, out.stderr)
-        code = out.stdout.strip().splitlines()[-1]
-        self.assertEqual(self.lic.activate(code)['until'], (date.today() + timedelta(days=30)).isoformat())
-        self.assertIn('Synthetic Centre', open(os.path.join(home, 'issued.csv'), encoding='utf-8-sig').read())
+        os.environ['HS_MACHINE_ID'] = OTHER_PC
+        req_b = lic_b.request()
+        os.environ['HS_MACHINE_ID'] = HERE_PC
+        frozen = datetime(2026, 10, 7, 12, 0, 0)
+        fake_dt = mock.Mock()
+        fake_dt.now.return_value = frozen
+        with mock.patch.object(seller_tool, 'datetime', fake_dt):
+            code_a, _ = seller_tool.issue([self.lic.request()], 31, 'Centre A')
+            code_b, _ = seller_tool.issue([req_b], 31, 'Centre B')
+        info_a = L.read_code(code_a, PUB)
+        info_b = L.read_code(code_b, PUB)
+        self.assertNotEqual(info_a['serial'], info_b['serial'])
+        self.assertEqual(self.lic.activate(code_a)['until'], (date.today() + timedelta(days=30)).isoformat())
+        os.environ['HS_MACHINE_ID'] = OTHER_PC
+        self.assertEqual(lic_b.activate(code_b)['until'], (date.today() + timedelta(days=30)).isoformat())
+        os.environ['HS_MACHINE_ID'] = HERE_PC
+        older = L.make_code(SEED, L.KIND_ACTIVATE, [L.machine_hash(HERE_PC)],
+                            until=date.today() + timedelta(days=5), issued=date.today(), serial=info_a['serial'] + 100)
+        with self.assertRaises(ValueError) as caught:
+            self.lic.activate(older)
+        self.assertEqual(str(caught.exception), 'older')
+        self.assertIn('Centre A', open(os.path.join(home, 'issued.csv'), encoding='utf-8-sig').read())
         with open(os.path.join(home, 'hessa-seller.key'), 'w') as f:
             f.write(OTHER.hex())
         out = subprocess.run([sys.executable, tool, 'issue', self.lic.request()], capture_output=True, text=True, env=env)
