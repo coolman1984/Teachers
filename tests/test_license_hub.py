@@ -1,4 +1,5 @@
 """Unified licence hub + AF codes in server/license.py (trial-hub kid, calendar dates)."""
+# CI: pyflakes must stay clean (no unused imports).
 import base64
 import json
 import os
