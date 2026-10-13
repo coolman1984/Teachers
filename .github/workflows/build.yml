@@ -127,7 +127,8 @@ jobs:
               $s = Invoke-RestMethod http://127.0.0.1:18080/api/auth/status
               $page = (Invoke-WebRequest http://127.0.0.1:18080/ -UseBasicParsing).Content
               $js = (Invoke-WebRequest http://127.0.0.1:18080/js/app.js -UseBasicParsing).StatusCode
-              if ($s.about.installed -and $page -match 'Hessa' -and $js -eq 200) { $ok = $true }
+              $lic = Invoke-RestMethod http://127.0.0.1:18080/api/license
+              if ($s.about.installed -and $page -match 'Hessa' -and $js -eq 200 -and $lic.required -eq $true -and $lic.state -eq 'trial') { $ok = $true }
             } catch { }
           }
           Stop-Process -Id $p.Id -Force
